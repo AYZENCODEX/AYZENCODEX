@@ -1,0 +1,3 @@
+- [AYZEN Auth Pattern](ayzen-auth.md) — Mock auth uses SHA-256+static salt + base64 JSON tokens; swap for bcrypt+JWT before prod.
+- [Orval Body Schema Naming](orval-body-naming.md) — Body schemas must use entity-shaped names (NoteInput, not CreateNoteBody) or TS2308 collisions break the build after codegen.
+- [Express 5 Wildcard Routes](express5-routes.md) — Use `/{*splat}` not `*` for catch-all routes; `req.params.id` is `string|string[]`, always parse with Array.isArray guard.

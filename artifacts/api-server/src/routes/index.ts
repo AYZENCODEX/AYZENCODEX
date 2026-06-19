@@ -1,8 +1,28 @@
 import { Router, type IRouter } from "express";
 import healthRouter from "./health";
+import authRouter from "./auth";
+import usersRouter from "./users";
+import projectsRouter from "./projects";
+import tasksRouter from "./tasks";
+import toolsRouter from "./tools";
+import vaultRouter from "./vault";
+import leaderboardRouter from "./leaderboard";
+import broadcastRouter from "./broadcast";
+import settingsRouter from "./settings";
+import telemetryRouter from "./telemetry";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(authRouter);
+router.use(usersRouter);
+router.use(projectsRouter);
+router.use(tasksRouter);
+router.use(toolsRouter);
+router.use(vaultRouter);
+router.use(leaderboardRouter);
+router.use(broadcastRouter);
+router.use(settingsRouter);
+router.use(telemetryRouter);
 
 export default router;
