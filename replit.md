@@ -14,12 +14,12 @@ A full-stack Crypto Airdrop & Task Management Platform with Admin and User roles
 
 ## Demo Accounts
 
-| Role  | Email             | Password  |
-|-------|-------------------|-----------|
-| Admin | admin@ayzen.io    | demo123   |
-| User  | user@ayzen.io     | demo123   |
+| Role  | Email                  | Password      |
+|-------|------------------------|---------------|
+| Admin | support@ayzen.tech     | 1234578@Ba1   |
+| User  | user@ayzen.io          | demo123       |
 
-Or use the "Admin Init" / "User Init" quick-login buttons on the login page.
+Or use the "Admin Init" / "User Init" quick-login buttons on the login page (they call the real API, not a mock).
 
 ## Stack
 

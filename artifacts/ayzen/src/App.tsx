@@ -25,6 +25,7 @@ import UserTasks from "@/pages/user/tasks";
 import UserVault from "@/pages/user/vault";
 import UserLeaderboard from "@/pages/user/leaderboard";
 import UserInbox from "@/pages/user/inbox";
+import Authenticator from "@/pages/user/authenticator";
 
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -83,7 +84,8 @@ function Router() {
       <Route path="/vault">{() => <ProtectedRoute component={UserVault} />}</Route>
       <Route path="/leaderboard">{() => <ProtectedRoute component={UserLeaderboard} />}</Route>
       <Route path="/inbox">{() => <ProtectedRoute component={UserInbox} />}</Route>
-      
+      <Route path="/authenticator">{() => <ProtectedRoute component={Authenticator} />}</Route>
+
       <Route component={NotFound} />
     </Switch>
   );
