@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { db, vaultEntriesTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { db, vaultEntriesTable, usersTable } from "@workspace/db";
+import { eq, and, count } from "drizzle-orm";
 
 const router = Router();
 
@@ -13,10 +13,26 @@ function getUserId(req: { headers: { authorization?: string } }): number {
   } catch { return 1; }
 }
 
+function isAdmin(req: { headers: { authorization?: string } }): boolean {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return false;
+  try {
+    const payload = JSON.parse(Buffer.from(authHeader.replace("Bearer ", ""), "base64").toString());
+    return payload.role === "admin";
+  } catch { return false; }
+}
+
+async function generateSerial(userId: number): Promise<string> {
+  const [{ total }] = await db.select({ total: count() }).from(vaultEntriesTable).where(eq(vaultEntriesTable.userId, userId));
+  const num = Number(total) + 1;
+  return `AYZNA${userId}-${num}`;
+}
+
 function formatEntry(e: typeof vaultEntriesTable.$inferSelect) {
   return {
     ...e,
     walletAddresses: e.walletAddresses ? JSON.parse(e.walletAddresses) : [],
+    backupCodes: e.backupCodes ? JSON.parse(e.backupCodes) : [],
     createdAt: e.createdAt.toISOString(),
     updatedAt: e.updatedAt.toISOString(),
   };
@@ -30,11 +46,12 @@ router.get("/vault", async (req, res): Promise<void> => {
 
 router.post("/vault", async (req, res): Promise<void> => {
   const userId = getUserId(req);
-  const { category, projectName, twitterUsername, discordUsername, telegramUsername, walletAddresses, backupCodes, notes } = req.body;
+  const { category, projectName, email, twitterUsername, discordUsername, telegramUsername, walletAddresses, backupCodes, notes } = req.body;
   if (!category || !projectName) { res.status(400).json({ error: "category and projectName are required" }); return; }
+  const serial = await generateSerial(userId);
   const [entry] = await db.insert(vaultEntriesTable).values({
-    userId, category, projectName,
-    twitterUsername, discordUsername, telegramUsername,
+    userId, entitySerial: serial, category, projectName,
+    email, twitterUsername, discordUsername, telegramUsername,
     walletAddresses: walletAddresses ? JSON.stringify(walletAddresses) : null,
     backupCodes: backupCodes ? JSON.stringify(backupCodes) : null,
     notes,
@@ -54,7 +71,7 @@ router.patch("/vault/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const userId = getUserId(req);
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  for (const f of ["category", "projectName", "twitterUsername", "discordUsername", "telegramUsername", "notes"]) {
+  for (const f of ["category", "projectName", "email", "twitterUsername", "discordUsername", "telegramUsername", "notes"]) {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   }
   if (req.body.walletAddresses !== undefined) updates.walletAddresses = JSON.stringify(req.body.walletAddresses);
@@ -69,6 +86,20 @@ router.delete("/vault/:id", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   await db.delete(vaultEntriesTable).where(and(eq(vaultEntriesTable.id, id), eq(vaultEntriesTable.userId, userId)));
   res.json({ message: "Vault entry deleted" });
+});
+
+// Admin: view all entities across all users
+router.get("/admin/vault", async (req, res): Promise<void> => {
+  if (!isAdmin(req)) { res.status(403).json({ error: "Forbidden" }); return; }
+  const entries = await db
+    .select({ entry: vaultEntriesTable, username: usersTable.username, userEmail: usersTable.email })
+    .from(vaultEntriesTable)
+    .leftJoin(usersTable, eq(vaultEntriesTable.userId, usersTable.id));
+  res.json(entries.map(({ entry, username, userEmail }) => ({
+    ...formatEntry(entry),
+    username,
+    userEmail,
+  })));
 });
 
 export default router;

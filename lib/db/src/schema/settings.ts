@@ -8,6 +8,8 @@ export const settingsTable = pgTable("settings", {
   smtpHost: text("smtp_host"),
   smtpPort: integer("smtp_port"),
   smtpUser: text("smtp_user"),
+  smtpPassword: text("smtp_password"),
+  smtpFrom: text("smtp_from"),
   telegramBotUsername: text("telegram_bot_username"),
   telegramWebhookUrl: text("telegram_webhook_url"),
   twoFaIssuerName: text("two_fa_issuer_name").notNull().default("AYZEN"),
