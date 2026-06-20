@@ -30,6 +30,7 @@ import UserInbox from "@/pages/user/inbox";
 import Authenticator from "@/pages/user/authenticator";
 import AyzenEmail from "@/pages/user/ayzen-email";
 
+import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
 
@@ -55,7 +56,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/dashboard" />) : <Redirect to="/login" />}
+        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/dashboard" />) : <Landing />}
       </Route>
 
       <Route path="/login" component={Login} />
