@@ -30,3 +30,9 @@ NODE_ENV = "production"
 
 [services.production.health.startup]
 path = "/api/healthz"
+# Give the Node.js process time to bind its port before the probe fires.
+# The proxy starts immediately and would otherwise probe before the backend
+# is ready, causing spurious 500s during the first ~500 ms of cold-start.
+initialDelaySeconds = 5
+periodSeconds = 5
+failureThreshold = 12
