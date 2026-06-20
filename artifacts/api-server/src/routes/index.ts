@@ -13,6 +13,8 @@ import telemetryRouter from "./telemetry";
 import aiRouter from "./ai";
 import emailRoutingRouter from "./email-routing";
 import telegramRouter from "./telegram";
+import emailAccountsRouter from "./email-accounts";
+import supportRouter from "./support";
 
 const router: IRouter = Router();
 
@@ -30,5 +32,7 @@ router.use(telemetryRouter);
 router.use(aiRouter);
 router.use(emailRoutingRouter);
 router.use(telegramRouter);
+router.use(emailAccountsRouter);
+router.use(supportRouter);
 
 export default router;

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FolderGit2, CheckSquare, Fuel, Wallet,
   Activity, MessageSquare, Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
-  Radio, Code2, BarChart3, Database, AtSign, UserCircle,
+  Radio, Code2, BarChart3, Database, AtSign, UserCircle, Mail, HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/admin/broadcast", label: "Broadcast", icon: Radio },
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
+      { href: "/admin/support", label: "Support", icon: HelpCircle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
       { href: "/admin/developer", label: "Developer", icon: Code2 },
     ],
@@ -70,6 +71,7 @@ const USER_NAV: NavGroup[] = [
     items: [
       { href: "/vault", label: "Vault", icon: Vault },
       { href: "/ayzen-email", label: "AYZEN Email", icon: AtSign },
+      { href: "/email-accounts", label: "Email Manager", icon: Mail },
       { href: "/authenticator", label: "2FA Codes", icon: ShieldCheck },
     ],
   },
@@ -79,6 +81,7 @@ const USER_NAV: NavGroup[] = [
       { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
       { href: "/inbox", label: "Inbox", icon: Inbox },
       { href: "/profile", label: "My Profile", icon: UserCircle },
+      { href: "/support", label: "Support", icon: HelpCircle },
     ],
   },
 ];

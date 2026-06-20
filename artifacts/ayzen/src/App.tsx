@@ -30,6 +30,9 @@ import UserInbox from "@/pages/user/inbox";
 import Authenticator from "@/pages/user/authenticator";
 import AyzenEmail from "@/pages/user/ayzen-email";
 import UserProfile from "@/pages/user/profile";
+import EmailAccounts from "@/pages/user/email-accounts";
+import UserSupport from "@/pages/user/support";
+import AdminSupport from "@/pages/admin/support";
 
 import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
@@ -89,6 +92,9 @@ function Router() {
       <Route path="/authenticator">{() => <ProtectedRoute component={Authenticator} />}</Route>
       <Route path="/ayzen-email">{() => <ProtectedRoute component={AyzenEmail} />}</Route>
       <Route path="/profile">{() => <ProtectedRoute component={UserProfile} />}</Route>
+      <Route path="/email-accounts">{() => <ProtectedRoute component={EmailAccounts} />}</Route>
+      <Route path="/support">{() => <ProtectedRoute component={UserSupport} />}</Route>
+      <Route path="/admin/support">{() => <ProtectedRoute component={AdminSupport} adminOnly />}</Route>
 
       <Route component={NotFound} />
     </Switch>

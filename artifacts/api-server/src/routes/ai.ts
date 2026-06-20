@@ -111,7 +111,7 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     .where(eq(userProjectsTable.userId, userId));
   const tasks = await db.select().from(taskSubmissionsTable)
     .where(eq(taskSubmissionsTable.userId, userId))
-    .orderBy(desc(taskSubmissionsTable.createdAt))
+    .orderBy(desc(taskSubmissionsTable.submittedAt))
     .limit(10);
 
   const systemPrompt = BASE_SYSTEM + (user ? buildContext(user, vault, projects, tasks) : "");
@@ -124,7 +124,7 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
       headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
       body: JSON.stringify({ model: selectedModel, messages: allMessages, max_tokens: 1024 }),
     });
-    const data = await response.json();
+    const data = await response.json() as Record<string, unknown>;
     res.json({ ...data, _model: selectedModel });
     return;
   }
@@ -134,7 +134,7 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://ayzen.tech" },
     body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: allMessages, max_tokens: 1024 }),
   });
-  const data = await response.json();
+  const data = await response.json() as Record<string, unknown>;
   res.json({ ...data, _model: "llama-3.3-70b (OpenRouter)" });
 });
 
