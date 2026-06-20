@@ -18,6 +18,8 @@ export const usersTable = pgTable("users", {
   walletCount: integer("wallet_count").notNull().default(0),
   streak: integer("streak").notNull().default(0),
   longestStreak: integer("longest_streak").notNull().default(0),
+  telegramChatId: text("telegram_chat_id"),
+  telegramUsername: text("telegram_username"),
   lastActiveAt: timestamp("last_active_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

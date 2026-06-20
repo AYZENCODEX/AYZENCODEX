@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, broadcastsTable, usersTable } from "@workspace/db";
 import { count } from "drizzle-orm";
+import { broadcastToAll } from "../lib/telegram";
 
 const router = Router();
 
@@ -24,6 +25,12 @@ router.post("/broadcast", async (req, res): Promise<void> => {
     status: scheduledAt ? "scheduled" : "sent",
     scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
   }).returning();
+  // Push to Telegram if channel includes telegram
+  if (channel === "telegram" || channel === "all") {
+    const tgText = `📣 *${title}*\n\n${message}`;
+    broadcastToAll(tgText).catch(() => {});
+  }
+
   res.status(201).json(formatBroadcast(broadcast));
 });
 

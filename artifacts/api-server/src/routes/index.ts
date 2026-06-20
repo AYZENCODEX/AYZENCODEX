@@ -12,6 +12,7 @@ import settingsRouter from "./settings";
 import telemetryRouter from "./telemetry";
 import aiRouter from "./ai";
 import emailRoutingRouter from "./email-routing";
+import telegramRouter from "./telegram";
 
 const router: IRouter = Router();
 
@@ -28,5 +29,6 @@ router.use(settingsRouter);
 router.use(telemetryRouter);
 router.use(aiRouter);
 router.use(emailRoutingRouter);
+router.use(telegramRouter);
 
 export default router;
