@@ -33,6 +33,8 @@ import UserProfile from "@/pages/user/profile";
 import EmailAccounts from "@/pages/user/email-accounts";
 import UserSupport from "@/pages/user/support";
 import AdminSupport from "@/pages/admin/support";
+import UserReferrals from "@/pages/user/referrals";
+import AdminReferrals from "@/pages/admin/referrals";
 
 import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
@@ -94,7 +96,9 @@ function Router() {
       <Route path="/profile">{() => <ProtectedRoute component={UserProfile} />}</Route>
       <Route path="/email-accounts">{() => <ProtectedRoute component={EmailAccounts} />}</Route>
       <Route path="/support">{() => <ProtectedRoute component={UserSupport} />}</Route>
+      <Route path="/referrals">{() => <ProtectedRoute component={UserReferrals} />}</Route>
       <Route path="/admin/support">{() => <ProtectedRoute component={AdminSupport} adminOnly />}</Route>
+      <Route path="/admin/referrals">{() => <ProtectedRoute component={AdminReferrals} adminOnly />}</Route>
 
       <Route component={NotFound} />
     </Switch>

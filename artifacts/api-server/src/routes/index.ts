@@ -15,6 +15,7 @@ import emailRoutingRouter from "./email-routing";
 import telegramRouter from "./telegram";
 import emailAccountsRouter from "./email-accounts";
 import supportRouter from "./support";
+import referralsRouter from "./referrals";
 
 const router: IRouter = Router();
 
@@ -34,5 +35,6 @@ router.use(emailRoutingRouter);
 router.use(telegramRouter);
 router.use(emailAccountsRouter);
 router.use(supportRouter);
+router.use(referralsRouter);
 
 export default router;

@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FolderGit2, CheckSquare, Fuel, Wallet,
   Activity, MessageSquare, Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
-  Radio, Code2, BarChart3, Database, AtSign, UserCircle, Mail, HelpCircle,
+  Radio, Code2, BarChart3, Database, AtSign, UserCircle, Mail, HelpCircle, Share2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ const ADMIN_NAV: NavGroup[] = [
     label: "System", icon: Settings,
     items: [
       { href: "/admin/broadcast", label: "Broadcast", icon: Radio },
+      { href: "/admin/referrals", label: "Referrals", icon: Share2 },
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
       { href: "/admin/support", label: "Support", icon: HelpCircle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
@@ -81,6 +82,7 @@ const USER_NAV: NavGroup[] = [
       { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
       { href: "/inbox", label: "Inbox", icon: Inbox },
       { href: "/profile", label: "My Profile", icon: UserCircle },
+      { href: "/referrals", label: "Referrals", icon: Share2 },
       { href: "/support", label: "Support", icon: HelpCircle },
     ],
   },

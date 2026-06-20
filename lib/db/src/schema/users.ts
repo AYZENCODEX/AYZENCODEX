@@ -25,6 +25,8 @@ export const usersTable = pgTable("users", {
   telegramHandle: text("telegram_handle"),
   telegramChatId: text("telegram_chat_id"),
   telegramUsername: text("telegram_username"),
+  referralCode: text("referral_code").unique(),
+  referredBy: integer("referred_by"),
   lastActiveAt: timestamp("last_active_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

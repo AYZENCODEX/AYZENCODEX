@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import * as crypto from "crypto";
+import { referralsTable } from "@workspace/db";
 import { getUserFromToken } from "../lib/auth-utils";
 
 const router = Router();
@@ -24,17 +25,53 @@ function sanitizeUser(user: typeof usersTable.$inferSelect) {
   };
 }
 
+function generateReferralCode(): string {
+  return "AYZN" + crypto.randomBytes(3).toString("hex").toUpperCase();
+}
+
 router.post("/auth/register", async (req, res): Promise<void> => {
-  const { username, email, password } = req.body;
+  const { username, email, password, refCode } = req.body;
   if (!username || !email || !password) {
     res.status(400).json({ error: "username, email, and password are required" }); return;
   }
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (existing.length > 0) { res.status(409).json({ error: "Email already registered" }); return; }
+
+  // Generate unique referral code
+  let referralCode = generateReferralCode();
+  let codeExists = true;
+  while (codeExists) {
+    const check = await db.select().from(usersTable).where(eq(usersTable.referralCode, referralCode));
+    if (check.length === 0) codeExists = false;
+    else referralCode = generateReferralCode();
+  }
+
+  // Resolve referrer if refCode provided
+  let referredBy: number | null = null;
+  let referrer: typeof usersTable.$inferSelect | null = null;
+  if (refCode) {
+    const [found] = await db.select().from(usersTable).where(eq(usersTable.referralCode, (refCode as string).toUpperCase().trim()));
+    if (found) { referredBy = found.id; referrer = found; }
+  }
+
   const [user] = await db.insert(usersTable).values({
     username, email, passwordHash: hashPassword(password),
     role: "user", status: "active", emailVerified: false, twoFaEnabled: false,
+    referralCode,
+    ...(referredBy ? { referredBy } : {}),
   }).returning();
+
+  // Create referral record
+  if (referrer) {
+    await db.insert(referralsTable).values({
+      referrerId: referrer.id,
+      referredId: user.id,
+      codeUsed: (refCode as string).toUpperCase().trim(),
+      rewardAmount: 10,
+      rewardPaid: false,
+    });
+  }
+
   const token = generateToken(user.id, user.role);
   res.status(201).json({ token, refreshToken: token, user: sanitizeUser(user) });
 });
