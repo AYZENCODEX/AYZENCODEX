@@ -18,6 +18,7 @@ import AdminBroadcast from "@/pages/admin/broadcast";
 import AdminLeaderboard from "@/pages/admin/leaderboard";
 import AdminSettings from "@/pages/admin/settings";
 import AdminDeveloper from "@/pages/admin/developer";
+import AdminVault from "@/pages/admin/vault";
 import UserDashboard from "@/pages/user/dashboard";
 import UserProjects from "@/pages/user/projects";
 import UserProjectDetail from "@/pages/user/project-detail";
@@ -73,6 +74,7 @@ function Router() {
       <Route path="/admin/tools/streak">{() => <ProtectedRoute component={AdminStreak} adminOnly />}</Route>
       <Route path="/admin/broadcast">{() => <ProtectedRoute component={AdminBroadcast} adminOnly />}</Route>
       <Route path="/admin/leaderboard">{() => <ProtectedRoute component={AdminLeaderboard} adminOnly />}</Route>
+      <Route path="/admin/vault">{() => <ProtectedRoute component={AdminVault} adminOnly />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={AdminSettings} adminOnly />}</Route>
       <Route path="/admin/developer">{() => <ProtectedRoute component={AdminDeveloper} adminOnly />}</Route>
 

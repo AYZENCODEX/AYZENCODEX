@@ -1650,10 +1650,14 @@ components:
           type: integer
         userId:
           type: integer
+        entitySerial:
+          type: ["string", "null"]
         category:
           type: string
         projectName:
           type: string
+        email:
+          type: ["string", "null"]
         twitterUsername:
           type: ["string", "null"]
         discordUsername:
@@ -1661,6 +1665,10 @@ components:
         telegramUsername:
           type: ["string", "null"]
         walletAddresses:
+          type: array
+          items:
+            type: string
+        backupCodes:
           type: array
           items:
             type: string
@@ -1678,6 +1686,8 @@ components:
         category:
           type: string
         projectName:
+          type: string
+        email:
           type: string
         twitterUsername:
           type: string
@@ -1702,6 +1712,8 @@ components:
         category:
           type: string
         projectName:
+          type: string
+        email:
           type: string
         twitterUsername:
           type: string

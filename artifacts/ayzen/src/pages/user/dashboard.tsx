@@ -6,7 +6,7 @@ import { Trophy, CheckSquare, Zap, Activity } from "lucide-react";
 export default function UserDashboard() {
   const { data: user, isLoading: userLoading } = useGetMe();
   const { data: stats, isLoading: statsLoading } = useGetUserStats(user?.id || 0, {
-    query: { enabled: !!user?.id }
+    query: { enabled: !!user?.id, queryKey: ["user-stats", user?.id] }
   });
 
   return (

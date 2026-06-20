@@ -9,6 +9,7 @@
 export interface VaultEntryUpdate {
   category?: string;
   projectName?: string;
+  email?: string;
   twitterUsername?: string;
   discordUsername?: string;
   telegramUsername?: string;

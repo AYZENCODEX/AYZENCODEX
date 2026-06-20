@@ -374,8 +374,12 @@ export interface SpamScore {
 export interface VaultEntry {
   id: number;
   userId: number;
+  /** @nullable */
+  entitySerial?: string | null;
   category: string;
   projectName: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   twitterUsername?: string | null;
   /** @nullable */
@@ -383,6 +387,7 @@ export interface VaultEntry {
   /** @nullable */
   telegramUsername?: string | null;
   walletAddresses?: string[];
+  backupCodes?: string[];
   /** @nullable */
   notes?: string | null;
   createdAt: string;
@@ -392,6 +397,7 @@ export interface VaultEntry {
 export interface VaultEntryInput {
   category: string;
   projectName: string;
+  email?: string;
   twitterUsername?: string;
   discordUsername?: string;
   telegramUsername?: string;
@@ -403,6 +409,7 @@ export interface VaultEntryInput {
 export interface VaultEntryUpdate {
   category?: string;
   projectName?: string;
+  email?: string;
   twitterUsername?: string;
   discordUsername?: string;
   telegramUsername?: string;

@@ -9,8 +9,12 @@
 export interface VaultEntry {
   id: number;
   userId: number;
+  /** @nullable */
+  entitySerial?: string | null;
   category: string;
   projectName: string;
+  /** @nullable */
+  email?: string | null;
   /** @nullable */
   twitterUsername?: string | null;
   /** @nullable */
@@ -18,6 +22,7 @@ export interface VaultEntry {
   /** @nullable */
   telegramUsername?: string | null;
   walletAddresses?: string[];
+  backupCodes?: string[];
   /** @nullable */
   notes?: string | null;
   createdAt: string;

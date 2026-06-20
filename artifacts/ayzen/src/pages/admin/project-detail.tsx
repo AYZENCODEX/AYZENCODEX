@@ -12,11 +12,11 @@ export default function AdminProjectDetail() {
   const projectId = parseInt(id || "0", 10);
   
   const { data: project, isLoading: projectLoading } = useGetProject(projectId, {
-    query: { enabled: !!projectId }
+    query: { enabled: !!projectId, queryKey: ["project", projectId] }
   });
   
   const { data: stats, isLoading: statsLoading } = useGetProjectStats(projectId, {
-    query: { enabled: !!projectId }
+    query: { enabled: !!projectId, queryKey: ["project-stats", projectId] }
   });
 
   return (

@@ -9,6 +9,7 @@
 export interface VaultEntryInput {
   category: string;
   projectName: string;
+  email?: string;
   twitterUsername?: string;
   discordUsername?: string;
   telegramUsername?: string;

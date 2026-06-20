@@ -746,12 +746,15 @@ export const GetSpamScoreResponse = zod.object({
 export const ListVaultEntriesResponseItem = zod.object({
   "id": zod.number(),
   "userId": zod.number(),
+  "entitySerial": zod.string().nullish(),
   "category": zod.string(),
   "projectName": zod.string(),
+  "email": zod.string().nullish(),
   "twitterUsername": zod.string().nullish(),
   "discordUsername": zod.string().nullish(),
   "telegramUsername": zod.string().nullish(),
   "walletAddresses": zod.array(zod.string()).optional(),
+  "backupCodes": zod.array(zod.string()).optional(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -765,6 +768,7 @@ export const ListVaultEntriesResponse = zod.array(ListVaultEntriesResponseItem)
 export const CreateVaultEntryBody = zod.object({
   "category": zod.string(),
   "projectName": zod.string(),
+  "email": zod.string().optional(),
   "twitterUsername": zod.string().optional(),
   "discordUsername": zod.string().optional(),
   "telegramUsername": zod.string().optional(),
@@ -784,12 +788,15 @@ export const GetVaultEntryParams = zod.object({
 export const GetVaultEntryResponse = zod.object({
   "id": zod.number(),
   "userId": zod.number(),
+  "entitySerial": zod.string().nullish(),
   "category": zod.string(),
   "projectName": zod.string(),
+  "email": zod.string().nullish(),
   "twitterUsername": zod.string().nullish(),
   "discordUsername": zod.string().nullish(),
   "telegramUsername": zod.string().nullish(),
   "walletAddresses": zod.array(zod.string()).optional(),
+  "backupCodes": zod.array(zod.string()).optional(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()
@@ -806,6 +813,7 @@ export const UpdateVaultEntryParams = zod.object({
 export const UpdateVaultEntryBody = zod.object({
   "category": zod.string().optional(),
   "projectName": zod.string().optional(),
+  "email": zod.string().optional(),
   "twitterUsername": zod.string().optional(),
   "discordUsername": zod.string().optional(),
   "telegramUsername": zod.string().optional(),
@@ -817,12 +825,15 @@ export const UpdateVaultEntryBody = zod.object({
 export const UpdateVaultEntryResponse = zod.object({
   "id": zod.number(),
   "userId": zod.number(),
+  "entitySerial": zod.string().nullish(),
   "category": zod.string(),
   "projectName": zod.string(),
+  "email": zod.string().nullish(),
   "twitterUsername": zod.string().nullish(),
   "discordUsername": zod.string().nullish(),
   "telegramUsername": zod.string().nullish(),
   "walletAddresses": zod.array(zod.string()).optional(),
+  "backupCodes": zod.array(zod.string()).optional(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string().optional()

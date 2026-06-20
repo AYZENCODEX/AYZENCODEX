@@ -64,7 +64,7 @@ export default function UserProjectDetail() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { data: project, isLoading } = useGetProject(projectId, { query: { enabled: !!projectId } });
+  const { data: project, isLoading } = useGetProject(projectId, { query: { enabled: !!projectId, queryKey: ["project", projectId] } });
   const { data: vaultEntries } = useListVaultEntries();
 
   const [enrollOpen, setEnrollOpen] = useState(false);
