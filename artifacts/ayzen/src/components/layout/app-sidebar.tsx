@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FolderGit2, CheckSquare, Fuel, Wallet,
   Activity, MessageSquare, Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
-  Radio, Code2, BarChart3, Database, AtSign,
+  Radio, Code2, BarChart3, Database, AtSign, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -78,6 +78,7 @@ const USER_NAV: NavGroup[] = [
     items: [
       { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
       { href: "/inbox", label: "Inbox", icon: Inbox },
+      { href: "/profile", label: "My Profile", icon: UserCircle },
     ],
   },
 ];

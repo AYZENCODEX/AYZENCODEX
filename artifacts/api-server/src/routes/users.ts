@@ -135,4 +135,52 @@ router.get("/admin/activity", async (_req, res): Promise<void> => {
   res.json({ daily, monthly });
 });
 
+// ─── Profile: GET + PUT for the authenticated user ───────────────────────────
+
+function getAuthUserId(req: any): number | null {
+  const auth = req.headers.authorization as string | undefined;
+  if (!auth) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(auth.replace("Bearer ", ""), "base64").toString());
+    return payload.userId ?? null;
+  } catch { return null; }
+}
+
+router.get("/profile", async (req, res): Promise<void> => {
+  const userId = getAuthUserId(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) { res.status(404).json({ error: "Not found" }); return; }
+
+  const [projectCountResult] = await db.select({ cnt: count() }).from(userProjectsTable).where(eq(userProjectsTable.userId, userId));
+  const [taskCountResult] = await db.select({ cnt: count() }).from(taskSubmissionsTable)
+    .where(and(eq(taskSubmissionsTable.userId, userId), eq(taskSubmissionsTable.status, "approved")));
+
+  res.json({
+    ...sanitizeUser(user),
+    projectCount: Number(projectCountResult?.cnt ?? 0),
+    tasksCompleted: Number(taskCountResult?.cnt ?? 0),
+  });
+});
+
+router.put("/profile", async (req, res): Promise<void> => {
+  const userId = getAuthUserId(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { bio, twitterHandle, discordHandle, websiteUrl, telegramHandle, avatarUrl, username } = req.body as Record<string, string>;
+  const updates: Record<string, unknown> = {};
+  if (bio !== undefined) updates.bio = bio.slice(0, 300);
+  if (twitterHandle !== undefined) updates.twitterHandle = twitterHandle.replace(/^@/, "");
+  if (discordHandle !== undefined) updates.discordHandle = discordHandle;
+  if (websiteUrl !== undefined) updates.websiteUrl = websiteUrl;
+  if (telegramHandle !== undefined) updates.telegramHandle = telegramHandle.replace(/^@/, "");
+  if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+  if (username !== undefined && username.trim()) updates.username = username.trim().slice(0, 30);
+
+  const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
+  if (!updated) { res.status(404).json({ error: "Not found" }); return; }
+  res.json(sanitizeUser(updated));
+});
+
 export default router;
