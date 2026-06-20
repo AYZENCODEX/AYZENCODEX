@@ -10,6 +10,7 @@ export const usersTable = pgTable("users", {
   role: text("role").notNull().default("user"),
   status: text("status").notNull().default("active"),
   avatarUrl: text("avatar_url"),
+  ayzenEmail: text("ayzen_email"),
   twoFaEnabled: boolean("two_fa_enabled").notNull().default(false),
   twoFaSecret: text("two_fa_secret"),
   emailVerified: boolean("email_verified").notNull().default(false),

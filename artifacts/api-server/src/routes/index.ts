@@ -10,6 +10,8 @@ import leaderboardRouter from "./leaderboard";
 import broadcastRouter from "./broadcast";
 import settingsRouter from "./settings";
 import telemetryRouter from "./telemetry";
+import aiRouter from "./ai";
+import emailRoutingRouter from "./email-routing";
 
 const router: IRouter = Router();
 
@@ -24,5 +26,7 @@ router.use(leaderboardRouter);
 router.use(broadcastRouter);
 router.use(settingsRouter);
 router.use(telemetryRouter);
+router.use(aiRouter);
+router.use(emailRoutingRouter);
 
 export default router;

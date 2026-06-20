@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, FolderGit2, CheckSquare, Fuel, Wallet,
   Activity, MessageSquare, Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
-  Radio, Code2, BarChart3, Database,
+  Radio, Code2, BarChart3, Database, AtSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,7 @@ const USER_NAV: NavGroup[] = [
     label: "Assets", icon: KeyRound,
     items: [
       { href: "/vault", label: "Vault", icon: Vault },
+      { href: "/ayzen-email", label: "AYZEN Email", icon: AtSign },
       { href: "/authenticator", label: "2FA Codes", icon: ShieldCheck },
     ],
   },

@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/app-layout";
+import { AiChat } from "@/components/ai-chat";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import AdminDashboard from "@/pages/admin/dashboard";
@@ -27,6 +28,7 @@ import UserVault from "@/pages/user/vault";
 import UserLeaderboard from "@/pages/user/leaderboard";
 import UserInbox from "@/pages/user/inbox";
 import Authenticator from "@/pages/user/authenticator";
+import AyzenEmail from "@/pages/user/ayzen-email";
 
 import NotFound from "@/pages/not-found";
 import { useEffect } from "react";
@@ -36,13 +38,9 @@ function ProtectedRoute({ component: Component, adminOnly = false, ...rest }: an
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono">INITIALIZING...</div>;
 
-  if (!user) {
-    return <Redirect to="/login" />;
-  }
+  if (!user) return <Redirect to="/login" />;
 
-  if (adminOnly && !isAdmin) {
-    return <Redirect to="/dashboard" />;
-  }
+  if (adminOnly && !isAdmin) return <Redirect to="/dashboard" />;
 
   return (
     <AppLayout>
@@ -53,16 +51,16 @@ function ProtectedRoute({ component: Component, adminOnly = false, ...rest }: an
 
 function Router() {
   const { user, isAdmin } = useAuth();
-  
+
   return (
     <Switch>
       <Route path="/">
         {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/dashboard" />) : <Redirect to="/login" />}
       </Route>
-      
+
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
-      
+
       {/* Admin Routes */}
       <Route path="/admin/dashboard">{() => <ProtectedRoute component={AdminDashboard} adminOnly />}</Route>
       <Route path="/admin/users">{() => <ProtectedRoute component={AdminUsers} adminOnly />}</Route>
@@ -87,6 +85,7 @@ function Router() {
       <Route path="/leaderboard">{() => <ProtectedRoute component={UserLeaderboard} />}</Route>
       <Route path="/inbox">{() => <ProtectedRoute component={UserInbox} />}</Route>
       <Route path="/authenticator">{() => <ProtectedRoute component={Authenticator} />}</Route>
+      <Route path="/ayzen-email">{() => <ProtectedRoute component={AyzenEmail} />}</Route>
 
       <Route component={NotFound} />
     </Switch>
@@ -104,6 +103,7 @@ function App() {
         <AuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
             <Router />
+            <AiChat />
           </WouterRouter>
         </AuthProvider>
         <Toaster />
