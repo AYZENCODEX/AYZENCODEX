@@ -55,7 +55,7 @@ export default function AdminDeveloper() {
       body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: "ping" }] }),
     });
     const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content ?? data.error ?? "No response";
+    const reply = String(data.choices?.[0]?.message?.content ?? data.error ?? "No response");
     alert(`Model: ${modelId}\n\nResponse: ${reply.slice(0, 300)}`);
   };
 

@@ -1,7 +1,8 @@
 import TelegramBot from "node-telegram-bot-api";
-import { db, usersTable, projectsTable, tasksTable, broadcastsTable } from "@workspace/db";
-import { eq, desc, count, isNotNull } from "drizzle-orm";
+import { db, usersTable, projectsTable, tasksTable, broadcastsTable, taskSubmissionsTable } from "@workspace/db";
+import { eq, desc, count, isNotNull, and } from "drizzle-orm";
 import { logger } from "./logger";
+import { broadcastEvent } from "../routes/events";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
@@ -112,7 +113,11 @@ async function handleHelp(chatId: string): Promise<void> {
     "📊 *Airdrop Intel*",
     "/projects — Active airdrop projects",
     "/leaderboard — Top operators by ROI",
-    "/tasks — Recent tasks",
+    "/tasks — Available tasks with IDs",
+    "",
+    "✅ *Task Completion*",
+    "/done <taskId> — Submit task completion",
+    "/mytasks — Your submission history",
     "",
     "👤 *Account*",
     "/connect — Link your AYZEN account",
@@ -212,6 +217,7 @@ async function handleLeaderboard(chatId: string): Promise<void> {
 async function handleTasks(chatId: string): Promise<void> {
   const tasks = await db
     .select({
+      id: tasksTable.id,
       name: tasksTable.name,
       taskType: tasksTable.taskType,
       rewardAmount: tasksTable.rewardAmount,
@@ -227,12 +233,114 @@ async function handleTasks(chatId: string): Promise<void> {
   }
 
   const lines = tasks.map(
-    (t) => `• *${t.name}* [${t.taskType}] — $${t.rewardAmount ?? 0} reward`
+    (t) => `• [ID: \`${t.id}\`] *${md(t.name)}* [${t.taskType}] — $${t.rewardAmount ?? 0} reward`
   );
 
   await bot!.sendMessage(
     chatId,
-    `*✅ Recent Tasks*\n\n${lines.join("\n")}`,
+    `*✅ Available Tasks*\n\n${lines.join("\n")}\n\n_Use /done <ID> to complete a task_`,
+    { parse_mode: "Markdown" }
+  );
+}
+
+async function handleDone(chatId: string, taskIdStr: string): Promise<void> {
+  const user = await getLinkedUser(chatId);
+  if (!user) {
+    await bot!.sendMessage(
+      chatId,
+      "❌ You must link your AYZEN account first\\. Use /connect to get started\\.",
+      { parse_mode: "MarkdownV2" }
+    );
+    return;
+  }
+
+  const taskId = parseInt(taskIdStr.trim(), 10);
+  if (isNaN(taskId)) {
+    await bot!.sendMessage(chatId, "❌ Invalid task ID\\. Usage: `/done 5`", { parse_mode: "MarkdownV2" });
+    return;
+  }
+
+  const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, taskId));
+  if (!task) {
+    await bot!.sendMessage(chatId, `❌ Task #${taskId} not found\\.`, { parse_mode: "MarkdownV2" });
+    return;
+  }
+
+  // Check if already submitted
+  const [existing] = await db
+    .select()
+    .from(taskSubmissionsTable)
+    .where(and(eq(taskSubmissionsTable.taskId, taskId), eq(taskSubmissionsTable.userId, user.id)))
+    .limit(1);
+
+  if (existing) {
+    const statusMap: Record<string, string> = { pending: "⏳ pending review", approved: "✅ already approved", rejected: "❌ rejected" };
+    await bot!.sendMessage(
+      chatId,
+      `You already submitted this task\\. Status: *${statusMap[existing.status] ?? existing.status}*`,
+      { parse_mode: "MarkdownV2" }
+    );
+    return;
+  }
+
+  // Auto-approve if verification is auto, otherwise pending
+  const status = task.verificationType === "auto" ? "approved" : "pending";
+  const notes = "Submitted via Telegram";
+
+  await db.insert(taskSubmissionsTable).values({ taskId, userId: user.id, status, notes });
+
+  if (status === "approved") {
+    await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, taskId));
+  }
+
+  // Broadcast to website — real-time sync
+  broadcastEvent("tasks_updated", { action: "submitted", taskId, userId: user.id, status, source: "telegram" });
+
+  const rewardText = task.rewardAmount ? ` \\($${task.rewardAmount} reward\\)` : "";
+
+  if (status === "approved") {
+    await bot!.sendMessage(
+      chatId,
+      `✅ *Task Completed\\!*\n\n📋 *${md(task.name)}*${rewardText}\n\nAuto\\-verified and credited to your account\\.`,
+      { parse_mode: "MarkdownV2" }
+    );
+  } else {
+    await bot!.sendMessage(
+      chatId,
+      `📨 *Task Submitted\\!*\n\n📋 *${md(task.name)}*${rewardText}\n\nStatus: ⏳ Pending admin review\\.\nYou'll be notified when it's verified\\.`,
+      { parse_mode: "MarkdownV2" }
+    );
+  }
+}
+
+async function handleMyTasks(chatId: string): Promise<void> {
+  const user = await getLinkedUser(chatId);
+  if (!user) {
+    await bot!.sendMessage(chatId, "❌ No linked account. Use /connect first.");
+    return;
+  }
+
+  const subs = await db
+    .select({ sub: taskSubmissionsTable, task: tasksTable })
+    .from(taskSubmissionsTable)
+    .leftJoin(tasksTable, eq(taskSubmissionsTable.taskId, tasksTable.id))
+    .where(eq(taskSubmissionsTable.userId, user.id))
+    .orderBy(desc(taskSubmissionsTable.submittedAt))
+    .limit(10);
+
+  if (!subs.length) {
+    await bot!.sendMessage(chatId, "You haven't submitted any tasks yet\\. Use /tasks to see available tasks\\.", { parse_mode: "MarkdownV2" });
+    return;
+  }
+
+  const statusEmoji: Record<string, string> = { approved: "✅", pending: "⏳", rejected: "❌" };
+  const lines = subs.map(
+    (s) => `${statusEmoji[s.sub.status] ?? "•"} *${md(s.task?.name ?? "Unknown")}* — ${s.sub.status}`
+  );
+
+  await bot!.sendMessage(
+    chatId,
+    `*📋 Your Task Submissions*\n\n${lines.join("\n")}`,
     { parse_mode: "Markdown" }
   );
 }
@@ -341,6 +449,8 @@ function registerHandlers(b: TelegramBot): void {
   b.onText(/^\/projects/, (msg) => handleProjects(String(msg.chat.id)));
   b.onText(/^\/leaderboard/, (msg) => handleLeaderboard(String(msg.chat.id)));
   b.onText(/^\/tasks/, (msg) => handleTasks(String(msg.chat.id)));
+  b.onText(/^\/done(?:\s+(.+))?/, (msg, match) => handleDone(String(msg.chat.id), match?.[1] ?? ""));
+  b.onText(/^\/mytasks/, (msg) => handleMyTasks(String(msg.chat.id)));
   b.onText(/^\/me/, (msg) => handleMe(String(msg.chat.id)));
   b.onText(/^\/stats/, (msg) => handleStats(String(msg.chat.id)));
   b.onText(/^\/connect/, (msg) => handleConnect(String(msg.chat.id)));
@@ -385,6 +495,35 @@ function registerHandlers(b: TelegramBot): void {
     }
     logger.warn({ err: msg }, "Telegram polling error");
   });
+}
+
+// ─── Notify user when their task submission is reviewed ───────────────────────
+
+export async function notifyTaskVerified(
+  userId: number,
+  taskName: string,
+  approved: boolean,
+  rewardAmount?: number | null
+): Promise<void> {
+  if (!bot) return;
+  const rows = await db
+    .select({ telegramChatId: usersTable.telegramChatId })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  const chatId = rows[0]?.telegramChatId;
+  if (!chatId) return;
+
+  const reward = rewardAmount ? ` (+$${rewardAmount})` : "";
+  const text = approved
+    ? `✅ *Task Approved\\!*\n\n📋 *${md(taskName)}*${reward}\n\nYour submission has been verified\\. Great work, Operator\\!`
+    : `❌ *Task Rejected*\n\n📋 *${md(taskName)}*\n\nYour submission was not approved\\. Try again or contact support\\.`;
+
+  try {
+    await bot.sendMessage(chatId, text, { parse_mode: "MarkdownV2" });
+  } catch (err: any) {
+    logger.warn({ err: err?.message, userId, chatId }, "notifyTaskVerified: failed to send");
+  }
 }
 
 // ─── Exported for route use ───────────────────────────────────────────────────

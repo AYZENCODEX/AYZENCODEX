@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, tasksTable, taskSubmissionsTable, projectsTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { broadcastEvent } from "./events";
+import { notifyTaskVerified } from "../lib/telegram";
 
 const router = Router();
 
@@ -99,13 +100,26 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
   const { submissionId, approved, rejectionReason } = req.body;
   const status = approved ? "approved" : "rejected";
   await db.update(taskSubmissionsTable).set({ status, rejectionReason, reviewedAt: new Date() }).where(eq(taskSubmissionsTable.id, submissionId));
-  if (approved) {
-    const [sub] = await db.select().from(taskSubmissionsTable).where(eq(taskSubmissionsTable.id, submissionId));
-    if (sub) {
-      const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, sub.taskId));
-      if (task) await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, sub.taskId));
+
+  const [sub] = await db.select().from(taskSubmissionsTable).where(eq(taskSubmissionsTable.id, submissionId));
+  let taskName: string | null = null;
+  let rewardAmount: number | null = null;
+
+  if (sub) {
+    const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, sub.taskId));
+    if (task) {
+      taskName = task.name;
+      rewardAmount = task.rewardAmount ?? null;
+      if (approved) {
+        await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, sub.taskId));
+      }
+    }
+    // Notify user on Telegram (fire and forget)
+    if (taskName) {
+      notifyTaskVerified(sub.userId, taskName, !!approved, rewardAmount).catch(() => {});
     }
   }
+
   broadcastEvent("tasks_updated", { action: "verified", submissionId, status });
   broadcastEvent("users_updated", { reason: "task_verified" });
   res.json({ message: `Submission ${status}` });
