@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import {
-  Mail, Plus, Trash2, Edit3, Star, StarOff, Save, X,
+  Mail, Plus, Trash2, Edit3, Star, Save, X,
   ChevronDown, ChevronUp, Eye, EyeOff, Copy, Check,
-  Server, Lock, Tag, Globe,
+  Server, Lock, Tag, Globe, Send, Inbox, Loader2,
+  RefreshCw, AlertCircle, CheckCircle, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,17 @@ interface EmailAccount {
   notes: string | null;
   tags: string | null;
   createdAt: string;
+}
+
+interface InboxMessage {
+  uid: number;
+  seqno: number;
+  flags: string[];
+  date: string;
+  from: string;
+  to: string;
+  subject: string;
+  preview: string;
 }
 
 const BLANK: Omit<EmailAccount, "id" | "createdAt"> = {
@@ -54,6 +66,22 @@ export default function EmailAccountsPage() {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [showPw, setShowPw] = useState<Record<number, boolean>>({});
   const [copied, setCopied] = useState<number | null>(null);
+
+  // Inbox state
+  const [inboxAcc, setInboxAcc] = useState<EmailAccount | null>(null);
+  const [inboxMsgs, setInboxMsgs] = useState<InboxMessage[]>([]);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [inboxError, setInboxError] = useState<string | null>(null);
+
+  // Compose state
+  const [composeAcc, setComposeAcc] = useState<EmailAccount | null>(null);
+  const [composeTo, setComposeTo] = useState("");
+  const [composeSubject, setComposeSubject] = useState("");
+  const [composeBody, setComposeBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // Test connection state
+  const [testing, setTesting] = useState<number | null>(null);
 
   const headers = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
 
@@ -109,10 +137,7 @@ export default function EmailAccountsPage() {
   };
 
   const setDefault = async (id: number) => {
-    await fetch(`/api/email-accounts/${id}`, {
-      method: "PUT", headers,
-      body: JSON.stringify({ isDefault: true }),
-    });
+    await fetch(`/api/email-accounts/${id}`, { method: "PUT", headers, body: JSON.stringify({ isDefault: true }) });
     await load();
   };
 
@@ -125,6 +150,53 @@ export default function EmailAccountsPage() {
   const toggleExpand = (id: number) => setExpanded(e => ({ ...e, [id]: !e[id] }));
   const togglePw = (id: number) => setShowPw(p => ({ ...p, [id]: !p[id] }));
 
+  // Test SMTP connection
+  const testConnection = async (acc: EmailAccount) => {
+    setTesting(acc.id);
+    try {
+      const res = await fetch(`/api/email-accounts/${acc.id}/test`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok) toast({ title: "✓ Connection OK", description: `SMTP verified for ${acc.emailAddress}` });
+      else toast({ variant: "destructive", title: "Connection failed", description: data.error });
+    } catch { toast({ variant: "destructive", title: "Test failed", description: "Network error" }); }
+    setTesting(null);
+  };
+
+  // Open inbox
+  const openInbox = async (acc: EmailAccount) => {
+    setInboxAcc(acc);
+    setInboxMsgs([]);
+    setInboxError(null);
+    setInboxLoading(true);
+    try {
+      const res = await fetch(`/api/email-accounts/${acc.id}/inbox?limit=20`, { headers: { Authorization: `Bearer ${token}` } });
+      const data = await res.json();
+      if (res.ok) setInboxMsgs(data.messages ?? []);
+      else setInboxError(data.error ?? "Failed to load inbox");
+    } catch { setInboxError("Network error — could not connect"); }
+    setInboxLoading(false);
+  };
+
+  // Send email
+  const sendEmail = async () => {
+    if (!composeAcc || !composeTo || !composeSubject || !composeBody) return;
+    setSending(true);
+    try {
+      const res = await fetch(`/api/email-accounts/${composeAcc.id}/send`, {
+        method: "POST", headers,
+        body: JSON.stringify({ to: composeTo, subject: composeSubject, body: composeBody }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: "Email sent!", description: `To: ${composeTo}` });
+        setComposeAcc(null); setComposeTo(""); setComposeSubject(""); setComposeBody("");
+      } else {
+        toast({ variant: "destructive", title: "Send failed", description: data.error });
+      }
+    } catch { toast({ variant: "destructive", title: "Error", description: "Network error" }); }
+    setSending(false);
+  };
+
   const tagColors = ["border-primary/30 text-primary", "border-secondary/30 text-secondary", "border-emerald-400/30 text-emerald-400", "border-amber-400/30 text-amber-400"];
 
   return (
@@ -135,7 +207,7 @@ export default function EmailAccountsPage() {
           <h1 className="text-2xl font-mono font-bold tracking-tighter uppercase flex items-center gap-2">
             <Mail className="w-6 h-6 text-primary" /> Email Manager
           </h1>
-          <p className="text-muted-foreground font-mono text-sm mt-0.5">Manage all your airdrop email configurations</p>
+          <p className="text-muted-foreground font-mono text-sm mt-0.5">Manage, send and receive from your airdrop email accounts</p>
         </div>
         <button
           onClick={openCreate}
@@ -197,6 +269,21 @@ export default function EmailAccountsPage() {
               </div>
 
               <div className="flex items-center gap-1 flex-shrink-0">
+                {/* Inbox */}
+                <button onClick={() => openInbox(acc)} title="View Inbox"
+                  className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded">
+                  <Inbox className="w-3.5 h-3.5" />
+                </button>
+                {/* Compose */}
+                <button onClick={() => { setComposeAcc(acc); setComposeTo(""); setComposeSubject(""); setComposeBody(""); }} title="Compose Email"
+                  className="p-1.5 text-muted-foreground hover:text-emerald-400 transition-colors rounded">
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+                {/* Test connection */}
+                <button onClick={() => testConnection(acc)} title="Test SMTP" disabled={testing === acc.id}
+                  className="p-1.5 text-muted-foreground hover:text-amber-400 transition-colors rounded disabled:opacity-50">
+                  {testing === acc.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                </button>
                 <button onClick={() => copyEmail(acc.id, acc.emailAddress)} className="p-1.5 text-muted-foreground hover:text-primary transition-colors rounded">
                   {copied === acc.id ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                 </button>
@@ -259,6 +346,154 @@ export default function EmailAccountsPage() {
         ))}
       </div>
 
+      {/* ── INBOX MODAL ───────────────────────────────────────────────────────── */}
+      {inboxAcc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
+          <div className="glass-card border rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-scale-in">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-card/90 backdrop-blur-sm rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <Inbox className="w-4 h-4 text-primary" />
+                <h2 className="font-mono font-bold text-primary uppercase tracking-widest text-sm">Inbox</h2>
+                <span className="font-mono text-xs text-muted-foreground">— {inboxAcc.emailAddress}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button onClick={() => openInbox(inboxAcc)} disabled={inboxLoading}
+                  className="p-1.5 text-muted-foreground hover:text-primary transition-colors disabled:opacity-50">
+                  <RefreshCw className={cn("w-4 h-4", inboxLoading && "animate-spin")} />
+                </button>
+                <button onClick={() => setInboxAcc(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {inboxLoading ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                  <p className="font-mono text-xs text-muted-foreground">Connecting to {inboxAcc.imapHost}…</p>
+                </div>
+              ) : inboxError ? (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <AlertCircle className="w-8 h-8 text-destructive" />
+                  <p className="font-mono text-sm text-destructive">{inboxError}</p>
+                  {inboxError.includes("Gmail") || inboxError.includes("credentials") ? (
+                    <p className="font-mono text-xs text-muted-foreground max-w-sm">
+                      Gmail requires an <span className="text-primary">App Password</span>. Go to Google Account → Security → 2-Step Verification → App passwords.
+                    </p>
+                  ) : null}
+                </div>
+              ) : inboxMsgs.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 gap-2">
+                  <Inbox className="w-8 h-8 text-muted-foreground/20" />
+                  <p className="font-mono text-sm text-muted-foreground">No messages found</p>
+                </div>
+              ) : inboxMsgs.map((msg) => (
+                <div key={msg.uid} className={cn(
+                  "p-3 rounded-lg border border-border/50 hover:border-primary/30 transition-colors cursor-default",
+                  msg.flags.includes("\\Seen") ? "bg-muted/5" : "bg-primary/5 border-primary/20"
+                )}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        {!msg.flags.includes("\\Seen") && <span className="w-1.5 h-1.5 bg-primary rounded-full flex-shrink-0" />}
+                        <p className="font-mono text-xs font-bold text-foreground truncate">{msg.subject}</p>
+                      </div>
+                      <p className="font-mono text-[10px] text-muted-foreground mt-0.5 truncate">From: {msg.from}</p>
+                      {msg.preview && (
+                        <p className="font-mono text-[10px] text-muted-foreground/60 mt-1 line-clamp-2">{msg.preview}</p>
+                      )}
+                    </div>
+                    <p className="font-mono text-[10px] text-muted-foreground/50 flex-shrink-0 text-right">
+                      {msg.date ? new Date(msg.date).toLocaleDateString() : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-border bg-card/90 rounded-b-2xl flex items-center justify-between">
+              <p className="font-mono text-[10px] text-muted-foreground">{inboxMsgs.length} message{inboxMsgs.length !== 1 ? "s" : ""} loaded</p>
+              <button
+                onClick={() => { setComposeAcc(inboxAcc); setInboxAcc(null); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground rounded-lg font-mono text-xs hover:bg-primary/90 transition-colors"
+              >
+                <Send className="w-3 h-3" /> Compose
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── COMPOSE MODAL ─────────────────────────────────────────────────────── */}
+      {composeAcc && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
+          <div className="glass-card border rounded-2xl w-full max-w-lg animate-scale-in">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-card/90 backdrop-blur-sm rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <Send className="w-4 h-4 text-emerald-400" />
+                <h2 className="font-mono font-bold text-sm uppercase tracking-widest">New Email</h2>
+                <span className="font-mono text-xs text-muted-foreground">from {composeAcc.emailAddress}</span>
+              </div>
+              <button onClick={() => setComposeAcc(null)} className="text-muted-foreground hover:text-foreground transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1">To *</label>
+                <input
+                  type="email"
+                  placeholder="recipient@example.com"
+                  value={composeTo}
+                  onChange={e => setComposeTo(e.target.value)}
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm font-mono focus:border-primary/60 outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1">Subject *</label>
+                <input
+                  type="text"
+                  placeholder="Email subject"
+                  value={composeSubject}
+                  onChange={e => setComposeSubject(e.target.value)}
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm font-mono focus:border-primary/60 outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1">Message *</label>
+                <textarea
+                  rows={6}
+                  placeholder="Write your message here…"
+                  value={composeBody}
+                  onChange={e => setComposeBody(e.target.value)}
+                  className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm font-mono focus:border-primary/60 outline-none transition-colors resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 px-5 py-4 border-t border-border bg-card/90 rounded-b-2xl">
+              <button onClick={() => setComposeAcc(null)}
+                className="flex-1 py-2 border border-border rounded-lg text-sm font-mono text-muted-foreground hover:text-foreground transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={sendEmail}
+                disabled={sending || !composeTo || !composeSubject || !composeBody}
+                className="flex-1 flex items-center justify-center gap-2 py-2 bg-emerald-500 text-white rounded-lg text-sm font-mono font-bold hover:bg-emerald-500/90 transition-colors disabled:opacity-50"
+              >
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {sending ? "Sending…" : "Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Add / Edit Form Modal ──────────────────────────────────────────────── */}
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md animate-fade-in">
@@ -291,7 +526,7 @@ export default function EmailAccountsPage() {
               {[
                 { key: "label", label: "Label *", placeholder: "e.g. Airdrop Gmail #1" },
                 { key: "emailAddress", label: "Email Address *", placeholder: "example@gmail.com" },
-                { key: "username", label: "IMAP Username", placeholder: "Usually same as email" },
+                { key: "username", label: "IMAP/SMTP Username", placeholder: "Usually same as email" },
               ].map(({ key, label, placeholder }) => (
                 <div key={key}>
                   <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1">{label}</label>
@@ -302,10 +537,11 @@ export default function EmailAccountsPage() {
               ))}
 
               <div>
-                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1">Password</label>
+                <label className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest block mb-1">Password / App Password</label>
                 <input type="password" value={form.password ?? ""} onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="App password or account password"
+                  placeholder="Gmail: use App Password (not account password)"
                   className="w-full bg-input border border-border rounded-lg px-3 py-2 text-sm font-mono focus:border-primary/60 outline-none transition-colors" />
+                <p className="text-[10px] font-mono text-muted-foreground/50 mt-1">For Gmail, generate an App Password at myaccount.google.com → Security</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

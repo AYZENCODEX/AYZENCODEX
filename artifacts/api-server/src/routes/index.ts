@@ -14,6 +14,7 @@ import aiRouter from "./ai";
 import emailRoutingRouter from "./email-routing";
 import telegramRouter from "./telegram";
 import emailAccountsRouter from "./email-accounts";
+import emailComposeRouter from "./email-compose";
 import supportRouter from "./support";
 import referralsRouter from "./referrals";
 import eventsRouter from "./events";
@@ -40,6 +41,7 @@ router.use(aiRouter);
 router.use(emailRoutingRouter);
 router.use(telegramRouter);
 router.use(emailAccountsRouter);
+router.use(emailComposeRouter);
 router.use(supportRouter);
 router.use(referralsRouter);
 

@@ -215,22 +215,26 @@ export default function Login() {
             </button>
           </div>
 
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full h-10 font-mono text-xs border-border hover:border-primary/40 hover:text-primary gap-2 mb-5"
-            onClick={handleGoogleSignIn}
-            disabled={isLoading}
-          >
-            {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
-            Continue with Google
-          </Button>
+          {import.meta.env.VITE_FIREBASE_API_KEY && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full h-10 font-mono text-xs border-border hover:border-primary/40 hover:text-primary gap-2 mb-5"
+                onClick={handleGoogleSignIn}
+                disabled={isLoading}
+              >
+                {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
+                Continue with Google
+              </Button>
 
-          <div className="flex items-center gap-3 mb-5">
-            <div className="flex-1 h-px bg-border" />
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">or</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
+              <div className="flex items-center gap-3 mb-5">
+                <div className="flex-1 h-px bg-border" />
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">or</span>
+                <div className="flex-1 h-px bg-border" />
+              </div>
+            </>
+          )}
 
           <form onSubmit={tab === "signin" ? handleSignIn : handleSignUp} className="space-y-4">
             {tab === "signup" && (
