@@ -1,10 +1,12 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
 import { User } from "@workspace/api-client-react";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
-import { supabase } from "@/lib/supabase";
+import { auth, firebaseSignOut } from "@/lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface AuthContextType {
   user: User | null;
+  token: string | null;
   login: (user: User, token: string) => void;
   logout: () => void;
   isAdmin: boolean;
@@ -15,70 +17,55 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const doLogout = useCallback(() => {
     setUser(null);
+    setToken(null);
     localStorage.removeItem("ayzen_user");
     localStorage.removeItem("ayzen_token");
     setAuthTokenGetter(null);
   }, []);
 
-  const syncSupabaseSession = useCallback(async (token: string) => {
-    try {
-      const res = await fetch("/api/auth/supabase-sync", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        localStorage.setItem("ayzen_user", JSON.stringify(data.user));
-        localStorage.setItem("ayzen_token", token);
-        setAuthTokenGetter(() => localStorage.getItem("ayzen_token"));
-      }
-    } catch {
-      // Supabase sync failed — user must use demo login
-    }
-  }, []);
-
   useEffect(() => {
-    // Wire up the auth token getter immediately so all API calls include the token
     setAuthTokenGetter(() => localStorage.getItem("ayzen_token"));
 
-    // Restore session from localStorage (demo / password accounts)
     const storedUser = localStorage.getItem("ayzen_user");
-    if (storedUser) {
-      try { setUser(JSON.parse(storedUser)); } catch { /* invalid json */ }
+    const storedToken = localStorage.getItem("ayzen_token");
+    if (storedUser && storedToken) {
+      try {
+        setUser(JSON.parse(storedUser));
+        setToken(storedToken);
+      } catch { /* invalid json */ }
     }
 
-    // Listen for Supabase OAuth / magic link completions
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.access_token && (event === "SIGNED_IN" || event === "TOKEN_REFRESHED")) {
-        await syncSupabaseSession(session.access_token);
-      } else if (event === "SIGNED_OUT") {
-        doLogout();
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      if (!firebaseUser) {
+        const tk = localStorage.getItem("ayzen_token");
+        if (!tk) doLogout();
       }
+      setIsLoading(false);
     });
 
-    setIsLoading(false);
-    return () => subscription.unsubscribe();
-  }, [syncSupabaseSession, doLogout]);
+    return () => unsubscribe();
+  }, [doLogout]);
 
-  const login = (newUser: User, token: string) => {
+  const login = (newUser: User, newToken: string) => {
     setUser(newUser);
+    setToken(newToken);
     localStorage.setItem("ayzen_user", JSON.stringify(newUser));
-    localStorage.setItem("ayzen_token", token);
+    localStorage.setItem("ayzen_token", newToken);
     setAuthTokenGetter(() => localStorage.getItem("ayzen_token"));
   };
 
   const logout = async () => {
-    await supabase.auth.signOut().catch(() => {});
+    await firebaseSignOut(auth).catch(() => {});
     doLogout();
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAdmin: user?.role === "admin", isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, isAdmin: user?.role === "admin", isLoading }}>
       {children}
     </AuthContext.Provider>
   );
