@@ -11,23 +11,37 @@ if (!process.env.DATABASE_URL) {
 }
 
 /**
- * Supabase's direct DB host (db.PROJECT.supabase.co) has no DNS A records
- * from Replit. Redirect to the session pooler, which resolves correctly.
- * Parse URL into individual Pool options so ssl settings aren't overridden
- * by connection-string parsing.
+ * Normalise the DATABASE_URL so it always works with Drizzle's prepared-statement queries.
+ *
+ * Common problems:
+ * 1. Supabase direct URL (db.PROJECT.supabase.co) → DNS not reachable from Replit.
+ *    Fix: redirect to session pooler.
+ *
+ * 2. Supabase Transaction Pooler (port 6543) → does NOT support prepared statements.
+ *    Drizzle uses prepared statements, so every query fails.
+ *    Fix: switch port to 5432 (Session Pooler) which supports prepared statements.
+ *
+ * 3. Any Supabase URL → requires SSL but Replit's trust store may reject the cert.
+ *    Fix: always use ssl: { rejectUnauthorized: false } for Supabase hosts.
  */
 function buildPoolConfig(rawUrl: string): pg.PoolConfig {
-  const u = new URL(rawUrl);
-  const directMatch = u.hostname.match(/^db\.([^.]+)\.supabase\.co$/);
+  let u: URL;
+  try {
+    u = new URL(rawUrl);
+  } catch {
+    // Fallback: try as-is
+    return { connectionString: rawUrl };
+  }
 
+  const host = u.hostname;
+
+  // ── Supabase direct DB host ──────────────────────────────────────────────
+  const directMatch = host.match(/^db\.([^.]+)\.supabase\.co$/);
   if (directMatch) {
     const projectRef = directMatch[1];
-    // Session pooler: different host + username prefix, SSL required but
-    // Replit's trust store doesn't include Supabase's intermediate CA so we
-    // skip verification (connection is still encrypted).
     return {
-      host: "aws-0-us-east-1.pooler.supabase.com",
-      port: 5432,
+      host: `aws-0-us-east-1.pooler.supabase.com`,
+      port: 5432,                               // session pooler (supports prepared stmts)
       user: `postgres.${projectRef}`,
       password: decodeURIComponent(u.password),
       database: u.pathname.replace(/^\//, "") || "postgres",
@@ -35,8 +49,33 @@ function buildPoolConfig(rawUrl: string): pg.PoolConfig {
     };
   }
 
-  // Already a pooler URL or unknown format — use the string as-is
-  return { connectionString: rawUrl };
+  // ── Supabase pooler URL (any region) ─────────────────────────────────────
+  const isSupabasePooler = /\.pooler\.supabase\.com$/.test(host);
+  if (isSupabasePooler) {
+    // Switch from transaction pooler (6543) → session pooler (5432) if needed
+    if (u.port === "6543") {
+      u.port = "5432";
+    }
+    return {
+      connectionString: u.toString(),
+      ssl: { rejectUnauthorized: false },
+    };
+  }
+
+  // ── Other Supabase hosts (e.g. legacy) ────────────────────────────────────
+  if (host.endsWith(".supabase.co")) {
+    return {
+      connectionString: rawUrl,
+      ssl: { rejectUnauthorized: false },
+    };
+  }
+
+  // ── Non-Supabase databases (Neon, Railway, etc.) ─────────────────────────
+  // Add ssl: rejectUnauthorized: false as a safe default for hosted DBs
+  return {
+    connectionString: rawUrl,
+    ssl: { rejectUnauthorized: false },
+  };
 }
 
 const poolConfig = buildPoolConfig(process.env.DATABASE_URL);
