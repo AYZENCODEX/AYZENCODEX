@@ -16,9 +16,11 @@ import telegramRouter from "./telegram";
 import emailAccountsRouter from "./email-accounts";
 import supportRouter from "./support";
 import referralsRouter from "./referrals";
+import eventsRouter from "./events";
 
 const router: IRouter = Router();
 
+router.use(eventsRouter);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(usersRouter);

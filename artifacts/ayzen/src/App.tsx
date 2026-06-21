@@ -5,6 +5,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AiChat } from "@/components/ai-chat";
+import { useRealtime } from "@/hooks/use-realtime";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import AdminDashboard from "@/pages/admin/dashboard";
@@ -107,18 +108,35 @@ function Router() {
   );
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 10_000,
+      refetchOnWindowFocus: true,
+      retry: 1,
+    },
+  },
+});
+
+function RealtimeProvider({ children }: { children: React.ReactNode }) {
+  useRealtime();
+  return <>{children}</>;
+}
+
 function App() {
   useEffect(() => {
     document.documentElement.classList.add("dark");
   }, []);
 
   return (
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-            <AiChat />
+            <RealtimeProvider>
+              <Router />
+              <AiChat />
+            </RealtimeProvider>
           </WouterRouter>
         </AuthProvider>
         <Toaster />

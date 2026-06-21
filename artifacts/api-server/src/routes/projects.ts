@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, projectsTable, userProjectsTable, tasksTable, usersTable, projectEnrollmentsTable, vaultEntriesTable } from "@workspace/db";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
+import { broadcastEvent } from "./events";
 
 const router = Router();
 
@@ -51,6 +52,7 @@ router.post("/projects", async (req, res): Promise<void> => {
     rewardEstimate: Number(rewardEstimate ?? 0),
     thumbnailUrl,
   }).returning();
+  broadcastEvent("projects_updated", { action: "created", projectId: project.id });
   res.status(201).json(formatProject(project));
 });
 
@@ -80,12 +82,14 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
   for (const f of fields) if (req.body[f] !== undefined) updates[f] = req.body[f];
   const [project] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, id)).returning();
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  broadcastEvent("projects_updated", { action: "updated", projectId: id });
   res.json(formatProject(project));
 });
 
 router.delete("/projects/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   await db.delete(projectsTable).where(eq(projectsTable.id, id));
+  broadcastEvent("projects_updated", { action: "deleted", projectId: id });
   res.json({ message: "Project deleted" });
 });
 

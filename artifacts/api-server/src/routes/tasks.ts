@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db, tasksTable, taskSubmissionsTable, projectsTable, usersTable } from "@workspace/db";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import { broadcastEvent } from "./events";
 
 const router = Router();
 
@@ -9,7 +10,7 @@ function formatTask(t: typeof tasksTable.$inferSelect, projectName?: string | nu
 }
 
 router.get("/tasks", async (req, res): Promise<void> => {
-  const { projectId, status, userId } = req.query as Record<string, string>;
+  const { projectId, userId } = req.query as Record<string, string>;
   const conditions = [];
   if (projectId) conditions.push(eq(tasksTable.projectId, parseInt(projectId, 10)));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -37,6 +38,7 @@ router.post("/tasks", async (req, res): Promise<void> => {
     verificationType: verificationType ?? "manual",
     taskType: taskType ?? "One-time",
   }).returning();
+  broadcastEvent("tasks_updated", { action: "created", taskId: task.id });
   res.status(201).json(formatTask(task));
 });
 
@@ -56,12 +58,14 @@ router.patch("/tasks/:id", async (req, res): Promise<void> => {
   }
   const [task] = await db.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
   if (!task) { res.status(404).json({ error: "Task not found" }); return; }
+  broadcastEvent("tasks_updated", { action: "updated", taskId: id });
   res.json(formatTask(task));
 });
 
 router.delete("/tasks/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   await db.delete(tasksTable).where(eq(tasksTable.id, id));
+  broadcastEvent("tasks_updated", { action: "deleted", taskId: id });
   res.json({ message: "Task deleted" });
 });
 
@@ -83,7 +87,7 @@ router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
   if (status === "approved") {
     await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, taskId));
   }
-  const [proj] = await db.select({ name: projectsTable.name }).from(projectsTable).where(eq(projectsTable.id, task.projectId));
+  broadcastEvent("tasks_updated", { action: "submitted", taskId, userId, status });
   res.json({
     id: sub.id, taskId: sub.taskId, taskName: task.name, userId: sub.userId, username: null,
     status: sub.status, proofUrl: sub.proofUrl, notes: sub.notes,
@@ -102,6 +106,8 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
       if (task) await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, sub.taskId));
     }
   }
+  broadcastEvent("tasks_updated", { action: "verified", submissionId, status });
+  broadcastEvent("users_updated", { reason: "task_verified" });
   res.json({ message: `Submission ${status}` });
 });
 

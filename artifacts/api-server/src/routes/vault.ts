@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, vaultEntriesTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import * as crypto from "crypto";
+import { broadcastEvent } from "./events";
 
 const router = Router();
 
@@ -67,6 +68,7 @@ router.post("/vault", async (req, res): Promise<void> => {
     backupCodes: backupCodes ? JSON.stringify(backupCodes) : null,
     notes: notes || null,
   }).returning();
+  broadcastEvent("vault_updated", { action: "created", entryId: entry.id });
   res.status(201).json(formatEntry(entry));
 });
 
@@ -96,6 +98,7 @@ router.patch("/vault/:id", async (req, res): Promise<void> => {
   if (req.body.backupCodes !== undefined) updates.backupCodes = JSON.stringify(req.body.backupCodes);
   const [entry] = await db.update(vaultEntriesTable).set(updates).where(and(eq(vaultEntriesTable.id, id), eq(vaultEntriesTable.userId, userId))).returning();
   if (!entry) { res.status(404).json({ error: "Vault entry not found" }); return; }
+  broadcastEvent("vault_updated", { action: "updated", entryId: id });
   res.json(formatEntry(entry));
 });
 
@@ -103,6 +106,7 @@ router.delete("/vault/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const userId = getUserId(req);
   await db.delete(vaultEntriesTable).where(and(eq(vaultEntriesTable.id, id), eq(vaultEntriesTable.userId, userId)));
+  broadcastEvent("vault_updated", { action: "deleted", entryId: id });
   res.json({ message: "Vault entry deleted" });
 });
 
