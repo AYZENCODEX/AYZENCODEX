@@ -1,8 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { User } from "@workspace/api-client-react";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
-import { auth, firebaseSignOut } from "@/lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
 
 interface AuthContextType {
   user: User | null;
@@ -40,40 +38,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch { }
     }
 
-    // Hard timeout — if Firebase never calls back (misconfigured domain,
-    // network issue, blocked by Replit proxy), resolve after 2 s anyway.
-    const fallback = setTimeout(() => setIsLoading(false), 2000);
+    setIsLoading(false);
+  }, []);
 
-    let unsubscribe: (() => void) | null = null;
-    try {
-      unsubscribe = onAuthStateChanged(auth, () => {
-        clearTimeout(fallback);
-        setIsLoading(false);
-      });
-    } catch {
-      // Firebase not available at all — clear immediately
-      clearTimeout(fallback);
-      setIsLoading(false);
-    }
+  const login = useCallback((u: User, t: string) => {
+    setUser(u);
+    setToken(t);
+    localStorage.setItem("ayzen_user", JSON.stringify(u));
+    localStorage.setItem("ayzen_token", t);
+    setAuthTokenGetter(() => t);
+  }, []);
 
-    return () => {
-      clearTimeout(fallback);
-      unsubscribe?.();
-    };
-  }, [doLogout]);
-
-  const login = (newUser: User, newToken: string) => {
-    setUser(newUser);
-    setToken(newToken);
-    localStorage.setItem("ayzen_user", JSON.stringify(newUser));
-    localStorage.setItem("ayzen_token", newToken);
-    setAuthTokenGetter(() => localStorage.getItem("ayzen_token"));
-  };
-
-  const logout = async () => {
-    try { await firebaseSignOut(auth); } catch { }
+  const logout = useCallback(() => {
     doLogout();
-  };
+  }, [doLogout]);
 
   return (
     <AuthContext.Provider value={{ user, token, login, logout, isAdmin: user?.role === "admin", isLoading }}>
@@ -84,6 +62,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }

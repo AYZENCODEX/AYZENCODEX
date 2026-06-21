@@ -1,18 +1,18 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { usePlugins } from "@/hooks/use-plugins";
 import {
   LayoutDashboard, Users, FolderGit2, CheckSquare, Fuel, Wallet,
-  Activity, MessageSquare, Trophy, Settings, Terminal, LogOut,
+  Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
-  Radio, Code2, BarChart3, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Send,
+  Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
 interface AppSidebarProps { onNavigate?: () => void; }
-
-interface NavItem { href: string; label: string; icon: React.ElementType; }
+interface NavItem { href: string; label: string; icon: React.ElementType; pluginSlug?: string; }
 interface NavGroup { label: string; icon: React.ElementType; items: NavItem[]; }
 
 const ADMIN_NAV: NavGroup[] = [
@@ -24,14 +24,14 @@ const ADMIN_NAV: NavGroup[] = [
     label: "Operators", icon: Users,
     items: [
       { href: "/admin/users", label: "Users", icon: Users },
-      { href: "/admin/vault", label: "Entities", icon: Database },
+      { href: "/admin/vault", label: "Entities", icon: Database, pluginSlug: "vault" },
     ],
   },
   {
     label: "Protocols", icon: FolderGit2,
     items: [
-      { href: "/admin/projects", label: "Projects", icon: FolderGit2 },
-      { href: "/admin/tasks", label: "Tasks", icon: CheckSquare },
+      { href: "/admin/projects", label: "Projects", icon: FolderGit2, pluginSlug: "projects" },
+      { href: "/admin/tasks", label: "Tasks", icon: CheckSquare, pluginSlug: "tasks" },
     ],
   },
   {
@@ -39,16 +39,17 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/admin/tools/gas", label: "Gas Tracker", icon: Fuel },
       { href: "/admin/tools/wallet", label: "Wallet Analysis", icon: Wallet },
-      { href: "/admin/tools/streak", label: "Streak & Spam", icon: Activity },
+      { href: "/admin/tools/streak", label: "Streak & Spam", icon: CheckSquare },
     ],
   },
   {
     label: "System", icon: Settings,
     items: [
-      { href: "/admin/broadcast", label: "Broadcast", icon: Radio },
-      { href: "/admin/referrals", label: "Referrals", icon: Share2 },
-      { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy },
-      { href: "/admin/support", label: "Support", icon: HelpCircle },
+      { href: "/admin/broadcast", label: "Broadcast", icon: Radio, pluginSlug: "broadcast" },
+      { href: "/admin/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
+      { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
+      { href: "/admin/support", label: "Support", icon: HelpCircle, pluginSlug: "support" },
+      { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
       { href: "/admin/developer", label: "Developer", icon: Code2 },
     ],
@@ -63,28 +64,28 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Protocols", icon: FolderGit2,
     items: [
-      { href: "/projects", label: "Projects", icon: FolderGit2 },
-      { href: "/tasks", label: "Tasks", icon: CheckSquare },
+      { href: "/projects", label: "Projects", icon: FolderGit2, pluginSlug: "projects" },
+      { href: "/tasks", label: "Tasks", icon: CheckSquare, pluginSlug: "tasks" },
     ],
   },
   {
     label: "Assets", icon: KeyRound,
     items: [
-      { href: "/wallets", label: "My Wallets", icon: Wallet },
-      { href: "/vault", label: "Vault", icon: Vault },
-      { href: "/ayzen-email", label: "AYZEN Email", icon: AtSign },
-      { href: "/email-accounts", label: "Email Manager", icon: Mail },
-      { href: "/authenticator", label: "2FA Codes", icon: ShieldCheck },
+      { href: "/wallets", label: "My Wallets", icon: Wallet, pluginSlug: "wallets" },
+      { href: "/vault", label: "Vault", icon: Vault, pluginSlug: "vault" },
+      { href: "/ayzen-email", label: "AYZEN Email", icon: AtSign, pluginSlug: "ayzen-email" },
+      { href: "/email-accounts", label: "Email Manager", icon: Mail, pluginSlug: "email-manager" },
+      { href: "/authenticator", label: "2FA Codes", icon: ShieldCheck, pluginSlug: "authenticator" },
     ],
   },
   {
     label: "Social", icon: Trophy,
     items: [
-      { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+      { href: "/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
       { href: "/inbox", label: "Inbox", icon: Inbox },
       { href: "/profile", label: "My Profile", icon: UserCircle },
-      { href: "/referrals", label: "Referrals", icon: Share2 },
-      { href: "/support", label: "Support", icon: HelpCircle },
+      { href: "/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
+      { href: "/support", label: "Support", icon: HelpCircle, pluginSlug: "support" },
     ],
   },
   {
@@ -95,14 +96,22 @@ const USER_NAV: NavGroup[] = [
   },
 ];
 
-function NavGroup({ group, location, onNavigate }: { group: NavGroup; location: string; onNavigate?: () => void }) {
-  const hasActive = group.items.some(i => location === i.href || location.startsWith(i.href + "/"));
-  const [open, setOpen] = useState(hasActive || group.items.length === 1);
+function NavGroupComp({ group, location, isEnabled, onNavigate }: {
+  group: NavGroup;
+  location: string;
+  isEnabled: (slug: string) => boolean;
+  onNavigate?: () => void;
+}) {
+  const visibleItems = group.items.filter(i => !i.pluginSlug || isEnabled(i.pluginSlug));
+  const hasActive = visibleItems.some(i => location === i.href || location.startsWith(i.href + "/"));
+  const [open, setOpen] = useState(hasActive || visibleItems.length === 1);
   const GroupIcon = group.icon;
+
+  if (visibleItems.length === 0) return null;
 
   return (
     <div>
-      {group.items.length > 1 ? (
+      {visibleItems.length > 1 ? (
         <button
           onClick={() => setOpen(o => !o)}
           className="w-full flex items-center gap-2 px-3 py-1.5 text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 hover:text-muted-foreground transition-colors"
@@ -118,7 +127,7 @@ function NavGroup({ group, location, onNavigate }: { group: NavGroup; location: 
       )}
       {open && (
         <nav className="space-y-0.5 px-2 pb-1">
-          {group.items.map(item => {
+          {visibleItems.map(item => {
             const Icon = item.icon;
             const isActive = location === item.href || location.startsWith(item.href + "/");
             return (
@@ -144,6 +153,7 @@ function NavGroup({ group, location, onNavigate }: { group: NavGroup; location: 
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
   const [location] = useLocation();
   const { isAdmin, logout, user } = useAuth();
+  const { isEnabled } = usePlugins();
   const groups = isAdmin ? ADMIN_NAV : USER_NAV;
 
   return (
@@ -154,7 +164,7 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
       </div>
       <div className="flex-1 overflow-y-auto py-2 space-y-1">
         {groups.map(group => (
-          <NavGroup key={group.label} group={group} location={location} onNavigate={onNavigate} />
+          <NavGroupComp key={group.label} group={group} location={location} isEnabled={isEnabled} onNavigate={onNavigate} />
         ))}
       </div>
       <div className="p-3 border-t border-sidebar-border">

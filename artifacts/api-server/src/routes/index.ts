@@ -21,6 +21,7 @@ import eventsRouter from "./events";
 import emailRouter from "./email";
 import walletsRouter from "./wallets";
 import logsRouter from "./logs";
+import pluginsRouter from "./plugins";
 
 const router: IRouter = Router();
 
@@ -38,6 +39,7 @@ router.use(vaultRouter);
 router.use(leaderboardRouter);
 router.use(broadcastRouter);
 router.use(settingsRouter);
+router.use(pluginsRouter);
 router.use(telemetryRouter);
 router.use(aiRouter);
 router.use(emailRoutingRouter);

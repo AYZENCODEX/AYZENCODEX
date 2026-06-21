@@ -5,8 +5,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Settings as SettingsIcon, Mail, Send, CheckCircle2, Eye, EyeOff, Loader2, MessageSquare } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Settings as SettingsIcon, Mail, Send, CheckCircle2, Eye, EyeOff, Loader2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 export default function AdminSettings() {
   const { data: settings, isLoading, refetch } = useGetSettings();
@@ -42,7 +45,7 @@ export default function AdminSettings() {
       };
       if (smtpForm.smtpPassword) body.smtpPassword = smtpForm.smtpPassword;
 
-      const res = await fetch("/api/settings", {
+      const res = await fetch(`${BASE}/api/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify(body),
@@ -61,13 +64,13 @@ export default function AdminSettings() {
     if (!testEmail) { toast({ variant: "destructive", title: "Enter a test email address" }); return; }
     setTesting(true);
     try {
-      const res = await fetch("/api/email/test", {
+      const res = await fetch(`${BASE}/api/settings/email/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ to: testEmail }),
       });
       const data = await res.json();
-      if (res.ok) toast({ title: "✅ Test email sent!", description: `Check ${testEmail} for the AYZEN test message.` });
+      if (res.ok) toast({ title: "Test email sent!", description: `Check ${testEmail} for the AYZEN test message.` });
       else toast({ variant: "destructive", title: data.error || "Failed to send" });
     } finally { setTesting(false); }
   };
@@ -115,7 +118,10 @@ export default function AdminSettings() {
         <CardHeader>
           <CardTitle className="font-mono uppercase text-xs flex items-center gap-2">
             <Mail className="h-4 w-4 text-primary" /> SMTP Email Configuration
-            {smtpConfigured && <span className="ml-auto flex items-center gap-1 text-green-400 text-[10px] font-normal"><CheckCircle2 className="w-3 h-3" /> Configured</span>}
+            {smtpConfigured
+              ? <Badge className="ml-auto text-[9px] bg-green-500/20 text-green-400 border-green-500/30 font-mono">CONFIGURED</Badge>
+              : <Badge variant="secondary" className="ml-auto text-[9px] font-mono">NOT SET</Badge>
+            }
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -131,7 +137,7 @@ export default function AdminSettings() {
           </div>
           <div className="space-y-1.5">
             <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">SMTP Username / Email</Label>
-            <Input type="email" value={smtpForm.smtpUser} onChange={e => setSmtpForm(f => ({ ...f, smtpUser: e.target.value }))} className="font-mono text-xs h-10 bg-input border-border" placeholder="noreply@ayzen.tech" />
+            <Input type="email" value={smtpForm.smtpUser} onChange={e => setSmtpForm(f => ({ ...f, smtpUser: e.target.value }))} className="font-mono text-xs h-10 bg-input border-border" placeholder="noreply@yourdomain.com" />
           </div>
           <div className="space-y-1.5">
             <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Password / App Password</Label>
@@ -150,7 +156,7 @@ export default function AdminSettings() {
           </div>
           <div className="space-y-1.5">
             <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">From Address <span className="text-muted-foreground/50">(optional)</span></Label>
-            <Input type="email" value={smtpForm.smtpFrom} onChange={e => setSmtpForm(f => ({ ...f, smtpFrom: e.target.value }))} className="font-mono text-xs h-10 bg-input border-border" placeholder="AYZEN <noreply@ayzen.tech>" />
+            <Input type="email" value={smtpForm.smtpFrom} onChange={e => setSmtpForm(f => ({ ...f, smtpFrom: e.target.value }))} className="font-mono text-xs h-10 bg-input border-border" placeholder="AYZEN <noreply@yourdomain.com>" />
           </div>
 
           <div className="bg-muted/20 border border-border rounded-md p-3 text-[10px] font-mono text-muted-foreground space-y-1">
@@ -176,10 +182,18 @@ export default function AdminSettings() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            <div className="bg-primary/5 border border-primary/15 rounded-md px-3 py-2 flex items-center gap-2">
-              <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-              <p className="text-[10px] font-mono text-primary">Powered by Resend — no SMTP config required</p>
-            </div>
+            {!smtpConfigured && (
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-md px-3 py-2 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                <p className="text-[10px] font-mono text-yellow-400">Configure SMTP settings above before sending a test email.</p>
+              </div>
+            )}
+            {smtpConfigured && (
+              <div className="bg-primary/5 border border-primary/15 rounded-md px-3 py-2 flex items-center gap-2">
+                <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                <p className="text-[10px] font-mono text-primary">Ready — will send via {settings?.smtpHost}</p>
+              </div>
+            )}
             <div className="flex gap-3">
               <Input
                 type="email"
@@ -189,7 +203,7 @@ export default function AdminSettings() {
                 placeholder="your@email.com"
                 onKeyDown={e => e.key === "Enter" && sendTest()}
               />
-              <Button onClick={sendTest} disabled={testing} className="font-mono text-xs gap-2 flex-shrink-0">
+              <Button onClick={sendTest} disabled={testing || !smtpConfigured} className="font-mono text-xs gap-2 flex-shrink-0">
                 {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
                 {testing ? "Sending..." : "Send Test"}
               </Button>

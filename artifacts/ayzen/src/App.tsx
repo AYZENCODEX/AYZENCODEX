@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { PluginsProvider } from "@/hooks/use-plugins";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AiChat } from "@/components/ai-chat";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -21,6 +22,7 @@ import AdminLeaderboard from "@/pages/admin/leaderboard";
 import AdminSettings from "@/pages/admin/settings";
 import AdminDeveloper from "@/pages/admin/developer";
 import AdminVault from "@/pages/admin/vault";
+import AdminPlugins from "@/pages/admin/plugins";
 import UserDashboard from "@/pages/user/dashboard";
 import UserProjects from "@/pages/user/projects";
 import UserProjectDetail from "@/pages/user/project-detail";
@@ -83,6 +85,7 @@ function Router() {
       <Route path="/admin/broadcast">{() => <ProtectedRoute component={AdminBroadcast} adminOnly />}</Route>
       <Route path="/admin/leaderboard">{() => <ProtectedRoute component={AdminLeaderboard} adminOnly />}</Route>
       <Route path="/admin/vault">{() => <ProtectedRoute component={AdminVault} adminOnly />}</Route>
+      <Route path="/admin/plugins">{() => <ProtectedRoute component={AdminPlugins} adminOnly />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={AdminSettings} adminOnly />}</Route>
       <Route path="/admin/developer">{() => <ProtectedRoute component={AdminDeveloper} adminOnly />}</Route>
 
@@ -135,10 +138,12 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <RealtimeProvider>
-              <Router />
-              <AiChat />
-            </RealtimeProvider>
+            <PluginsProvider>
+              <RealtimeProvider>
+                <Router />
+                <AiChat />
+              </RealtimeProvider>
+            </PluginsProvider>
           </WouterRouter>
         </AuthProvider>
         <Toaster />

@@ -1,4 +1,4 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, serial, text, integer, boolean, timestamp } from "drizzle-orm/pg-core";
 
 export const settingsTable = pgTable("settings", {
   id: serial("id").primaryKey(),
@@ -13,6 +13,15 @@ export const settingsTable = pgTable("settings", {
   telegramBotUsername: text("telegram_bot_username"),
   telegramWebhookUrl: text("telegram_webhook_url"),
   twoFaIssuerName: text("two_fa_issuer_name").notNull().default("AYZEN"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const pluginsTable = pgTable("plugins", {
+  id: serial("id").primaryKey(),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  enabled: boolean("enabled").notNull().default(true),
+  config: text("config"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 

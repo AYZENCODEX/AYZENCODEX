@@ -1,36 +1,61 @@
-import { Resend } from "resend";
 import { logger } from "./logger";
 
-const resend = process.env.RESEND_API_KEY
-  ? new Resend(process.env.RESEND_API_KEY)
-  : null;
+const FROM_DEFAULT = "AYZEN <noreply@ayzen.tech>";
 
-const FROM = "AYZEN <noreply@ayzen.tech>";
-
-export async function sendEmail(opts: {
+export interface EmailOptions {
   to: string;
   subject: string;
   html: string;
   text?: string;
-}): Promise<{ success: boolean; id?: string; error?: string }> {
-  if (!resend) {
-    logger.warn("RESEND_API_KEY not set — email not sent");
-    return { success: false, error: "Email service not configured" };
-  }
+}
+
+export interface SendResult {
+  success: boolean;
+  id?: string;
+  error?: string;
+}
+
+async function getSmtpConfig(): Promise<{ host: string; port: number; user: string; pass: string; from: string } | null> {
   try {
-    const { data, error } = await resend.emails.send({
-      from: FROM,
-      to: opts.to,
-      subject: opts.subject,
-      html: opts.html,
-      text: opts.text,
-    });
-    if (error) {
-      logger.warn({ error }, "Resend error");
-      return { success: false, error: error.message };
-    }
-    logger.info({ id: data?.id, to: opts.to }, "Email sent");
-    return { success: true, id: data?.id };
+    const { pool } = await import("@workspace/db");
+    const r = await pool.query("SELECT smtp_host, smtp_port, smtp_user, smtp_password, smtp_from FROM settings LIMIT 1");
+    const row = r.rows[0];
+    if (!row?.smtp_host || !row?.smtp_user || !row?.smtp_password) return null;
+    return { host: row.smtp_host, port: row.smtp_port ?? 587, user: row.smtp_user, pass: row.smtp_password, from: row.smtp_from ?? row.smtp_user };
+  } catch { return null; }
+}
+
+async function sendViaSmtp(cfg: NonNullable<Awaited<ReturnType<typeof getSmtpConfig>>>, opts: EmailOptions): Promise<SendResult> {
+  const nodemailer = await import("nodemailer");
+  const transport = nodemailer.default.createTransport({
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.port === 465,
+    auth: { user: cfg.user, pass: cfg.pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+  });
+  await transport.sendMail({ from: cfg.from || FROM_DEFAULT, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text });
+  logger.info({ to: opts.to }, "Email sent via SMTP");
+  return { success: true };
+}
+
+async function sendViaResend(opts: EmailOptions): Promise<SendResult> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key) return { success: false, error: "No email transport configured (no SMTP settings, no RESEND_API_KEY)" };
+  const { Resend } = await import("resend");
+  const resend = new Resend(key);
+  const { data, error } = await resend.emails.send({ from: FROM_DEFAULT, to: opts.to, subject: opts.subject, html: opts.html, text: opts.text });
+  if (error) { logger.warn({ error }, "Resend error"); return { success: false, error: error.message }; }
+  logger.info({ id: data?.id, to: opts.to }, "Email sent via Resend");
+  return { success: true, id: data?.id };
+}
+
+export async function sendEmail(opts: EmailOptions): Promise<SendResult> {
+  try {
+    const smtpCfg = await getSmtpConfig();
+    if (smtpCfg) return await sendViaSmtp(smtpCfg, opts);
+    return await sendViaResend(opts);
   } catch (err: any) {
     logger.error({ err: err?.message }, "sendEmail failed");
     return { success: false, error: err?.message ?? "Unknown error" };
@@ -52,8 +77,6 @@ function baseTemplate(content: string): string {
   .body{padding:32px;}
   h2{color:#00d4cc;font-size:16px;letter-spacing:2px;text-transform:uppercase;margin:0 0 16px;}
   p{color:#a0c8c8;font-size:13px;line-height:1.7;margin:0 0 12px;}
-  .code{background:#0a1a1a;border:1px solid #00d4cc40;border-radius:6px;padding:20px;text-align:center;margin:20px 0;}
-  .code span{font-size:36px;letter-spacing:12px;color:#00d4cc;font-weight:bold;}
   .btn{display:inline-block;background:#00d4cc;color:#070a0f;padding:12px 28px;border-radius:4px;text-decoration:none;font-weight:bold;font-size:13px;letter-spacing:2px;text-transform:uppercase;margin:16px 0;}
   .footer{padding:20px 32px;border-top:1px solid #1a3a3a;font-size:10px;color:#2a5050;letter-spacing:1px;}
   .divider{height:1px;background:linear-gradient(to right,transparent,#00d4cc40,transparent);margin:24px 0;}
@@ -79,13 +102,7 @@ export async function sendWelcomeEmail(to: string, username: string): Promise<vo
   const html = baseTemplate(`
     <h2>Access Granted, ${username}</h2>
     <p>Welcome to <strong>AYZEN</strong> — your encrypted airdrop command center.</p>
-    <p>You now have access to:</p>
-    <p>
-      ✦ Real-time airdrop tracking across 20+ chains<br/>
-      ✦ Task automation with ROI tracking<br/>
-      ✦ Telegram bot integration (<a href="https://t.me/Airglowxbot" style="color:#00d4cc;">@Airglowxbot</a>)<br/>
-      ✦ Leaderboard and referral rewards
-    </p>
+    <p>You now have access to real-time airdrop tracking, task automation, ROI tracking, and the Telegram bot integration.</p>
     <div class="divider"></div>
     <p style="font-size:11px;color:#4a8080;">Connect Telegram for live task notifications: go to Settings → Telegram Bot → /connect</p>
   `);
@@ -108,15 +125,13 @@ export async function sendTaskApprovedEmail(to: string, username: string, taskNa
   const html = baseTemplate(`
     <h2>Task Approved ✓</h2>
     <p>Hi <strong>${username}</strong>, your task submission has been verified!</p>
-    <p>
-      📋 Task: <strong>${taskName}</strong>${rewardStr}
-    </p>
+    <p>📋 Task: <strong>${taskName}</strong>${rewardStr}</p>
     <p>Your account has been credited. Keep executing tasks to climb the leaderboard.</p>
   `);
   await sendEmail({ to, subject: `AYZEN — Task Approved: ${taskName}`, html });
 }
 
-export async function sendTestEmail(to: string): Promise<{ success: boolean; error?: string }> {
+export async function sendTestEmail(to: string): Promise<SendResult> {
   const html = baseTemplate(`
     <h2>Test Transmission</h2>
     <p>This is a test email from your AYZEN platform.</p>
