@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useLogin } from "@workspace/api-client-react";
-import { supabase } from "@/lib/supabase";
+import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Terminal, ArrowRight, Loader2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 function GoogleIcon() {
   return (
@@ -20,12 +22,18 @@ function GoogleIcon() {
   );
 }
 
-function FacebookIcon() {
-  return (
-    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#1877F2">
-      <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-    </svg>
-  );
+async function firebaseSyncToBackend(idToken: string): Promise<{ token: string; user: any } | null> {
+  try {
+    const res = await fetch(`${BASE}/api/auth/firebase-sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export default function Login() {
@@ -38,10 +46,10 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [oauthLoading, setOauthLoading] = useState<"google" | "facebook" | null>(null);
-  const [supabaseLoading, setSupabaseLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [firebaseLoading, setFirebaseLoading] = useState(false);
 
-  const doLogin = (emailVal: string, passwordVal: string) => {
+  const doBackendLogin = (emailVal: string, passwordVal: string) => {
     loginMutation.mutate(
       { data: { email: emailVal, password: passwordVal } },
       {
@@ -56,56 +64,79 @@ export default function Login() {
     );
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+      const data = await firebaseSyncToBackend(idToken);
+      if (!data) throw new Error("Backend sync failed");
+      setAuthContext(data.user, data.token);
+      toast({ title: "Access granted", description: `Welcome, ${data.user.username}!` });
+      if (data.user.role === "admin") setLocation("/admin/dashboard");
+      else setLocation("/dashboard");
+    } catch (err: any) {
+      if (err?.code !== "auth/popup-closed-by-user") {
+        toast({ variant: "destructive", title: "Google sign-in failed", description: err?.message ?? "Try again." });
+      }
+    }
+    setGoogleLoading(false);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (tab === "signin") {
-      doLogin(email, password);
+      setFirebaseLoading(true);
+      try {
+        const cred = await signInWithEmailAndPassword(auth, email, password);
+        const idToken = await cred.user.getIdToken();
+        const data = await firebaseSyncToBackend(idToken);
+        if (data) {
+          setAuthContext(data.user, data.token);
+          toast({ title: "Access granted", description: "Welcome back, operator." });
+          if (data.user.role === "admin") setLocation("/admin/dashboard");
+          else setLocation("/dashboard");
+        } else {
+          doBackendLogin(email, password);
+        }
+      } catch {
+        doBackendLogin(email, password);
+      }
+      setFirebaseLoading(false);
     } else {
-      handleSupabaseSignup();
+      handleFirebaseSignup();
     }
   };
 
-  const handleSupabaseSignup = async () => {
+  const handleFirebaseSignup = async () => {
     if (!email || !password) return;
-    setSupabaseLoading(true);
+    setFirebaseLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { username: username || email.split("@")[0] } },
-      });
-      if (error) {
-        toast({ variant: "destructive", title: "Signup failed", description: error.message });
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      const idToken = await cred.user.getIdToken();
+      const data = await firebaseSyncToBackend(idToken);
+      if (data) {
+        setAuthContext(data.user, data.token);
+        toast({ title: "Account created", description: "Welcome to AYZEN." });
+        setLocation("/dashboard");
       } else {
-        toast({ title: "Account created", description: "Check your email to confirm your account, then sign in." });
-        setTab("signin");
+        toast({ variant: "destructive", title: "Signup failed", description: "Could not sync account." });
       }
     } catch (err: any) {
-      toast({ variant: "destructive", title: "Error", description: err?.message ?? "Signup failed" });
+      if (err?.code === "auth/email-already-in-use") {
+        toast({ variant: "destructive", title: "Email already registered", description: "Try signing in instead." });
+        setTab("signin");
+      } else {
+        toast({ variant: "destructive", title: "Signup failed", description: err?.message ?? "Try again." });
+      }
     }
-    setSupabaseLoading(false);
+    setFirebaseLoading(false);
   };
 
-  const handleOAuth = async (provider: "google" | "facebook") => {
-    setOauthLoading(provider);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/login`,
-        queryParams: provider === "google" ? { access_type: "offline", prompt: "consent" } : {},
-      },
-    });
-    if (error) {
-      toast({ variant: "destructive", title: "OAuth failed", description: error.message });
-      setOauthLoading(null);
-    }
-    // On success, page will redirect — no need to clear loading
-  };
+  const handleDemoAdmin = () => doBackendLogin("support@ayzen.tech", "1234578@Ba1");
+  const handleDemoUser = () => doBackendLogin("user@ayzen.io", "demo123");
 
-  const handleDemoAdmin = () => doLogin("support@ayzen.tech", "1234578@Ba1");
-  const handleDemoUser = () => doLogin("user@ayzen.io", "demo123");
-
-  const isLoading = loginMutation.isPending || supabaseLoading || !!oauthLoading;
+  const isLoading = loginMutation.isPending || firebaseLoading || googleLoading;
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -127,7 +158,6 @@ export default function Login() {
         <div className="bg-card border border-card-border p-8 shadow-2xl relative">
           <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent opacity-60" />
 
-          {/* Tab selector */}
           <div className="flex mb-6 border border-border rounded overflow-hidden">
             <button
               onClick={() => setTab("signin")}
@@ -143,29 +173,16 @@ export default function Login() {
             </button>
           </div>
 
-          {/* OAuth Buttons */}
-          <div className="space-y-2 mb-5">
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-10 font-mono text-xs border-border hover:border-primary/40 hover:text-primary gap-2"
-              onClick={() => handleOAuth("google")}
-              disabled={isLoading}
-            >
-              {oauthLoading === "google" ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
-              Continue with Google
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-10 font-mono text-xs border-border hover:border-blue-500/40 hover:text-blue-400 gap-2"
-              onClick={() => handleOAuth("facebook")}
-              disabled={isLoading}
-            >
-              {oauthLoading === "facebook" ? <Loader2 className="w-4 h-4 animate-spin" /> : <FacebookIcon />}
-              Continue with Facebook
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-10 font-mono text-xs border-border hover:border-primary/40 hover:text-primary gap-2 mb-5"
+            onClick={handleGoogleSignIn}
+            disabled={isLoading}
+          >
+            {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
+            Continue with Google
+          </Button>
 
           <div className="flex items-center gap-3 mb-5">
             <div className="flex-1 h-px bg-border" />
@@ -221,7 +238,7 @@ export default function Login() {
               className="w-full h-11 font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={isLoading}
             >
-              {(loginMutation.isPending || supabaseLoading) ? (
+              {(loginMutation.isPending || firebaseLoading) ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <span className="flex items-center gap-2">

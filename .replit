@@ -41,3 +41,8 @@ externalPort = 3003
 [[ports]]
 localPort = 23325
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+FIREBASE_PROJECT_ID = "ayzenworkspacex01"

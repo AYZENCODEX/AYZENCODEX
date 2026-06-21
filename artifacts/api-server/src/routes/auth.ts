@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import * as crypto from "crypto";
 import { referralsTable } from "@workspace/db";
 import { getUserFromToken } from "../lib/auth-utils";
+import { getFirebaseAdmin } from "../lib/firebase-admin";
 
 const router = Router();
 
@@ -88,7 +89,20 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   res.json({ token, refreshToken: token, user: sanitizeUser(user) });
 });
 
-// Supabase OAuth sync — called by frontend after Supabase sign-in
+// Firebase OAuth sync — called by frontend after Firebase sign-in
+router.post("/auth/firebase-sync", async (req, res): Promise<void> => {
+  const { idToken } = req.body as { idToken?: string };
+  if (!idToken) { res.status(400).json({ error: "idToken is required" }); return; }
+  const result = await getUserFromToken(idToken);
+  if (!result) { res.status(401).json({ error: "Invalid Firebase token" }); return; }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, result.userId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+  await db.update(usersTable).set({ lastActiveAt: new Date() }).where(eq(usersTable.id, user.id));
+  const token = generateToken(user.id, user.role);
+  res.json({ token, refreshToken: token, user: sanitizeUser(user) });
+});
+
+// Supabase OAuth sync — legacy fallback
 router.post("/auth/supabase-sync", async (req, res): Promise<void> => {
   const token = req.headers.authorization?.replace("Bearer ", "").trim();
   if (!token) { res.status(401).json({ error: "No token provided" }); return; }
@@ -97,7 +111,6 @@ router.post("/auth/supabase-sync", async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, result.userId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
   await db.update(usersTable).set({ lastActiveAt: new Date() }).where(eq(usersTable.id, user.id));
-  // Return Supabase token as ayzen_token — our middleware knows how to verify it
   res.json({ token, refreshToken: token, user: sanitizeUser(user) });
 });
 

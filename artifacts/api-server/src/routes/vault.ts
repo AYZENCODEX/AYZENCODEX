@@ -1,8 +1,15 @@
 import { Router } from "express";
 import { db, vaultEntriesTable, usersTable } from "@workspace/db";
-import { eq, and, count } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
+import * as crypto from "crypto";
 
 const router = Router();
+
+function generateSerial(userId: number): string {
+  const ts = Date.now().toString(36).toUpperCase().slice(-4);
+  const rand = crypto.randomBytes(2).toString("hex").toUpperCase();
+  return `AYZN${userId}-${ts}${rand}`;
+}
 
 function getUserId(req: { headers: { authorization?: string } }): number {
   const authHeader = req.headers.authorization;
@@ -20,12 +27,6 @@ function isAdmin(req: { headers: { authorization?: string } }): boolean {
     const payload = JSON.parse(Buffer.from(authHeader.replace("Bearer ", ""), "base64").toString());
     return payload.role === "admin";
   } catch { return false; }
-}
-
-async function generateSerial(userId: number): Promise<string> {
-  const [{ total }] = await db.select({ total: count() }).from(vaultEntriesTable).where(eq(vaultEntriesTable.userId, userId));
-  const num = Number(total) + 1;
-  return `AYZNA${userId}-${num}`;
 }
 
 function formatEntry(e: typeof vaultEntriesTable.$inferSelect) {
@@ -48,7 +49,7 @@ router.post("/vault", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const { category, projectName, email, twitterUsername, discordUsername, telegramUsername, walletAddresses, backupCodes, notes } = req.body;
   if (!category || !projectName) { res.status(400).json({ error: "category and projectName are required" }); return; }
-  const serial = await generateSerial(userId);
+  const serial = generateSerial(userId);
   const [entry] = await db.insert(vaultEntriesTable).values({
     userId, entitySerial: serial, category, projectName,
     email, twitterUsername, discordUsername, telegramUsername,

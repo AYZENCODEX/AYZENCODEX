@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { initTelegramBot } from "./lib/telegram";
+import { getFirebaseAdmin } from "./lib/firebase-admin";
 
 const rawPort = process.env["PORT"];
 
@@ -23,5 +24,6 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  getFirebaseAdmin();
   initTelegramBot();
 });
