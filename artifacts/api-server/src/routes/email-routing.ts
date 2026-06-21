@@ -8,8 +8,12 @@ const router = Router();
 const CF_API = "https://api.cloudflare.com/client/v4";
 const DOMAIN = "ayzen.tech";
 
+function getCfKey(): string | null {
+  return process.env.CLOUDFLARE_API_KEY || process.env.cloudflare_api_key || null;
+}
+
 async function cfFetch(path: string, opts: RequestInit = {}) {
-  const key = process.env.CLOUDFLARE_API_KEY || process.env.cloudflare_api_key;
+  const key = getCfKey();
   if (!key) throw new Error("CLOUDFLARE_API_KEY not configured");
   const res = await fetch(`${CF_API}${path}`, {
     ...opts,
@@ -19,8 +23,10 @@ async function cfFetch(path: string, opts: RequestInit = {}) {
 }
 
 async function getZoneId(): Promise<string | null> {
-  const data = await cfFetch(`/zones?name=${DOMAIN}&status=active`) as { result?: Array<{ id: string }> };
-  return data.result?.[0]?.id ?? null;
+  try {
+    const data = await cfFetch(`/zones?name=${DOMAIN}&status=active`) as { result?: Array<{ id: string }> };
+    return data.result?.[0]?.id ?? null;
+  } catch { return null; }
 }
 
 // Check if Cloudflare email routing is enabled for the zone
@@ -29,11 +35,12 @@ router.get("/ayzen-email/status", async (req, res): Promise<void> => {
   const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
   if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-  const zoneId = await getZoneId().catch(() => null);
+  const cfConfigured = !!getCfKey();
+  const zoneId = cfConfigured ? await getZoneId() : null;
   res.json({
     ayzenEmail: user.ayzenEmail ?? null,
     domain: DOMAIN,
-    cfConfigured: !!(process.env.CLOUDFLARE_API_KEY || process.env.cloudflare_api_key),
+    cfConfigured,
     zoneFound: !!zoneId,
   });
 });
@@ -71,30 +78,52 @@ router.post("/ayzen-email/claim", async (req, res): Promise<void> => {
   const existing = await db.select().from(usersTable).where(eq(usersTable.ayzenEmail, ayzenEmail));
   if (existing.length > 0) { res.status(409).json({ error: "Username already taken" }); return; }
 
-  // Create Cloudflare email routing rule
-  try {
-    const zoneId = await getZoneId();
-    if (zoneId) {
-      const cfRes = await cfFetch(`/zones/${zoneId}/email/routing/rules`, {
-        method: "POST",
-        body: JSON.stringify({
-          name: `AYZEN: ${ayzenEmail}`,
-          enabled: true,
-          matchers: [{ type: "literal", field: "to", value: ayzenEmail }],
-          actions: [{ type: "forward", value: [forwardTo] }],
-        }),
-      }) as { success: boolean; errors?: unknown[] };
-      if (!cfRes.success) {
-        res.status(500).json({ error: `Cloudflare error: ${JSON.stringify(cfRes.errors)}` }); return;
+  let cfWarning: string | null = null;
+
+  // Try Cloudflare email routing — soft failure so email is always claimed
+  if (getCfKey()) {
+    try {
+      const zoneId = await getZoneId();
+      if (zoneId) {
+        const cfRes = await cfFetch(`/zones/${zoneId}/email/routing/rules`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: `AYZEN: ${ayzenEmail}`,
+            enabled: true,
+            matchers: [{ type: "literal", field: "to", value: ayzenEmail }],
+            actions: [{ type: "forward", value: [forwardTo] }],
+          }),
+        }) as { success: boolean; errors?: unknown[] };
+        if (!cfRes.success) {
+          cfWarning = `Cloudflare routing could not be configured: ${JSON.stringify(cfRes.errors)}`;
+        }
+      } else {
+        cfWarning = "Cloudflare zone not found — address reserved but routing not active yet";
       }
+    } catch (err: any) {
+      cfWarning = `Cloudflare unavailable: ${err?.message ?? "unknown error"}`;
     }
-  } catch (err: any) {
-    res.status(500).json({ error: `Failed to create email route: ${err?.message}` }); return;
+  } else {
+    cfWarning = "Cloudflare not configured — address reserved in system only";
   }
 
-  // Save to DB
+  // Always save to DB regardless of CF outcome
   await db.update(usersTable).set({ ayzenEmail }).where(eq(usersTable.id, userId));
-  res.status(201).json({ ayzenEmail, forwardTo, message: `${ayzenEmail} now forwards to ${forwardTo}` });
+  res.status(201).json({
+    ayzenEmail,
+    forwardTo,
+    message: `${ayzenEmail} has been claimed`,
+    ...(cfWarning ? { warning: cfWarning } : {}),
+  });
+});
+
+// Release/unclaim AYZEN email
+router.delete("/ayzen-email", async (req, res): Promise<void> => {
+  const userId = await getUserIdAsync(req);
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user || !user.ayzenEmail) { res.status(404).json({ error: "No AYZEN email to release" }); return; }
+  await db.update(usersTable).set({ ayzenEmail: null }).where(eq(usersTable.id, userId));
+  res.json({ message: "AYZEN email released" });
 });
 
 export default router;

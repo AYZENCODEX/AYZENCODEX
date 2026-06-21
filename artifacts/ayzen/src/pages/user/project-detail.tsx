@@ -6,7 +6,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, ExternalLink, UserPlus, Hash, CheckCircle2, Clock, Twitter, MessageCircle, Wallet, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, ExternalLink, UserPlus, Hash, CheckCircle2, Clock, Twitter, MessageCircle, Wallet, Trash2, ChevronDown, ChevronRight, Zap, Link2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -27,31 +29,97 @@ interface Enrollment {
   } | null;
 }
 
-function TaskRow({ task }: { task: any }) {
+function TaskRow({ task, projectId, token, xpName }: { task: any; projectId: number; token: string; xpName?: string }) {
   const [open, setOpen] = useState(false);
-  const statusColor = task.userStatus === "completed" ? "text-green-400" : task.userStatus === "pending" ? "text-yellow-400" : "text-muted-foreground";
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [proofUrl, setProofUrl] = useState("");
+  const { toast } = useToast();
+
+  const effectiveStatus = submitted ? "pending" : task.userStatus;
+  const statusColor = effectiveStatus === "completed" || effectiveStatus === "approved"
+    ? "text-green-400"
+    : effectiveStatus === "pending"
+    ? "text-yellow-400"
+    : "text-muted-foreground";
+
+  const handleMarkComplete = async () => {
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/tasks/${task.id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ proofUrl: proofUrl || undefined, notes: "Marked complete from project panel" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ variant: "destructive", title: data.error || "Submission failed" });
+        return;
+      }
+      setSubmitted(true);
+      setOpen(false);
+      toast({ title: "Task submitted!", description: task.verificationType === "auto" ? "Auto-approved!" : "Pending review." });
+    } catch {
+      toast({ variant: "destructive", title: "Network error" });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const isDone = effectiveStatus === "completed" || effectiveStatus === "approved" || submitted;
 
   return (
     <div className="border border-card-border rounded-md overflow-hidden">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-muted/10 transition-colors text-left">
         <div className={`flex-shrink-0 ${statusColor}`}>
-          {task.userStatus === "completed" ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+          {isDone ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
         </div>
         <div className="flex-1 min-w-0">
           <div className="font-mono text-sm font-medium text-foreground truncate">{task.name}</div>
           <div className="text-[10px] font-mono text-muted-foreground uppercase">{task.taskType} · {task.verificationType}</div>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="text-xs font-mono font-bold text-primary">${task.rewardAmount}</span>
+          {task.rewardAmount ? (
+            <span className="text-xs font-mono font-bold text-primary">${task.rewardAmount}</span>
+          ) : null}
+          {xpName && (
+            <Badge variant="outline" className="font-mono text-[9px] border-yellow-500/30 text-yellow-400 bg-yellow-400/5 flex items-center gap-1">
+              <Zap className="w-2 h-2" />{xpName}
+            </Badge>
+          )}
           {open ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
         </div>
       </button>
       {open && (
-        <div className="border-t border-card-border px-4 py-3 bg-muted/5">
-          <p className="text-xs font-mono text-muted-foreground leading-relaxed mb-3">{task.description}</p>
-          <Button size="sm" className="font-mono text-[10px] uppercase tracking-wider h-7">
-            Mark Complete
-          </Button>
+        <div className="border-t border-card-border px-4 py-3 bg-muted/5 space-y-3">
+          <p className="text-xs font-mono text-muted-foreground leading-relaxed">{task.description}</p>
+          {!isDone && (
+            <div className="space-y-2">
+              <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                <Link2 className="w-2.5 h-2.5" /> Proof URL (optional)
+              </Label>
+              <Input
+                value={proofUrl}
+                onChange={e => setProofUrl(e.target.value)}
+                placeholder="https://..."
+                className="font-mono text-xs h-8 bg-input"
+              />
+              <Button
+                size="sm"
+                onClick={handleMarkComplete}
+                disabled={submitting}
+                className="font-mono text-[10px] uppercase tracking-wider h-7"
+              >
+                {submitting ? "Submitting..." : "Mark Complete"}
+              </Button>
+            </div>
+          )}
+          {isDone && (
+            <div className="flex items-center gap-2 text-green-400 text-xs font-mono">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              {effectiveStatus === "pending" || submitted ? "Submitted — awaiting review" : "Completed"}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -73,6 +141,7 @@ export default function UserProjectDetail() {
   const [enrollLoaded, setEnrollLoaded] = useState(false);
 
   const token = localStorage.getItem("ayzen_token") || "";
+  const xpName = (project as any)?.xpName;
 
   const loadEnrollments = async () => {
     if (enrollLoaded) return;
@@ -95,7 +164,6 @@ export default function UserProjectDetail() {
       const data = await res.json();
       if (!res.ok) { toast({ variant: "destructive", title: data.error || "Enrollment failed" }); return; }
       toast({ title: "Entity enrolled!", description: `Successfully enrolled in ${project?.name}.` });
-      // Refresh enrollments
       const res2 = await fetch(`/api/projects/${projectId}/enrollments`, { headers: { Authorization: `Bearer ${token}` } });
       if (res2.ok) setEnrollments(await res2.json());
     } catch { toast({ variant: "destructive", title: "Network error" }); }
@@ -123,9 +191,16 @@ export default function UserProjectDetail() {
           <Button variant="ghost" size="icon" className="h-8 w-8"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold font-mono tracking-tighter uppercase truncate">
-            {isLoading ? <Skeleton className="h-7 w-48 inline-block" /> : project?.name}
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-xl font-bold font-mono tracking-tighter uppercase truncate">
+              {isLoading ? <Skeleton className="h-7 w-48 inline-block" /> : project?.name}
+            </h1>
+            {xpName && (
+              <Badge variant="outline" className="font-mono text-[10px] border-yellow-500/30 text-yellow-400 bg-yellow-400/5 flex items-center gap-1 flex-shrink-0">
+                <Zap className="w-2.5 h-2.5" />{xpName}
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground font-mono text-xs">Protocol Terminal · {enrollments.length} entit{enrollments.length === 1 ? "y" : "ies"} enrolled</p>
         </div>
         <Button onClick={openEnrollModal} className="font-mono text-xs gap-2 uppercase flex-shrink-0" size="sm">
@@ -162,7 +237,9 @@ export default function UserProjectDetail() {
                 <div className="text-center py-8 font-mono text-muted-foreground text-sm">No tasks assigned to this protocol yet.</div>
               ) : (
                 <div className="space-y-2">
-                  {tasks.map((task: any) => <TaskRow key={task.id} task={task} />)}
+                  {tasks.map((task: any) => (
+                    <TaskRow key={task.id} task={task} projectId={projectId} token={token} xpName={xpName} />
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -208,6 +285,7 @@ export default function UserProjectDetail() {
                 { label: "Est. Reward", value: <span className="text-primary font-bold">${project?.rewardEstimate?.toLocaleString() ?? 0}</span> },
                 { label: "Difficulty", value: project?.experienceLevel ?? "-" },
                 { label: "Members", value: (project as any)?.activeUserCount ?? 0 },
+                ...(xpName ? [{ label: "XP Token", value: <Badge variant="outline" className="font-mono text-[9px] border-yellow-500/30 text-yellow-400 bg-yellow-400/5 flex items-center gap-1"><Zap className="w-2 h-2" />{xpName}</Badge> }] : []),
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between items-center border-b border-card-border pb-2 last:border-0 last:pb-0">
                   <span className="text-muted-foreground text-xs">{label}</span>

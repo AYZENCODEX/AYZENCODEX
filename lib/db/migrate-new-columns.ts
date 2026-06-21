@@ -1,25 +1,8 @@
-import app from "./app";
-import { logger } from "./lib/logger";
-import { initTelegramBot } from "./lib/telegram";
-import { getFirebaseAdmin } from "./lib/firebase-admin";
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { Pool } from "pg";
 
-const rawPort = process.env["PORT"];
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
-const port = Number(rawPort);
-
-if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
-}
-
-const MIGRATIONS = [
+const queries = [
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS xp_name TEXT",
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS email_recovery TEXT",
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS email_recovery_password TEXT",
@@ -40,37 +23,11 @@ const MIGRATIONS = [
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS telegram_linked_email_password TEXT",
 ];
 
-async function waitForDbThenMigrate(): Promise<void> {
-  // Probe until the pool has an established connection
-  while (true) {
-    try {
-      await db.execute(sql`SELECT 1`);
-      break; // pool is up
-    } catch {
-      await new Promise((r) => setTimeout(r, 3000));
-    }
+(async () => {
+  for (const q of queries) {
+    await pool.query(q);
+    console.log("OK:", q.slice(0, 70));
   }
-  // Connection is live — run DDL
-  for (const q of MIGRATIONS) {
-    try {
-      await db.execute(sql.raw(q));
-    } catch (err: any) {
-      logger.warn({ err, q }, "Migration statement warning (column may already exist)");
-    }
-  }
-  logger.info("Startup migrations complete");
-}
-
-// Start migration after server begins accepting requests
-setTimeout(waitForDbThenMigrate, 2000);
-
-app.listen(port, (err) => {
-  if (err) {
-    logger.error({ err }, "Error listening on port");
-    process.exit(1);
-  }
-
-  logger.info({ port }, "Server listening");
-  getFirebaseAdmin();
-  initTelegramBot();
-});
+  await pool.end();
+  console.log("Migration complete!");
+})().catch(e => { console.error("ERROR:", e.message); process.exit(1); });

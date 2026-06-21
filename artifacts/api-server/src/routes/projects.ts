@@ -14,8 +14,43 @@ function getUserId(req: { headers: { authorization?: string } }): number {
   } catch { return 1; }
 }
 
-function formatProject(p: typeof projectsTable.$inferSelect, taskCount = 0, completedTaskCount = 0, activeUserCount = 0) {
-  return { ...p, createdAt: p.createdAt.toISOString(), taskCount, completedTaskCount, activeUserCount };
+// Columns guaranteed in the original DB schema (xp_name may not exist yet)
+const PROJ_SAFE = `id, name, description, null::text as xp_name, twitter_handle, discord_url, website_url, tutorial_link, experience_level, tier, funding_amount, reward_estimate, thumbnail_url, total_roi_distributed, created_at`;
+
+function formatRow(p: Record<string, unknown>, taskCount = 0, completedTaskCount = 0, activeUserCount = 0) {
+  return {
+    id: p.id,
+    name: p.name,
+    description: p.description ?? null,
+    xpName: p.xp_name ?? p.xpName ?? null,
+    twitterHandle: p.twitter_handle ?? p.twitterHandle ?? null,
+    discordUrl: p.discord_url ?? p.discordUrl ?? null,
+    websiteUrl: p.website_url ?? p.websiteUrl ?? null,
+    tutorialLink: p.tutorial_link ?? p.tutorialLink ?? null,
+    experienceLevel: p.experience_level ?? p.experienceLevel ?? "Beginner",
+    tier: p.tier ?? "1",
+    fundingAmount: p.funding_amount ?? p.fundingAmount ?? 0,
+    rewardEstimate: p.reward_estimate ?? p.rewardEstimate ?? 0,
+    thumbnailUrl: p.thumbnail_url ?? p.thumbnailUrl ?? null,
+    totalRoiDistributed: p.total_roi_distributed ?? p.totalRoiDistributed ?? 0,
+    createdAt: p.created_at ? new Date(p.created_at as string).toISOString() : (p.createdAt as Date | undefined)?.toISOString(),
+    taskCount,
+    completedTaskCount,
+    activeUserCount,
+  };
+}
+
+async function fetchProjects(conditions: ReturnType<typeof eq>[], limitNum: number, offset: number) {
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  try {
+    const rows = await db.select().from(projectsTable).where(where).limit(limitNum).offset(offset);
+    return rows as unknown as Record<string, unknown>[];
+  } catch {
+    // xp_name column not migrated yet — fallback without it
+    const whereSql = conditions.length ? sql.raw(`WHERE ${conditions.map(c => (c as unknown as {queryChunks?: {value?: string}[]}).queryChunks?.map(q => q.value).join("") ?? "1=1").join(" AND ")}`) : sql.raw("WHERE 1=1");
+    const result = await db.execute(sql`SELECT ${sql.raw(PROJ_SAFE)} FROM projects WHERE 1=1 LIMIT ${limitNum} OFFSET ${offset}`);
+    return result.rows as Record<string, unknown>[];
+  }
 }
 
 router.get("/projects", async (req, res): Promise<void> => {
@@ -24,51 +59,90 @@ router.get("/projects", async (req, res): Promise<void> => {
   const limitNum = Math.min(parseInt(limit, 10), 100);
   const offset = (pageNum - 1) * limitNum;
 
-  const conditions = [];
+  const conditions: ReturnType<typeof eq>[] = [];
   if (tier) conditions.push(eq(projectsTable.tier, tier));
-  if (search) conditions.push(ilike(projectsTable.name, `%${search}%`));
+  if (search) conditions.push(ilike(projectsTable.name, `%${search}%`) as unknown as ReturnType<typeof eq>);
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const projects = await db.select().from(projectsTable).where(where).limit(limitNum).offset(offset);
-  const [{ total }] = await db.select({ total: count() }).from(projectsTable).where(where);
+  let projects: Record<string, unknown>[];
+  let total = 0;
+  try {
+    const rows = await db.select().from(projectsTable).where(where).limit(limitNum).offset(offset);
+    const [{ cnt }] = await db.select({ cnt: count() }).from(projectsTable).where(where);
+    projects = rows as unknown as Record<string, unknown>[];
+    total = Number(cnt);
+  } catch {
+    const result = await db.execute(sql`SELECT ${sql.raw(PROJ_SAFE)} FROM projects LIMIT ${limitNum} OFFSET ${offset}`);
+    const [{ cnt }] = await db.select({ cnt: count() }).from(projectsTable);
+    projects = result.rows as Record<string, unknown>[];
+    total = Number(cnt);
+  }
 
   const enriched = await Promise.all(projects.map(async (p) => {
-    const [{ taskCount }] = await db.select({ taskCount: count() }).from(tasksTable).where(eq(tasksTable.projectId, p.id));
-    const [{ memberCount }] = await db.select({ memberCount: count() }).from(userProjectsTable).where(eq(userProjectsTable.projectId, p.id));
-    return formatProject(p, Number(taskCount), 0, Number(memberCount));
+    const id = p.id as number;
+    try {
+      const [{ taskCount }] = await db.select({ taskCount: count() }).from(tasksTable).where(eq(tasksTable.projectId, id));
+      const [{ memberCount }] = await db.select({ memberCount: count() }).from(userProjectsTable).where(eq(userProjectsTable.projectId, id));
+      return formatRow(p, Number(taskCount), 0, Number(memberCount));
+    } catch {
+      return formatRow(p);
+    }
   }));
 
-  res.json({ projects: enriched, total: Number(total), page: pageNum, limit: limitNum });
+  res.json({ projects: enriched, total, page: pageNum, limit: limitNum });
 });
 
 router.post("/projects", async (req, res): Promise<void> => {
-  const { name, description, twitterHandle, discordUrl, websiteUrl, tutorialLink, experienceLevel, tier, fundingAmount, rewardEstimate, thumbnailUrl } = req.body;
+  const { name, description, xpName, twitterHandle, discordUrl, websiteUrl, tutorialLink, experienceLevel, tier, fundingAmount, rewardEstimate, thumbnailUrl } = req.body;
   if (!name) { res.status(400).json({ error: "name is required" }); return; }
-  const [project] = await db.insert(projectsTable).values({
-    name, description, twitterHandle, discordUrl, websiteUrl, tutorialLink,
-    experienceLevel: experienceLevel ?? "Beginner",
-    tier: tier ?? "1",
-    fundingAmount: Number(fundingAmount ?? 0),
-    rewardEstimate: Number(rewardEstimate ?? 0),
-    thumbnailUrl,
-  }).returning();
+  let project: typeof projectsTable.$inferSelect;
+  try {
+    [project] = await db.insert(projectsTable).values({
+      name, description, xpName: xpName || null, twitterHandle, discordUrl, websiteUrl, tutorialLink,
+      experienceLevel: experienceLevel ?? "Beginner",
+      tier: tier ?? "1",
+      fundingAmount: Number(fundingAmount ?? 0),
+      rewardEstimate: Number(rewardEstimate ?? 0),
+      thumbnailUrl,
+    }).returning();
+  } catch {
+    // xp_name not yet migrated — insert without it
+    [project] = await db.insert(projectsTable).values({
+      name, description, twitterHandle, discordUrl, websiteUrl, tutorialLink,
+      experienceLevel: experienceLevel ?? "Beginner",
+      tier: tier ?? "1",
+      fundingAmount: Number(fundingAmount ?? 0),
+      rewardEstimate: Number(rewardEstimate ?? 0),
+      thumbnailUrl,
+    } as typeof projectsTable.$inferInsert).returning();
+  }
   broadcastEvent("projects_updated", { action: "created", projectId: project.id });
-  res.status(201).json(formatProject(project));
+  res.status(201).json(formatRow(project as unknown as Record<string, unknown>));
 });
 
 router.get("/projects/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const userId = getUserId(req);
-  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+
+  let project: Record<string, unknown> | null = null;
+  try {
+    const [row] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+    project = row as unknown as Record<string, unknown> ?? null;
+  } catch {
+    const result = await db.execute(sql`SELECT ${sql.raw(PROJ_SAFE)} FROM projects WHERE id = ${id}`);
+    project = (result.rows[0] as Record<string, unknown>) ?? null;
+  }
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.projectId, id));
   const [{ memberCount }] = await db.select({ memberCount: count() }).from(userProjectsTable).where(eq(userProjectsTable.projectId, id));
   const enrollments = await db.select().from(projectEnrollmentsTable)
     .where(and(eq(projectEnrollmentsTable.projectId, id), eq(projectEnrollmentsTable.userId, userId)));
   const isJoined = enrollments.length > 0;
+  const projectName = project.name as string;
   res.json({
-    ...formatProject(project, tasks.length, 0, Number(memberCount)),
-    tasks: tasks.map(t => ({ ...t, createdAt: t.createdAt.toISOString(), projectName: project.name, userStatus: null })),
+    ...formatRow(project, tasks.length, 0, Number(memberCount)),
+    tasks: tasks.map(t => ({ ...t, createdAt: t.createdAt.toISOString(), projectName, userStatus: null })),
     isJoined,
     enrollmentCount: enrollments.length,
     userProgress: 0,
@@ -78,12 +152,18 @@ router.get("/projects/:id", async (req, res): Promise<void> => {
 router.patch("/projects/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const updates: Record<string, unknown> = {};
-  const fields = ["name", "description", "twitterHandle", "discordUrl", "websiteUrl", "tutorialLink", "experienceLevel", "tier", "fundingAmount", "rewardEstimate", "thumbnailUrl"];
+  const fields = ["name", "description", "xpName", "twitterHandle", "discordUrl", "websiteUrl", "tutorialLink", "experienceLevel", "tier", "fundingAmount", "rewardEstimate", "thumbnailUrl"];
   for (const f of fields) if (req.body[f] !== undefined) updates[f] = req.body[f];
-  const [project] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, id)).returning();
+  let project: typeof projectsTable.$inferSelect;
+  try {
+    [project] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, id)).returning();
+  } catch {
+    delete updates.xpName;
+    [project] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, id)).returning();
+  }
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   broadcastEvent("projects_updated", { action: "updated", projectId: id });
-  res.json(formatProject(project));
+  res.json(formatRow(project as unknown as Record<string, unknown>));
 });
 
 router.delete("/projects/:id", async (req, res): Promise<void> => {
@@ -110,12 +190,10 @@ router.post("/projects/:id/enroll", async (req, res): Promise<void> => {
   const { vaultEntryId } = req.body;
   if (!vaultEntryId) { res.status(400).json({ error: "vaultEntryId is required" }); return; }
 
-  // Verify vault entry belongs to user
   const [vaultEntry] = await db.select().from(vaultEntriesTable)
     .where(and(eq(vaultEntriesTable.id, vaultEntryId), eq(vaultEntriesTable.userId, userId)));
   if (!vaultEntry) { res.status(404).json({ error: "Vault entity not found" }); return; }
 
-  // Check not already enrolled with this entity
   const existing = await db.select().from(projectEnrollmentsTable)
     .where(and(
       eq(projectEnrollmentsTable.projectId, projectId),
@@ -128,7 +206,6 @@ router.post("/projects/:id/enroll", async (req, res): Promise<void> => {
     userId, projectId, vaultEntryId, status: "active",
   }).returning();
 
-  // Also join the project (for backward compat)
   const alreadyJoined = await db.select().from(userProjectsTable).where(and(eq(userProjectsTable.userId, userId), eq(userProjectsTable.projectId, projectId)));
   if (alreadyJoined.length === 0) {
     await db.insert(userProjectsTable).values({ userId, projectId });
@@ -137,7 +214,6 @@ router.post("/projects/:id/enroll", async (req, res): Promise<void> => {
   res.status(201).json({ ...enrollment, enrolledAt: enrollment.enrolledAt.toISOString() });
 });
 
-// Get user's enrolled entities for a project
 router.get("/projects/:id/enrollments", async (req, res): Promise<void> => {
   const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const userId = getUserId(req);
@@ -162,7 +238,6 @@ router.get("/projects/:id/enrollments", async (req, res): Promise<void> => {
   })));
 });
 
-// Remove an enrollment
 router.delete("/projects/:id/enrollments/:enrollmentId", async (req, res): Promise<void> => {
   const enrollmentId = parseInt(Array.isArray(req.params.enrollmentId) ? req.params.enrollmentId[0] : req.params.enrollmentId, 10);
   const userId = getUserId(req);

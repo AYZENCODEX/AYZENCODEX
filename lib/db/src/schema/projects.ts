@@ -6,6 +6,7 @@ export const projectsTable = pgTable("projects", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   description: text("description"),
+  xpName: text("xp_name"),
   twitterHandle: text("twitter_handle"),
   discordUrl: text("discord_url"),
   websiteUrl: text("website_url"),

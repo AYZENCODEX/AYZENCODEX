@@ -8,9 +8,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
-  Plus, KeyRound, Trash2, Eye, EyeOff, Twitter, MessageCircle, Wallet,
+  Plus, KeyRound, Trash2, Eye, EyeOff,
   Copy, Check, Mail, Hash, Lock, Shield,
+  ChevronDown, Users, Phone, AtSign,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,8 +31,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other: "text-muted-foreground border-border bg-muted/20",
 };
 
-function CredField({ label, value, icon: Icon, color = "text-muted-foreground" }: {
-  label: string; value: string | null | undefined; icon?: React.ElementType; color?: string;
+function CredField({ label, value, color = "text-muted-foreground" }: {
+  label: string; value: string | null | undefined; color?: string;
 }) {
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -42,10 +44,7 @@ function CredField({ label, value, icon: Icon, color = "text-muted-foreground" }
   };
   return (
     <div className="flex items-center gap-2 group/row">
-      <div className={cn("w-3 h-3 flex-shrink-0", color)}>
-        {Icon && <Icon className="w-3 h-3" />}
-      </div>
-      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider w-12 flex-shrink-0">{label}</span>
+      <span className="text-[10px] font-mono text-muted-foreground/50 uppercase tracking-wider w-14 flex-shrink-0">{label}</span>
       <span className={cn("flex-1 font-mono text-[11px] truncate", shown ? "text-foreground/90" : "text-muted-foreground/60")}>
         {shown ? value : "•".repeat(Math.min(value.length, 12))}
       </span>
@@ -61,15 +60,15 @@ function CredField({ label, value, icon: Icon, color = "text-muted-foreground" }
   );
 }
 
-function CredGroup({ title, icon: Icon, color, fields }: {
-  title: string; icon: React.ElementType; color: string;
-  fields: { label: string; value: string | null | undefined; }[];
+function PlatformSection({ title, color, icon: Icon, fields }: {
+  title: string; color: string; icon: React.ElementType;
+  fields: { label: string; value: string | null | undefined }[];
 }) {
   const hasAny = fields.some(f => f.value);
   if (!hasAny) return null;
   return (
     <div className="space-y-1 py-2 border-t border-border/30 first:border-0 first:pt-0">
-      <div className="flex items-center gap-1.5 mb-1">
+      <div className="flex items-center gap-1.5 mb-1.5">
         <Icon className={cn("w-3 h-3", color)} />
         <span className={cn("text-[9px] font-mono uppercase tracking-widest font-bold", color)}>{title}</span>
       </div>
@@ -78,7 +77,65 @@ function CredGroup({ title, icon: Icon, color, fields }: {
   );
 }
 
+function FormSection({ title, color, icon: Icon, children }: {
+  title: string; color: string; icon: React.ElementType; children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <CollapsibleTrigger className={cn(
+        "w-full flex items-center justify-between p-3 rounded-lg border transition-colors",
+        open ? "bg-opacity-10 border-opacity-30" : "border-border/30 hover:border-opacity-50",
+        `bg-${color.replace("text-", "")}/5 border-${color.replace("text-", "")}/20`
+      )}>
+        <div className="flex items-center gap-2">
+          <Icon className={cn("w-3.5 h-3.5", color)} />
+          <span className={cn("font-mono text-[10px] uppercase tracking-widest font-bold", color)}>{title}</span>
+        </div>
+        <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", color, open && "rotate-180")} />
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <div className={cn("mt-1 p-3 rounded-lg border space-y-2", `bg-${color.replace("text-", "")}/3 border-${color.replace("text-", "")}/10`)}>
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+function TwoColInput({ label1, value1, onChange1, placeholder1, label2, value2, onChange2, placeholder2, type2 = "password" }: any) {
+  return (
+    <div className="grid grid-cols-2 gap-2">
+      <div className="space-y-1">
+        <Label className="font-mono text-[10px] text-muted-foreground/60">{label1}</Label>
+        <Input value={value1} onChange={onChange1} className="font-mono text-xs h-8 bg-input" placeholder={placeholder1} />
+      </div>
+      <div className="space-y-1">
+        <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> {label2}</Label>
+        <Input type={type2} value={value2} onChange={onChange2} className="font-mono text-xs h-8 bg-input" placeholder={placeholder2} />
+      </div>
+    </div>
+  );
+}
+
 type EntryAny = any;
+
+const EMPTY_FORM = {
+  category: "", projectName: "",
+  // Email
+  email: "", emailPassword: "", emailRecovery: "", emailRecoveryPassword: "",
+  // Twitter
+  twitterUsername: "", twitterPassword: "", twitterEmail: "", twitterEmailPassword: "",
+  twitterFollowers: "", twitter2fa: "", twitterEmailRecovery: "", twitterEmailRecoveryPassword: "",
+  // Discord
+  discordUsername: "", discordPassword: "", discordEmail: "", discordEmailPassword: "",
+  discord2fa: "", discordEmailRecovery: "", discordEmailRecoveryPassword: "",
+  // Telegram
+  telegramUsername: "", telegramPassword: "", telegramPhone: "", telegram2fa: "",
+  telegramLinkedEmail: "", telegramLinkedEmailPassword: "",
+  // Other
+  walletAddresses: "", backupCodes: "", notes: "",
+};
 
 export default function UserVault() {
   const { data, isLoading } = useListVaultEntries();
@@ -88,50 +145,35 @@ export default function UserVault() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [form, setForm] = useState({
-    category: "", projectName: "",
-    email: "", emailPassword: "",
-    twitterUsername: "", twitterPassword: "",
-    discordUsername: "", discordPassword: "",
-    telegramUsername: "", telegramPassword: "",
-    walletAddresses: "", backupCodes: "", notes: "",
-  });
+  const [form, setForm] = useState({ ...EMPTY_FORM });
 
-  const resetForm = () => setForm({
-    category: "", projectName: "",
-    email: "", emailPassword: "",
-    twitterUsername: "", twitterPassword: "",
-    discordUsername: "", discordPassword: "",
-    telegramUsername: "", telegramPassword: "",
-    walletAddresses: "", backupCodes: "", notes: "",
-  });
+  const f = (key: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setForm(prev => ({ ...prev, [key]: e.target.value }));
+
+  const resetForm = () => setForm({ ...EMPTY_FORM });
 
   const handleCreate = () => {
     if (!form.category || !form.projectName) {
       toast({ variant: "destructive", title: "Category and Entity Name are required." });
       return;
     }
-    createMutation.mutate({
-      data: {
-        category: form.category,
-        projectName: form.projectName,
-        email: form.email || undefined,
-        ...(form.emailPassword ? { emailPassword: form.emailPassword } : {}),
-        twitterUsername: form.twitterUsername || undefined,
-        ...(form.twitterPassword ? { twitterPassword: form.twitterPassword } : {}),
-        discordUsername: form.discordUsername || undefined,
-        ...(form.discordPassword ? { discordPassword: form.discordPassword } : {}),
-        telegramUsername: form.telegramUsername || undefined,
-        ...(form.telegramPassword ? { telegramPassword: form.telegramPassword } : {}),
-        walletAddresses: form.walletAddresses
-          ? form.walletAddresses.split("\n").map(s => s.trim()).filter(Boolean)
-          : undefined,
-        backupCodes: form.backupCodes
-          ? form.backupCodes.split("\n").map(s => s.trim()).filter(Boolean)
-          : undefined,
-        notes: form.notes || undefined,
-      } as any,
-    }, {
+    const payload: Record<string, any> = {
+      category: form.category, projectName: form.projectName,
+    };
+    const strFields: (keyof typeof EMPTY_FORM)[] = [
+      "email", "emailPassword", "emailRecovery", "emailRecoveryPassword",
+      "twitterUsername", "twitterPassword", "twitterEmail", "twitterEmailPassword",
+      "twitterFollowers", "twitter2fa", "twitterEmailRecovery", "twitterEmailRecoveryPassword",
+      "discordUsername", "discordPassword", "discordEmail", "discordEmailPassword",
+      "discord2fa", "discordEmailRecovery", "discordEmailRecoveryPassword",
+      "telegramUsername", "telegramPassword", "telegramPhone", "telegram2fa",
+      "telegramLinkedEmail", "telegramLinkedEmailPassword", "notes",
+    ];
+    for (const k of strFields) if (form[k]) payload[k] = form[k];
+    if (form.walletAddresses) payload.walletAddresses = form.walletAddresses.split("\n").map(s => s.trim()).filter(Boolean);
+    if (form.backupCodes) payload.backupCodes = form.backupCodes.split("\n").map(s => s.trim()).filter(Boolean);
+
+    createMutation.mutate({ data: payload as any }, {
       onSuccess: () => {
         toast({ title: "Entity secured", description: "Vault entity created with credentials." });
         queryClient.invalidateQueries();
@@ -237,56 +279,50 @@ export default function UserVault() {
 
                 {/* Credential groups */}
                 <div className="space-y-0">
-                  <CredGroup
+                  <PlatformSection
                     title="Email"
                     icon={Mail}
                     color="text-emerald-400"
                     fields={[
                       { label: "address", value: entry.email },
-                      { label: "password", value: (entry as any).emailPassword },
+                      { label: "pass", value: entry.emailPassword },
+                      { label: "recovery", value: entry.emailRecovery },
                     ]}
                   />
-                  <CredGroup
+                  <PlatformSection
                     title="Twitter"
-                    icon={Twitter}
+                    icon={AtSign}
                     color="text-sky-400"
                     fields={[
                       { label: "handle", value: entry.twitterUsername ? `@${entry.twitterUsername}` : null },
-                      { label: "pass", value: (entry as any).twitterPassword },
+                      { label: "pass", value: entry.twitterPassword },
+                      { label: "email", value: entry.twitterEmail },
+                      { label: "2fa", value: entry.twitter2fa },
+                      { label: "follows", value: entry.twitterFollowers },
                     ]}
                   />
-                  <CredGroup
+                  <PlatformSection
                     title="Discord"
-                    icon={MessageCircle}
+                    icon={Users}
                     color="text-indigo-400"
                     fields={[
                       { label: "user", value: entry.discordUsername },
-                      { label: "pass", value: (entry as any).discordPassword },
+                      { label: "pass", value: entry.discordPassword },
+                      { label: "email", value: entry.discordEmail },
+                      { label: "2fa", value: entry.discord2fa },
                     ]}
                   />
-                  <CredGroup
+                  <PlatformSection
                     title="Telegram"
-                    icon={MessageCircle}
+                    icon={Phone}
                     color="text-cyan-400"
                     fields={[
                       { label: "user", value: entry.telegramUsername },
-                      { label: "pass", value: (entry as any).telegramPassword },
+                      { label: "phone", value: entry.telegramPhone },
+                      { label: "2fa", value: entry.telegram2fa },
+                      { label: "email", value: entry.telegramLinkedEmail },
                     ]}
                   />
-                  {Array.isArray(entry.walletAddresses) && entry.walletAddresses.length > 0 && (
-                    <div className="space-y-1 py-2 border-t border-border/30">
-                      <div className="flex items-center gap-1.5 mb-1">
-                        <Wallet className="w-3 h-3 text-amber-400" />
-                        <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-amber-400">Wallets</span>
-                      </div>
-                      {(entry.walletAddresses as string[]).slice(0, 2).map((addr: string, idx: number) => (
-                        <CredField key={idx} label={`${idx + 1}`} value={addr} color="text-amber-400" />
-                      ))}
-                      {entry.walletAddresses.length > 2 && (
-                        <div className="text-[10px] font-mono text-muted-foreground/40 pl-5">+{entry.walletAddresses.length - 2} more</div>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 {entry.notes && (
@@ -319,12 +355,12 @@ export default function UserVault() {
             </p>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
+          <div className="space-y-3 py-2">
             {/* Category + Name */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Category *</Label>
-                <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                <Select value={form.category} onValueChange={v => setForm(prev => ({ ...prev, category: v }))}>
                   <SelectTrigger className="font-mono text-xs h-9 border-border bg-input">
                     <SelectValue placeholder="Select..." />
                   </SelectTrigger>
@@ -337,94 +373,105 @@ export default function UserVault() {
                 <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Entity Name *</Label>
                 <Input
                   value={form.projectName}
-                  onChange={e => setForm(f => ({ ...f, projectName: e.target.value }))}
+                  onChange={f("projectName")}
                   className="font-mono text-xs h-9 bg-input"
                   placeholder="e.g. zkSync Main"
                 />
               </div>
             </div>
 
-            {/* Email */}
+            {/* Email Section */}
             <div className="space-y-2 p-3 rounded-lg bg-emerald-400/3 border border-emerald-400/10">
-              <div className="flex items-center gap-1.5 mb-2">
+              <div className="flex items-center gap-1.5">
                 <Mail className="w-3 h-3 text-emerald-400" />
-                <span className="font-mono text-[10px] uppercase tracking-widest text-emerald-400 font-bold">Email</span>
+                <span className="font-mono text-[10px] uppercase tracking-widest text-emerald-400 font-bold">Email Identity</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60">Address</Label>
-                  <Input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="user@gmail.com" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label>
-                  <Input type="password" value={form.emailPassword} onChange={e => setForm(f => ({ ...f, emailPassword: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
-                </div>
-              </div>
+              <TwoColInput
+                label1="Address" value1={form.email} onChange1={f("email")} placeholder1="user@gmail.com"
+                label2="Password" value2={form.emailPassword} onChange2={f("emailPassword")} placeholder2="••••••••"
+              />
+              <TwoColInput
+                label1="Recovery Email" value1={form.emailRecovery} onChange1={f("emailRecovery")} placeholder1="backup@gmail.com"
+                label2="Recovery Pass" value2={form.emailRecoveryPassword} onChange2={f("emailRecoveryPassword")} placeholder2="••••••••"
+              />
             </div>
 
-            {/* Twitter */}
+            {/* Twitter Section */}
             <div className="space-y-2 p-3 rounded-lg bg-sky-400/3 border border-sky-400/10">
-              <div className="flex items-center gap-1.5 mb-2">
-                <Twitter className="w-3 h-3 text-sky-400" />
+              <div className="flex items-center gap-1.5">
+                <AtSign className="w-3 h-3 text-sky-400" />
                 <span className="font-mono text-[10px] uppercase tracking-widest text-sky-400 font-bold">Twitter / X</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60">Username</Label>
-                  <Input value={form.twitterUsername} onChange={e => setForm(f => ({ ...f, twitterUsername: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="handle (no @)" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label>
-                  <Input type="password" value={form.twitterPassword} onChange={e => setForm(f => ({ ...f, twitterPassword: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
-                </div>
-              </div>
+              <TwoColInput
+                label1="Username" value1={form.twitterUsername} onChange1={f("twitterUsername")} placeholder1="handle (no @)"
+                label2="Password" value2={form.twitterPassword} onChange2={f("twitterPassword")} placeholder2="••••••••"
+              />
+              <TwoColInput
+                label1="Linked Email" value1={form.twitterEmail} onChange1={f("twitterEmail")} placeholder1="twitter@gmail.com"
+                label2="Email Pass" value2={form.twitterEmailPassword} onChange2={f("twitterEmailPassword")} placeholder2="••••••••"
+              />
+              <TwoColInput
+                label1="Followers" value1={form.twitterFollowers} onChange1={f("twitterFollowers")} placeholder1="e.g. 1200" type2="text"
+                label2="2FA Secret" value2={form.twitter2fa} onChange2={f("twitter2fa")} placeholder2="TOTP or backup"
+              />
+              <TwoColInput
+                label1="Recovery Email" value1={form.twitterEmailRecovery} onChange1={f("twitterEmailRecovery")} placeholder1="recovery@gmail.com"
+                label2="Recovery Pass" value2={form.twitterEmailRecoveryPassword} onChange2={f("twitterEmailRecoveryPassword")} placeholder2="••••••••"
+              />
             </div>
 
-            {/* Discord */}
+            {/* Discord Section */}
             <div className="space-y-2 p-3 rounded-lg bg-indigo-400/3 border border-indigo-400/10">
-              <div className="flex items-center gap-1.5 mb-2">
-                <MessageCircle className="w-3 h-3 text-indigo-400" />
+              <div className="flex items-center gap-1.5">
+                <Users className="w-3 h-3 text-indigo-400" />
                 <span className="font-mono text-[10px] uppercase tracking-widest text-indigo-400 font-bold">Discord</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60">Username</Label>
-                  <Input value={form.discordUsername} onChange={e => setForm(f => ({ ...f, discordUsername: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="user#1234" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label>
-                  <Input type="password" value={form.discordPassword} onChange={e => setForm(f => ({ ...f, discordPassword: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
-                </div>
+              <TwoColInput
+                label1="Username" value1={form.discordUsername} onChange1={f("discordUsername")} placeholder1="user#1234"
+                label2="Password" value2={form.discordPassword} onChange2={f("discordPassword")} placeholder2="••••••••"
+              />
+              <TwoColInput
+                label1="Linked Email" value1={form.discordEmail} onChange1={f("discordEmail")} placeholder1="discord@gmail.com"
+                label2="Email Pass" value2={form.discordEmailPassword} onChange2={f("discordEmailPassword")} placeholder2="••••••••"
+              />
+              <TwoColInput
+                label1="2FA Secret" value1={form.discord2fa} onChange1={f("discord2fa")} placeholder1="TOTP or backup" type2="text"
+                label2="Recovery Email" value2={form.discordEmailRecovery} onChange2={f("discordEmailRecovery")} placeholder2="recovery@gmail.com"
+              />
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Email Pass</Label>
+                <Input type="password" value={form.discordEmailRecoveryPassword} onChange={f("discordEmailRecoveryPassword")} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
               </div>
             </div>
 
-            {/* Telegram */}
+            {/* Telegram Section */}
             <div className="space-y-2 p-3 rounded-lg bg-cyan-400/3 border border-cyan-400/10">
-              <div className="flex items-center gap-1.5 mb-2">
-                <MessageCircle className="w-3 h-3 text-cyan-400" />
+              <div className="flex items-center gap-1.5">
+                <Phone className="w-3 h-3 text-cyan-400" />
                 <span className="font-mono text-[10px] uppercase tracking-widest text-cyan-400 font-bold">Telegram</span>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60">Username</Label>
-                  <Input value={form.telegramUsername} onChange={e => setForm(f => ({ ...f, telegramUsername: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="@username" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label>
-                  <Input type="password" value={form.telegramPassword} onChange={e => setForm(f => ({ ...f, telegramPassword: e.target.value }))} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
-                </div>
+              <TwoColInput
+                label1="Username" value1={form.telegramUsername} onChange1={f("telegramUsername")} placeholder1="@username"
+                label2="Phone" value2={form.telegramPhone} onChange2={f("telegramPhone")} placeholder2="+1234567890" type2="text"
+              />
+              <TwoColInput
+                label1="2FA Pass" value1={form.telegram2fa} onChange1={f("telegram2fa")} placeholder1="Cloud password" type2="text"
+                label2="Linked Email" value2={form.telegramLinkedEmail} onChange2={f("telegramLinkedEmail")} placeholder2="tg@gmail.com"
+              />
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Linked Email Pass</Label>
+                <Input type="password" value={form.telegramLinkedEmailPassword} onChange={f("telegramLinkedEmailPassword")} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
               </div>
             </div>
 
             {/* Wallets */}
             <div className="space-y-1.5">
               <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <Wallet className="w-3 h-3 text-amber-400" /> Wallet Addresses
-                <span className="text-muted-foreground/40">(one per line)</span>
+                Wallet Addresses <span className="text-muted-foreground/40">(one per line)</span>
               </Label>
               <Textarea
                 value={form.walletAddresses}
-                onChange={e => setForm(f => ({ ...f, walletAddresses: e.target.value }))}
+                onChange={f("walletAddresses")}
                 className="font-mono text-xs bg-input min-h-[60px] resize-none"
                 placeholder={"0x1234...\n0xabcd..."}
               />
@@ -433,12 +480,11 @@ export default function UserVault() {
             {/* Backup codes */}
             <div className="space-y-1.5">
               <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
-                <Shield className="w-3 h-3" /> Backup Codes / Seeds
-                <span className="text-muted-foreground/40">(one per line)</span>
+                <Shield className="w-3 h-3" /> Backup Codes / Seeds <span className="text-muted-foreground/40">(one per line)</span>
               </Label>
               <Textarea
                 value={form.backupCodes}
-                onChange={e => setForm(f => ({ ...f, backupCodes: e.target.value }))}
+                onChange={f("backupCodes")}
                 className="font-mono text-xs bg-input min-h-[50px] resize-none"
                 placeholder="word1 word2 word3..."
               />
@@ -449,7 +495,7 @@ export default function UserVault() {
               <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Notes</Label>
               <Textarea
                 value={form.notes}
-                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                onChange={f("notes")}
                 className="font-mono text-xs bg-input min-h-[45px] resize-none"
                 placeholder="Any extra info..."
               />
@@ -469,24 +515,19 @@ export default function UserVault() {
       </Dialog>
 
       {/* Delete Confirm */}
-      <Dialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+      <Dialog open={deleteId !== null} onOpenChange={o => !o && setDeleteId(null)}>
         <DialogContent className="bg-card border-card-border max-w-sm">
           <DialogHeader>
-            <DialogTitle className="font-mono text-sm text-red-400 flex items-center gap-2">
+            <DialogTitle className="font-mono uppercase tracking-wider text-red-400 flex items-center gap-2">
               <Trash2 className="w-4 h-4" /> Delete Entity
             </DialogTitle>
+            <p className="text-xs font-mono text-muted-foreground mt-2">
+              This will permanently delete the vault entity and all stored credentials. This cannot be undone.
+            </p>
           </DialogHeader>
-          <p className="text-xs font-mono text-muted-foreground">
-            This entity and all its credentials will be permanently deleted.
-          </p>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setDeleteId(null)} className="font-mono text-xs">Cancel</Button>
-            <Button
-              variant="destructive"
-              onClick={() => deleteId && handleDelete(deleteId)}
-              disabled={deleteMutation.isPending}
-              className="font-mono text-xs"
-            >
+            <Button variant="destructive" onClick={() => deleteId !== null && handleDelete(deleteId)} disabled={deleteMutation.isPending} className="font-mono text-xs">
               {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </Button>
           </DialogFooter>

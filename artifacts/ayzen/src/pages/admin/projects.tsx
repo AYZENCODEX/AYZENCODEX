@@ -9,12 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, ExternalLink, Activity, X, Loader2 } from "lucide-react";
+import { Search, Plus, ExternalLink, Activity, X, Loader2, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface CreateForm {
   name: string;
   description: string;
+  xpName: string;
   tier: string;
   fundingAmount: string;
   rewardEstimate: string;
@@ -25,7 +26,7 @@ interface CreateForm {
 }
 
 const EMPTY_FORM: CreateForm = {
-  name: "", description: "", tier: "1", fundingAmount: "", rewardEstimate: "",
+  name: "", description: "", xpName: "", tier: "1", fundingAmount: "", rewardEstimate: "",
   twitterHandle: "", discordUrl: "", websiteUrl: "", experienceLevel: "Beginner",
 };
 
@@ -49,6 +50,7 @@ export default function AdminProjects() {
         data: {
           name: form.name.trim(),
           description: form.description.trim() || undefined,
+          xpName: form.xpName.trim() || undefined,
           tier: form.tier as any,
           fundingAmount: form.fundingAmount ? Number(form.fundingAmount) : 0,
           rewardEstimate: form.rewardEstimate ? Number(form.rewardEstimate) : 0,
@@ -56,7 +58,7 @@ export default function AdminProjects() {
           discordUrl: form.discordUrl || undefined,
           websiteUrl: form.websiteUrl || undefined,
           experienceLevel: form.experienceLevel as any,
-        },
+        } as any,
       },
       {
         onSuccess: () => {
@@ -103,6 +105,21 @@ export default function AdminProjects() {
               <div className="space-y-2">
                 <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Description</Label>
                 <Textarea value={form.description} onChange={setField("description")} placeholder="Describe the protocol and airdrop opportunity..." className="bg-input border-border font-mono resize-none" rows={3} />
+              </div>
+
+              {/* XP Token Name */}
+              <div className="space-y-2 p-3 rounded-lg border border-primary/20 bg-primary/3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Zap className="w-3 h-3 text-primary" />
+                  <Label className="font-mono text-[10px] uppercase tracking-widest text-primary font-bold">XP Token Name</Label>
+                </div>
+                <Input
+                  value={form.xpName}
+                  onChange={setField("xpName")}
+                  placeholder="e.g. TXP, ZXP, LZXP"
+                  className="bg-input border-border font-mono"
+                />
+                <p className="text-[10px] font-mono text-muted-foreground/60">Custom XP label for this project's experience points</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -208,7 +225,14 @@ export default function AdminProjects() {
                   <CardTitle className="font-mono font-bold truncate pr-2 text-primary">{project.name}</CardTitle>
                   <Badge variant="outline" className="font-mono text-[10px] uppercase rounded-sm border-primary/30">Tier {project.tier}</Badge>
                 </div>
-                <div className="text-xs font-mono text-muted-foreground truncate">Funding: ${project.fundingAmount?.toLocaleString() ?? 0}</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs font-mono text-muted-foreground truncate">Funding: ${project.fundingAmount?.toLocaleString() ?? 0}</div>
+                  {(project as any).xpName && (
+                    <Badge variant="outline" className="font-mono text-[9px] uppercase border-yellow-500/30 text-yellow-400 bg-yellow-400/5 flex items-center gap-1">
+                      <Zap className="w-2.5 h-2.5" />{(project as any).xpName}
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="flex-1">
                 <p className="text-sm text-muted-foreground line-clamp-3 mb-4">{project.description ?? "No data provided."}</p>
