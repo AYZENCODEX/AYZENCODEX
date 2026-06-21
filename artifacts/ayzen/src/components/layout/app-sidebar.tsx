@@ -70,6 +70,7 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Assets", icon: KeyRound,
     items: [
+      { href: "/wallets", label: "My Wallets", icon: Wallet },
       { href: "/vault", label: "Vault", icon: Vault },
       { href: "/ayzen-email", label: "AYZEN Email", icon: AtSign },
       { href: "/email-accounts", label: "Email Manager", icon: Mail },

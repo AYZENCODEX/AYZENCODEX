@@ -9,8 +9,8 @@ const CF_API = "https://api.cloudflare.com/client/v4";
 const DOMAIN = "ayzen.tech";
 
 async function cfFetch(path: string, opts: RequestInit = {}) {
-  const key = process.env.cloudflare_api_key;
-  if (!key) throw new Error("cloudflare_api_key not configured");
+  const key = process.env.CLOUDFLARE_API_KEY || process.env.cloudflare_api_key;
+  if (!key) throw new Error("CLOUDFLARE_API_KEY not configured");
   const res = await fetch(`${CF_API}${path}`, {
     ...opts,
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(opts.headers ?? {}) },
@@ -33,7 +33,7 @@ router.get("/ayzen-email/status", async (req, res): Promise<void> => {
   res.json({
     ayzenEmail: user.ayzenEmail ?? null,
     domain: DOMAIN,
-    cfConfigured: !!process.env.cloudflare_api_key,
+    cfConfigured: !!(process.env.CLOUDFLARE_API_KEY || process.env.cloudflare_api_key),
     zoneFound: !!zoneId,
   });
 });
