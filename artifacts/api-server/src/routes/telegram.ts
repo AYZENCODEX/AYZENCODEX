@@ -16,16 +16,16 @@ function getUserFromAuth(req: { headers: { authorization?: string } }): { id: nu
   }
 }
 
-// POST /telegram/connect/verify — user submits the 6-digit code from the bot
+// POST /telegram/connect/verify — user submits the 6-digit code from the bot (chatId not needed)
 router.post("/telegram/connect/verify", async (req, res): Promise<void> => {
   const authUser = getUserFromAuth(req);
   if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const { chatId, code } = req.body as { chatId?: string; code?: string };
-  if (!chatId || !code) { res.status(400).json({ error: "chatId and code are required" }); return; }
+  const { code } = req.body as { code?: string };
+  if (!code) { res.status(400).json({ error: "code is required" }); return; }
 
-  const ok = await verifyTelegramCode(chatId, code, authUser.id);
-  if (!ok) { res.status(400).json({ error: "Invalid or expired code — ask the bot for a new one with /connect" }); return; }
+  const ok = await verifyTelegramCode(code, authUser.id);
+  if (!ok) { res.status(400).json({ error: "Invalid or expired code — open the bot and send /connect for a new code" }); return; }
 
   res.json({ success: true, message: "Telegram account linked successfully" });
 });

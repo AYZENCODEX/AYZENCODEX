@@ -35,6 +35,7 @@ import UserSupport from "@/pages/user/support";
 import AdminSupport from "@/pages/admin/support";
 import UserReferrals from "@/pages/user/referrals";
 import AdminReferrals from "@/pages/admin/referrals";
+import UserSettings from "@/pages/user/settings";
 
 import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
@@ -99,6 +100,7 @@ function Router() {
       <Route path="/referrals">{() => <ProtectedRoute component={UserReferrals} />}</Route>
       <Route path="/admin/support">{() => <ProtectedRoute component={AdminSupport} adminOnly />}</Route>
       <Route path="/admin/referrals">{() => <ProtectedRoute component={AdminReferrals} adminOnly />}</Route>
+      <Route path="/settings">{() => <ProtectedRoute component={UserSettings} />}</Route>
 
       <Route component={NotFound} />
     </Switch>

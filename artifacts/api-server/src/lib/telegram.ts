@@ -9,6 +9,8 @@ let bot: TelegramBot | null = null;
 
 // Pending link sessions: telegramChatId → { code, expires }
 const pendingLinks = new Map<string, { code: string; expires: number }>();
+// Reverse lookup: code → chatId (so frontend only needs the 6-digit code)
+const pendingByCode = new Map<string, string>();
 
 function genCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -288,6 +290,7 @@ async function handleStats(chatId: string): Promise<void> {
 async function handleConnect(chatId: string): Promise<void> {
   const code = genCode();
   pendingLinks.set(chatId, { code, expires: Date.now() + 10 * 60 * 1000 });
+  pendingByCode.set(code, chatId);
 
   const text = [
     "*🔗 Link Your AYZEN Account*",
@@ -387,13 +390,18 @@ function registerHandlers(b: TelegramBot): void {
 // ─── Exported for route use ───────────────────────────────────────────────────
 
 export async function verifyTelegramCode(
-  chatId: string,
   code: string,
   userId: number
 ): Promise<boolean> {
+  const chatId = pendingByCode.get(code);
+  if (!chatId) return false;
   const pending = pendingLinks.get(chatId);
-  if (!pending || pending.expires < Date.now() || pending.code !== code) return false;
+  if (!pending || pending.expires < Date.now() || pending.code !== code) {
+    pendingByCode.delete(code);
+    return false;
+  }
   pendingLinks.delete(chatId);
+  pendingByCode.delete(code);
   let tgUsername: string | null = null;
   try {
     const chat = await bot?.getChat(chatId);
@@ -403,6 +411,11 @@ export async function verifyTelegramCode(
     .update(usersTable)
     .set({ telegramChatId: chatId, telegramUsername: tgUsername })
     .where(eq(usersTable.id, userId));
+  if (bot) {
+    try {
+      await bot.sendMessage(chatId, `✅ *Account linked!*\n\nYour AYZEN account has been connected to this Telegram.`, { parse_mode: "Markdown" });
+    } catch { /* ignore */ }
+  }
   return true;
 }
 
