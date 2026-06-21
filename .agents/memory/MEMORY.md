@@ -3,3 +3,5 @@
 - [Express 5 Wildcard Routes](express5-routes.md) — Use `/{*splat}` not `*` for catch-all routes; `req.params.id` is `string|string[]`, always parse with Array.isArray guard.
 - [AYZEN Projects API Shape](ayzen-api-shapes.md) — /api/projects returns {projects, total, page, limit} NOT array; /api/tasks returns array. Frontend must handle both.
 - [AYZEN Password Hash](ayzen-auth.md) — Hash uses "ayzen_salt" constant (not env var). change-password endpoint verified working after server restart.
+- [AYZEN DB Pool Config](ayzen-db-pool.md) — Supabase transaction pooler (port 6543) breaks Drizzle prepared statements; buildPoolConfig in lib/db/src/index.ts auto-switches to session pooler (5432) + ssl rejectUnauthorized:false.
+- [AYZEN DB Schema Migration](ayzen-db-schema.md) — When DATABASE_URL points to a different Supabase project, tables may have UUID ids or wrong columns; must drop+recreate projects/tasks/users/user_projects with integer serial ids.
