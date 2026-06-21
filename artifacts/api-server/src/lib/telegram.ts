@@ -3,15 +3,47 @@ import { db, usersTable, projectsTable, tasksTable, broadcastsTable, taskSubmiss
 import { eq, desc, count, isNotNull, and } from "drizzle-orm";
 import { logger } from "./logger";
 import { broadcastEvent } from "../routes/events";
+import * as fs from "fs";
+import * as path from "path";
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
 let bot: TelegramBot | null = null;
 
+// ─── Persistent pending-link store (survives server restarts) ─────────────────
+const PENDING_FILE = path.join("/tmp", "tg_pending_codes.json");
+
+interface PendingEntry { code: string; expires: number; }
+
+function loadPending(): Map<string, PendingEntry> {
+  try {
+    const raw = fs.readFileSync(PENDING_FILE, "utf-8");
+    const obj: Record<string, PendingEntry> = JSON.parse(raw);
+    const now = Date.now();
+    const m = new Map<string, PendingEntry>();
+    for (const [k, v] of Object.entries(obj)) {
+      if (v.expires > now) m.set(k, v);
+    }
+    return m;
+  } catch { return new Map(); }
+}
+
+function savePending(m: Map<string, PendingEntry>): void {
+  try {
+    const obj: Record<string, PendingEntry> = {};
+    for (const [k, v] of m.entries()) obj[k] = v;
+    fs.writeFileSync(PENDING_FILE, JSON.stringify(obj), "utf-8");
+  } catch (e: any) { logger.warn({ err: e?.message }, "savePending failed"); }
+}
+
 // Pending link sessions: telegramChatId → { code, expires }
-const pendingLinks = new Map<string, { code: string; expires: number }>();
-// Reverse lookup: code → chatId (so frontend only needs the 6-digit code)
+const pendingLinks: Map<string, PendingEntry> = loadPending();
+// Reverse lookup: code → chatId
 const pendingByCode = new Map<string, string>();
+// Rebuild reverse lookup from loaded data
+for (const [chatId, entry] of pendingLinks.entries()) {
+  pendingByCode.set(entry.code, chatId);
+}
 
 function genCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -397,8 +429,10 @@ async function handleStats(chatId: string): Promise<void> {
 
 async function handleConnect(chatId: string): Promise<void> {
   const code = genCode();
-  pendingLinks.set(chatId, { code, expires: Date.now() + 10 * 60 * 1000 });
+  const entry: PendingEntry = { code, expires: Date.now() + 10 * 60 * 1000 };
+  pendingLinks.set(chatId, entry);
   pendingByCode.set(code, chatId);
+  savePending(pendingLinks);
 
   const text = [
     "*🔗 Link Your AYZEN Account*",
@@ -541,6 +575,7 @@ export async function verifyTelegramCode(
   }
   pendingLinks.delete(chatId);
   pendingByCode.delete(code);
+  savePending(pendingLinks);
   let tgUsername: string | null = null;
   try {
     const chat = await bot?.getChat(chatId);
@@ -564,9 +599,19 @@ export function initTelegramBot(): void {
     return;
   }
   try {
-    bot = new TelegramBot(TOKEN, { polling: true });
+    bot = new TelegramBot(TOKEN, {
+      polling: {
+        autoStart: true,
+        params: { timeout: 10 },
+      },
+      // Kill any previous polling session before starting a new one
+      // This resolves 409 errors on server restart
+    });
+    // First delete any existing webhook + cancel prior polling
+    bot.deleteWebhook().then(() => {
+      logger.info("Telegram bot started (polling mode)");
+    }).catch(() => {});
     registerHandlers(bot);
-    logger.info("Telegram bot started (polling mode)");
 
     // Send startup notification to all connected users
     broadcastToAll(

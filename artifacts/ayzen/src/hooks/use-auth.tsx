@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { User } from "@workspace/api-client-react";
 import { setAuthTokenGetter } from "@workspace/api-client-react";
 import { auth, firebaseSignOut } from "@/lib/firebase";
@@ -37,18 +37,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setUser(JSON.parse(storedUser));
         setToken(storedToken);
-      } catch { /* invalid json */ }
+      } catch { }
     }
 
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (!firebaseUser) {
-        const tk = localStorage.getItem("ayzen_token");
-        if (!tk) doLogout();
-      }
-      setIsLoading(false);
-    });
+    // Hard timeout — if Firebase never calls back (misconfigured domain,
+    // network issue, blocked by Replit proxy), resolve after 2 s anyway.
+    const fallback = setTimeout(() => setIsLoading(false), 2000);
 
-    return () => unsubscribe();
+    let unsubscribe: (() => void) | null = null;
+    try {
+      unsubscribe = onAuthStateChanged(auth, () => {
+        clearTimeout(fallback);
+        setIsLoading(false);
+      });
+    } catch {
+      // Firebase not available at all — clear immediately
+      clearTimeout(fallback);
+      setIsLoading(false);
+    }
+
+    return () => {
+      clearTimeout(fallback);
+      unsubscribe?.();
+    };
   }, [doLogout]);
 
   const login = (newUser: User, newToken: string) => {
@@ -60,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await firebaseSignOut(auth).catch(() => {});
+    try { await firebaseSignOut(auth); } catch { }
     doLogout();
   };
 
@@ -72,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used within an AuthProvider");
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within an AuthProvider");
+  return ctx;
 }

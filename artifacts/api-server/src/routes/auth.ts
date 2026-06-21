@@ -74,6 +74,12 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   }
 
   const token = generateToken(user.id, user.role);
+
+  // Send welcome email (fire and forget)
+  import("../lib/email").then(({ sendWelcomeEmail }) => {
+    sendWelcomeEmail(user.email, user.username).catch(() => {});
+  }).catch(() => {});
+
   res.status(201).json({ token, refreshToken: token, user: sanitizeUser(user) });
 });
 

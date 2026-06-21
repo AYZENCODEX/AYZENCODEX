@@ -61,13 +61,13 @@ export default function AdminSettings() {
     if (!testEmail) { toast({ variant: "destructive", title: "Enter a test email address" }); return; }
     setTesting(true);
     try {
-      const res = await fetch("/api/settings/email/test", {
+      const res = await fetch("/api/email/test", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ to: testEmail }),
       });
       const data = await res.json();
-      if (res.ok) toast({ title: "Test email sent!", description: `Check ${testEmail} for the confirmation.` });
+      if (res.ok) toast({ title: "✅ Test email sent!", description: `Check ${testEmail} for the AYZEN test message.` });
       else toast({ variant: "destructive", title: data.error || "Failed to send" });
     } finally { setTesting(false); }
   };
@@ -175,20 +175,26 @@ export default function AdminSettings() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-3">
-            <Input
-              type="email"
-              value={testEmail}
-              onChange={e => setTestEmail(e.target.value)}
-              className="font-mono text-xs h-10 bg-input border-border flex-1"
-              placeholder="your@email.com"
-            />
-            <Button onClick={sendTest} disabled={testing || !smtpConfigured} className="font-mono text-xs gap-2 flex-shrink-0">
-              {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-              {testing ? "Sending..." : "Send Test"}
-            </Button>
+          <div className="space-y-3">
+            <div className="bg-primary/5 border border-primary/15 rounded-md px-3 py-2 flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              <p className="text-[10px] font-mono text-primary">Powered by Resend — no SMTP config required</p>
+            </div>
+            <div className="flex gap-3">
+              <Input
+                type="email"
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                className="font-mono text-xs h-10 bg-input border-border flex-1"
+                placeholder="your@email.com"
+                onKeyDown={e => e.key === "Enter" && sendTest()}
+              />
+              <Button onClick={sendTest} disabled={testing} className="font-mono text-xs gap-2 flex-shrink-0">
+                {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                {testing ? "Sending..." : "Send Test"}
+              </Button>
+            </div>
           </div>
-          {!smtpConfigured && <p className="text-[10px] font-mono text-yellow-500/80 mt-2">Configure SMTP above before sending a test.</p>}
         </CardContent>
       </Card>
     </div>

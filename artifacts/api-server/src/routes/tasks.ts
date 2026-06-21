@@ -114,9 +114,15 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
         await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, sub.taskId));
       }
     }
-    // Notify user on Telegram (fire and forget)
     if (taskName) {
       notifyTaskVerified(sub.userId, taskName, !!approved, rewardAmount).catch(() => {});
+      // Also send email notification
+      const { sendTaskApprovedEmail } = await import("../lib/email");
+      const [user] = await db.select({ email: usersTable.email, username: usersTable.username })
+        .from(usersTable).where(eq(usersTable.id, sub.userId));
+      if (user && approved) {
+        sendTaskApprovedEmail(user.email, user.username, taskName, rewardAmount).catch(() => {});
+      }
     }
   }
 

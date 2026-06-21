@@ -215,6 +215,12 @@ router.post("/users/change-password", async (req, res): Promise<void> => {
   }
 
   await db.update(usersTable).set({ passwordHash: hash(newPassword) }).where(eq(usersTable.id, userId));
+
+  // Send password changed email (fire and forget)
+  import("../lib/email").then(({ sendPasswordChangedEmail }) => {
+    sendPasswordChangedEmail(user.email, user.username).catch(() => {});
+  }).catch(() => {});
+
   res.json({ success: true, message: "Password updated successfully" });
 });
 

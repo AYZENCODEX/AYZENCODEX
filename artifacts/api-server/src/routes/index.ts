@@ -17,6 +17,7 @@ import emailAccountsRouter from "./email-accounts";
 import supportRouter from "./support";
 import referralsRouter from "./referrals";
 import eventsRouter from "./events";
+import emailRouter from "./email";
 
 const router: IRouter = Router();
 
@@ -24,6 +25,7 @@ router.use(eventsRouter);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(usersRouter);
+router.use(emailRouter);
 router.use(projectsRouter);
 router.use(tasksRouter);
 router.use(toolsRouter);
