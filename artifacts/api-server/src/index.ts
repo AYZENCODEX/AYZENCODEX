@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { logBus } from "./lib/log-bus";
 import { initTelegramBot } from "./lib/telegram";
 import { getFirebaseAdmin } from "./lib/firebase-admin";
 import { db } from "@workspace/db";
@@ -41,36 +42,45 @@ const MIGRATIONS = [
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {
-  // Probe until the pool has an established connection
+  logBus.system("DB probe started — waiting for connection...");
+  let attempts = 0;
   while (true) {
     try {
       await db.execute(sql`SELECT 1`);
-      break; // pool is up
-    } catch {
+      break;
+    } catch (err: any) {
+      attempts++;
+      if (attempts % 5 === 0) {
+        logBus.warn(`DB still offline after ${attempts} probes: ${err?.message ?? err}`);
+      }
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
-  // Connection is live — run DDL
+  logBus.system("✅ Database connected — running startup migrations");
   for (const q of MIGRATIONS) {
     try {
       await db.execute(sql.raw(q));
+      logBus.system(`Migration OK: ${q.replace("ALTER TABLE ", "").slice(0, 60)}`);
     } catch (err: any) {
       logger.warn({ err, q }, "Migration statement warning (column may already exist)");
+      logBus.warn(`Migration skip (exists): ${q.slice(0, 60)}`);
     }
   }
+  logBus.system("✅ All startup migrations complete");
   logger.info("Startup migrations complete");
 }
 
-// Start migration after server begins accepting requests
 setTimeout(waitForDbThenMigrate, 2000);
 
 app.listen(port, (err) => {
   if (err) {
     logger.error({ err }, "Error listening on port");
+    logBus.error(`Server failed to start: ${(err as Error).message}`);
     process.exit(1);
   }
 
   logger.info({ port }, "Server listening");
+  logBus.system(`🚀 AYZEN API Server started on port ${port}`);
   getFirebaseAdmin();
   initTelegramBot();
 });

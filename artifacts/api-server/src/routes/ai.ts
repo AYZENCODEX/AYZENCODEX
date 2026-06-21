@@ -1,10 +1,9 @@
 import { Router } from "express";
 import { db, vaultEntriesTable, usersTable, userProjectsTable, projectsTable, taskSubmissionsTable } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, count, sql } from "drizzle-orm";
 
 const router = Router();
 
-// ── Groq free-tier model catalogue (June 2025) ────────────────────────────
 export const GROQ_MODELS = [
   { id: "llama-3.3-70b-versatile",                     name: "Llama 3.3 70B Versatile",       context: 128000, free: true,  tier: "recommended",  speed: "fast" },
   { id: "llama-3.1-8b-instant",                         name: "Llama 3.1 8B Instant",           context: 131072, free: true,  tier: "recommended",  speed: "ultra-fast" },
@@ -20,24 +19,38 @@ export const GROQ_MODELS = [
 
 const DEFAULT_MODEL = "llama-3.3-70b-versatile";
 
-const BASE_SYSTEM = `You are AYZEN AI — a dedicated crypto airdrop intelligence assistant built exclusively for the AYZEN Airdrop Command Center.
+const USER_SYSTEM = `You are AYZEN AI — a dedicated crypto airdrop intelligence assistant for the AYZEN Airdrop Command Center.
 
 You have DIRECT ACCESS to the user's live account data (injected below). Answer questions about:
 - Their vault credential entities (wallets, emails, socials per airdrop project)
-- Their enrolled projects and airdrop participation  
+- Their enrolled projects and airdrop participation
 - Completed tasks, submission history, ROI, streak
 - General crypto: airdrops, DeFi, L2 networks, gas optimization, sybil avoidance
 
 Rules:
-- When asked about their data ("my accounts", "my vault", "my wallets", "show my credentials"), refer to the injected context
+- When asked about their data ("my accounts", "my vault", "my wallets"), refer to the injected context
 - Never fabricate credentials — only report what's in the context
 - Be concise, direct, and crypto-native
 - Use $TICKER symbols when relevant`;
 
-function buildContext(user: any, vault: any[], projects: any[], tasks: any[]): string {
+const ADMIN_SYSTEM = `You are AYZEN Admin AI — an intelligent admin assistant for the AYZEN crypto airdrop platform.
+
+You have DIRECT ACCESS to live platform statistics (injected below). You can help with:
+- Platform analytics: user counts, project stats, vault entries, ROI distributed
+- User management: answering questions about operators, roles, activity
+- Project management: explaining project details, task completion rates
+- Operational decisions: airdrop strategy, vault credential management, tier structure
+- Technical debugging: API errors, database issues, system health
+
+Rules:
+- Be precise and data-driven, referencing the injected platform stats
+- Use admin-appropriate language — direct, professional, action-oriented
+- For destructive actions (delete user, ban, etc.), describe the action but clarify it must be done via the admin panel
+- Be concise — executives don't want long explanations`;
+
+function buildUserContext(user: any, vault: any[], projects: any[], tasks: any[]): string {
   const lines = ["\n\n══ LIVE USER CONTEXT FROM AYZEN DB ══"];
   lines.push(`Operator: ${user.username} | Streak: ${user.streak}d | Total ROI: $${user.totalRoi} | Role: ${user.role}`);
-
   if (vault.length) {
     lines.push(`\n📂 Vault Entities (${vault.length} total):`);
     vault.slice(0, 25).forEach(e => {
@@ -48,31 +61,49 @@ function buildContext(user: any, vault: any[], projects: any[], tasks: any[]): s
       if (e.telegramUsername) lines.push(`    📱 @${e.telegramUsername}`);
       const wallets: string[] = e.walletAddresses ? JSON.parse(e.walletAddresses) : [];
       if (wallets.length) lines.push(`    👛 ${wallets.join(" | ")}`);
-      if (e.notes) lines.push(`    📝 ${e.notes}`);
     });
     if (vault.length > 25) lines.push(`  … +${vault.length - 25} more entities`);
-  } else {
-    lines.push("\n📂 Vault: No entities yet.");
   }
-
   if (projects.length) {
     lines.push(`\n🚀 Enrolled Projects (${projects.length}):`);
     projects.slice(0, 15).forEach(p => {
       lines.push(`  • ${p.name} | Tier: ${p.tier} | Est. Reward: $${p.rewardEstimate ?? "TBD"}`);
     });
-  } else {
-    lines.push("\n🚀 Projects: Not enrolled yet.");
   }
-
   if (tasks.length) {
     lines.push(`\n✅ Recent Task Submissions:`);
     tasks.slice(0, 8).forEach(t => {
       lines.push(`  • Task #${t.taskId} | ${t.status} | $${t.rewardAmount ?? "?"}`);
     });
   }
-
   lines.push("══════════════════════════════════════");
   return lines.join("\n");
+}
+
+async function buildAdminContext(): Promise<string> {
+  try {
+    const [{ totalUsers }] = await db.select({ totalUsers: count() }).from(usersTable);
+    const [{ totalProjects }] = await db.select({ totalProjects: count() }).from(projectsTable);
+    const [{ totalVault }] = await db.select({ totalVault: count() }).from(vaultEntriesTable);
+    const [{ totalSubmissions }] = await db.select({ totalSubmissions: count() }).from(taskSubmissionsTable);
+    const projects = await db.select({ name: projectsTable.name, tier: projectsTable.tier, rewardEstimate: projectsTable.rewardEstimate, fundingAmount: projectsTable.fundingAmount }).from(projectsTable).limit(20);
+    const recentUsers = await db.select({ username: usersTable.username, email: usersTable.email, role: usersTable.role, createdAt: usersTable.createdAt }).from(usersTable).orderBy(desc(usersTable.createdAt)).limit(10);
+
+    const lines = ["\n\n══ LIVE PLATFORM CONTEXT FROM AYZEN DB ══"];
+    lines.push(`Platform Stats: ${totalUsers} operators | ${totalProjects} projects | ${totalVault} vault entities | ${totalSubmissions} task submissions`);
+    if (projects.length) {
+      lines.push(`\n🚀 Active Projects:`);
+      projects.forEach(p => lines.push(`  • ${p.name} | Tier ${p.tier} | Est. Reward: $${p.rewardEstimate} | Funding: $${p.fundingAmount}`));
+    }
+    if (recentUsers.length) {
+      lines.push(`\n👥 Recent Operators (newest 10):`);
+      recentUsers.forEach(u => lines.push(`  • ${u.username} (${u.email}) | Role: ${u.role}`));
+    }
+    lines.push("══════════════════════════════════════");
+    return lines.join("\n");
+  } catch {
+    return "\n\n[Platform context unavailable — DB offline]";
+  }
 }
 
 function getAuth(req: any): { userId: number; role: string } {
@@ -89,7 +120,7 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
   const openRouterKey = process.env.OPENROUTER_API_KEY;
 
   if (!groqKey && !openRouterKey) {
-    res.status(503).json({ error: "AI not configured. Add GROQ_API_KEY or OPENROUTER_API_KEY." });
+    res.status(503).json({ error: "AI not configured. Add GROQ_API_KEY or OPENROUTER_API_KEY in Replit Secrets." });
     return;
   }
 
@@ -99,46 +130,53 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
     return;
   }
 
-  const { userId } = getAuth(req);
+  const { userId, role } = getAuth(req);
+  const isAdmin = role === "admin" || role === "operator";
 
-  // Fetch live user context
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
-  const vault = await db.select().from(vaultEntriesTable).where(eq(vaultEntriesTable.userId, userId));
-  const projects = await db
-    .select({ name: projectsTable.name, tier: projectsTable.tier, rewardEstimate: projectsTable.rewardEstimate })
-    .from(userProjectsTable)
-    .innerJoin(projectsTable, eq(userProjectsTable.projectId, projectsTable.id))
-    .where(eq(userProjectsTable.userId, userId));
-  const tasks = await db.select().from(taskSubmissionsTable)
-    .where(eq(taskSubmissionsTable.userId, userId))
-    .orderBy(desc(taskSubmissionsTable.submittedAt))
-    .limit(10);
+  let systemPrompt: string;
+  if (isAdmin) {
+    const ctx = await buildAdminContext();
+    systemPrompt = ADMIN_SYSTEM + ctx;
+  } else {
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+    const vault = await db.select().from(vaultEntriesTable).where(eq(vaultEntriesTable.userId, userId));
+    const projects = await db.select({ name: projectsTable.name, tier: projectsTable.tier, rewardEstimate: projectsTable.rewardEstimate })
+      .from(userProjectsTable)
+      .innerJoin(projectsTable, eq(userProjectsTable.projectId, projectsTable.id))
+      .where(eq(userProjectsTable.userId, userId));
+    const tasks = await db.select().from(taskSubmissionsTable)
+      .where(eq(taskSubmissionsTable.userId, userId))
+      .orderBy(desc(taskSubmissionsTable.submittedAt))
+      .limit(10);
+    systemPrompt = USER_SYSTEM + (user ? buildUserContext(user, vault, projects, tasks) : "");
+  }
 
-  const systemPrompt = BASE_SYSTEM + (user ? buildContext(user, vault, projects, tasks) : "");
   const selectedModel = (model && GROQ_MODELS.find(m => m.id === model)) ? model : DEFAULT_MODEL;
   const allMessages = [{ role: "system", content: systemPrompt }, ...messages.slice(-20)];
 
-  if (groqKey) {
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  try {
+    if (groqKey) {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: selectedModel, messages: allMessages, max_tokens: 1024 }),
+      });
+      const data = await response.json() as Record<string, unknown>;
+      res.json({ ...data, _model: selectedModel });
+      return;
+    }
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: selectedModel, messages: allMessages, max_tokens: 1024 }),
+      headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://ayzen.tech" },
+      body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: allMessages, max_tokens: 1024 }),
     });
     const data = await response.json() as Record<string, unknown>;
-    res.json({ ...data, _model: selectedModel });
-    return;
+    res.json({ ...data, _model: "llama-3.3-70b (OpenRouter)" });
+  } catch (err: any) {
+    res.status(502).json({ error: `AI provider error: ${err?.message ?? "Unknown error"}` });
   }
-
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://ayzen.tech" },
-    body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: allMessages, max_tokens: 1024 }),
-  });
-  const data = await response.json() as Record<string, unknown>;
-  res.json({ ...data, _model: "llama-3.3-70b (OpenRouter)" });
 });
 
-// ── Model catalogue endpoint ───────────────────────────────────────────────
 router.get("/ai/models", (_req, res) => {
   res.json(GROQ_MODELS);
 });

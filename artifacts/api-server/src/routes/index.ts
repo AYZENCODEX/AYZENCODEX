@@ -20,10 +20,12 @@ import referralsRouter from "./referrals";
 import eventsRouter from "./events";
 import emailRouter from "./email";
 import walletsRouter from "./wallets";
+import logsRouter from "./logs";
 
 const router: IRouter = Router();
 
 router.use(eventsRouter);
+router.use(logsRouter);
 router.use(healthRouter);
 router.use(authRouter);
 router.use(usersRouter);
