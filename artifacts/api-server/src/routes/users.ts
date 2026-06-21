@@ -85,13 +85,26 @@ router.get("/users/:id/stats", async (req, res): Promise<void> => {
   const [weekCount] = await db.select({ cnt: count() }).from(taskSubmissionsTable)
     .where(and(eq(taskSubmissionsTable.userId, id), eq(taskSubmissionsTable.status, "approved"), gte(taskSubmissionsTable.submittedAt, weekAgo)));
 
+  const [{ totalUsers }] = await db.select({ totalUsers: count() }).from(usersTable);
+
+  const betterThanMe = await db.select({ cnt: count() }).from(usersTable)
+    .where(sql`total_roi > ${user.totalRoi}`);
+  const rankNum = Number(betterThanMe[0]?.cnt ?? 0) + 1;
+
+  const [referralResult] = await db.select({ cnt: count() }).from(usersTable)
+    .where(eq(usersTable.referredBy, id));
+
   res.json({
     totalRoi: user.totalRoi,
     projectCount: Number(projectCountResult?.cnt ?? 0),
     tasksCompleted: Number(taskCountResult?.cnt ?? 0),
     streak: user.streak,
+    longestStreak: user.streak,
     walletCount: user.walletCount,
-    rank: Math.floor(Math.random() * 100) + 1,
+    points: user.points ?? 0,
+    referrals: Number(referralResult?.cnt ?? 0),
+    rank: rankNum,
+    totalUsers: Number(totalUsers),
     tasksToday: Number(todayCount?.cnt ?? 0),
     tasksThisWeek: Number(weekCount?.cnt ?? 0),
   });
@@ -181,6 +194,28 @@ router.put("/profile", async (req, res): Promise<void> => {
   const [updated] = await db.update(usersTable).set(updates).where(eq(usersTable.id, userId)).returning();
   if (!updated) { res.status(404).json({ error: "Not found" }); return; }
   res.json(sanitizeUser(updated));
+});
+
+router.post("/users/change-password", async (req, res): Promise<void> => {
+  const userId = getAuthUserId(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { oldPassword, newPassword } = req.body as { oldPassword?: string; newPassword?: string };
+  if (!oldPassword || !newPassword) { res.status(400).json({ error: "oldPassword and newPassword are required" }); return; }
+  if (newPassword.length < 6) { res.status(400).json({ error: "New password must be at least 6 characters" }); return; }
+
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  const crypto = await import("crypto");
+  const hash = (pw: string) => crypto.createHash("sha256").update(pw + "ayzen_salt").digest("hex");
+
+  if (hash(oldPassword) !== user.passwordHash) {
+    res.status(403).json({ error: "Current password is incorrect" }); return;
+  }
+
+  await db.update(usersTable).set({ passwordHash: hash(newPassword) }).where(eq(usersTable.id, userId));
+  res.json({ success: true, message: "Password updated successfully" });
 });
 
 export default router;

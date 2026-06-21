@@ -4,7 +4,11 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Settings, Send, Link2, Unlink, RefreshCw, CheckCircle2, ExternalLink } from "lucide-react";
+import {
+  Settings, Send, Link2, Unlink, RefreshCw, CheckCircle2,
+  ExternalLink, KeyRound, Eye, EyeOff, Bell, Shield, Loader2,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -14,8 +18,22 @@ interface TelegramStatus {
   username: string | null;
 }
 
+function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
+  return (
+    <div className="bg-card border border-card-border rounded-lg overflow-hidden">
+      <div className="bg-primary/5 border-b border-card-border px-5 py-4 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+          <Icon className="w-4 h-4 text-primary" />
+        </div>
+        <div className="font-mono font-bold text-sm text-foreground">{title}</div>
+      </div>
+      <div className="px-5 py-5">{children}</div>
+    </div>
+  );
+}
+
 export default function UserSettings() {
-  const { token } = useAuth() as any;
+  const { token, user } = useAuth() as any;
   const { toast } = useToast();
 
   const [tgStatus, setTgStatus] = useState<TelegramStatus | null>(null);
@@ -25,12 +43,21 @@ export default function UserSettings() {
   const [unlinking, setUnlinking] = useState(false);
   const [botName, setBotName] = useState<string | null>(null);
 
+  const [oldPw, setOldPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [showOld, setShowOld] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [pwLoading, setPwLoading] = useState(false);
+
+  const [notifBroadcast, setNotifBroadcast] = useState(true);
+  const [notifTask, setNotifTask] = useState(true);
+
   const fetchTgStatus = useCallback(async () => {
     setTgLoading(true);
     try {
       const res = await fetch(`${BASE}/api/telegram/me`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) setTgStatus(await res.json());
-    } catch { /* ignore */ }
+    } catch { }
     setTgLoading(false);
   }, [token]);
 
@@ -41,7 +68,7 @@ export default function UserSettings() {
         const data = await res.json();
         if (data.online) setBotName(data.username);
       }
-    } catch { /* ignore */ }
+    } catch { }
   }, [token]);
 
   useEffect(() => { fetchTgStatus(); fetchBotInfo(); }, [fetchTgStatus, fetchBotInfo]);
@@ -60,7 +87,7 @@ export default function UserSettings() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast({ title: "Telegram linked!", description: "Your Telegram account is now connected." });
+        toast({ title: "✅ Telegram linked!", description: "Your Telegram account is now connected to AYZEN." });
         setCode("");
         await fetchTgStatus();
       } else {
@@ -89,25 +116,79 @@ export default function UserSettings() {
     setUnlinking(false);
   };
 
+  const handleChangePassword = async () => {
+    if (!oldPw || !newPw) {
+      toast({ variant: "destructive", title: "Fill both fields" });
+      return;
+    }
+    if (newPw.length < 6) {
+      toast({ variant: "destructive", title: "New password too short", description: "Minimum 6 characters." });
+      return;
+    }
+    setPwLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/users/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ oldPassword: oldPw, newPassword: newPw }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: "✅ Password changed", description: "Your passphrase has been updated." });
+        setOldPw(""); setNewPw("");
+      } else {
+        toast({ variant: "destructive", title: "Password change failed", description: data.error ?? "Wrong current password?" });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Connection error" });
+    }
+    setPwLoading(false);
+  };
+
+  const ToggleRow = ({ label, sub, value, onChange }: { label: string; sub: string; value: boolean; onChange: (v: boolean) => void }) => (
+    <div className="flex items-center justify-between py-3 border-b border-card-border last:border-b-0">
+      <div>
+        <div className="font-mono text-xs text-foreground font-medium">{label}</div>
+        <div className="font-mono text-[10px] text-muted-foreground mt-0.5">{sub}</div>
+      </div>
+      <button
+        onClick={() => onChange(!value)}
+        className={cn(
+          "w-10 h-5 rounded-full transition-all duration-200 relative",
+          value ? "bg-primary" : "bg-muted"
+        )}
+      >
+        <span className={cn(
+          "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200",
+          value ? "left-5" : "left-0.5"
+        )} />
+      </button>
+    </div>
+  );
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
           <Settings className="w-6 h-6 text-primary" /> Settings
         </h1>
-        <p className="text-muted-foreground font-mono text-xs mt-1">Account integrations and preferences</p>
+        <p className="text-muted-foreground font-mono text-xs mt-1">
+          Account: <span className="text-primary">{user?.username ?? "..."}</span> · {user?.email ?? ""}
+        </p>
       </div>
 
-      {/* ── Telegram Connect ─────────────────────────────────── */}
+      {/* ── Telegram Connect ── */}
       <div className="bg-card border border-card-border rounded-lg overflow-hidden">
-        <div className="bg-primary/5 border-b border-card-border px-5 py-4 flex items-center justify-between">
+        <div className="bg-[#229ED9]/5 border-b border-card-border px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-[#229ED9]/10 border border-[#229ED9]/20 flex items-center justify-center">
               <Send className="w-4 h-4 text-[#229ED9]" />
             </div>
             <div>
               <div className="font-mono font-bold text-sm text-foreground">Telegram Bot</div>
-              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Account Notifications & Commands</div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {botName ? <>Bot: <a href={`https://t.me/${botName}`} target="_blank" rel="noopener noreferrer" className="text-[#229ED9] hover:underline inline-flex items-center gap-0.5">@{botName} <ExternalLink className="w-2.5 h-2.5" /></a></> : "Notifications & Commands"}
+              </div>
             </div>
           </div>
           {tgLoading ? (
@@ -126,7 +207,6 @@ export default function UserSettings() {
 
         <div className="px-5 py-5 space-y-5">
           {tgStatus?.linked ? (
-            /* ── Already linked ── */
             <div className="space-y-4">
               <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-md px-4 py-3 flex items-center gap-3">
                 <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
@@ -137,9 +217,10 @@ export default function UserSettings() {
                   )}
                 </div>
               </div>
-              <div className="text-xs font-mono text-muted-foreground space-y-1">
-                <div>✓ You will receive broadcast notifications</div>
-                <div>✓ Use bot commands: /me, /projects, /leaderboard</div>
+              <div className="text-xs font-mono text-muted-foreground space-y-1.5">
+                <div>✓ Task approvals → Telegram notification</div>
+                <div>✓ Broadcast alerts from admin</div>
+                <div>✓ Commands: /tasks · /done &lt;id&gt; · /mytasks · /me</div>
               </div>
               <Button
                 variant="outline"
@@ -153,21 +234,18 @@ export default function UserSettings() {
               </Button>
             </div>
           ) : (
-            /* ── Not linked — show connect flow ── */
             <div className="space-y-5">
-              {/* Step guide */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <p className="font-mono text-[11px] text-muted-foreground uppercase tracking-widest mb-3">How to connect</p>
                 {[
                   {
                     n: "1",
                     text: botName
-                      ? <>Open <a href={`https://t.me/${botName}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5">@{botName} <ExternalLink className="w-3 h-3" /></a> on Telegram</>
+                      ? <>Open <a href={`https://t.me/${botName}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-0.5 font-bold">@{botName} <ExternalLink className="w-3 h-3" /></a> on Telegram</>
                       : "Open the AYZEN bot on Telegram",
                   },
-                  { n: "2", text: <>Send the command <span className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary">/connect</span></> },
-                  { n: "3", text: "The bot will reply with a 6-digit code" },
-                  { n: "4", text: "Paste that code below and click Link" },
+                  { n: "2", text: <>Send <span className="bg-muted px-1.5 py-0.5 rounded font-mono text-primary">/connect</span> — the bot replies with a 6-digit code</> },
+                  { n: "3", text: "Paste that code below and click Link Account" },
                 ].map(({ n, text }) => (
                   <div key={n} className="flex items-start gap-3">
                     <div className="w-5 h-5 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-mono font-bold text-primary flex-shrink-0 mt-0.5">{n}</div>
@@ -176,11 +254,8 @@ export default function UserSettings() {
                 ))}
               </div>
 
-              {/* Code input */}
               <div className="space-y-2">
-                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  6-Digit Code from Bot
-                </label>
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">6-Digit Code from Bot</label>
                 <div className="flex gap-2">
                   <Input
                     value={code}
@@ -205,6 +280,71 @@ export default function UserSettings() {
           )}
         </div>
       </div>
+
+      {/* ── Change Password ── */}
+      <Section title="Security — Change Password" icon={KeyRound}>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Current Password</label>
+            <div className="relative">
+              <Input
+                type={showOld ? "text" : "password"}
+                value={oldPw}
+                onChange={e => setOldPw(e.target.value)}
+                placeholder="Current passphrase"
+                className="font-mono h-10 text-sm bg-input border-border pr-9 focus-visible:ring-primary/50"
+              />
+              <button type="button" onClick={() => setShowOld(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                {showOld ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">New Password</label>
+            <div className="relative">
+              <Input
+                type={showNew ? "text" : "password"}
+                value={newPw}
+                onChange={e => setNewPw(e.target.value)}
+                placeholder="New passphrase (min 6 chars)"
+                className="font-mono h-10 text-sm bg-input border-border pr-9 focus-visible:ring-primary/50"
+              />
+              <button type="button" onClick={() => setShowNew(p => !p)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                {showNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+          <Button
+            className="font-mono text-xs gap-2 h-10"
+            onClick={handleChangePassword}
+            disabled={pwLoading || !oldPw || !newPw}
+          >
+            {pwLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+            {pwLoading ? "Updating..." : "Update Password"}
+          </Button>
+        </div>
+      </Section>
+
+      {/* ── Notification Preferences ── */}
+      <Section title="Notification Preferences" icon={Bell}>
+        <div className="divide-y divide-card-border">
+          <ToggleRow
+            label="Broadcast Alerts"
+            sub="Receive system-wide announcements from admin"
+            value={notifBroadcast}
+            onChange={setNotifBroadcast}
+          />
+          <ToggleRow
+            label="Task Updates"
+            sub="Notify when task submissions are approved or rejected"
+            value={notifTask}
+            onChange={setNotifTask}
+          />
+        </div>
+        <p className="text-[10px] font-mono text-muted-foreground/40 mt-3">
+          Notifications are delivered via connected Telegram. Link your Telegram above to receive them.
+        </p>
+      </Section>
     </div>
   );
 }

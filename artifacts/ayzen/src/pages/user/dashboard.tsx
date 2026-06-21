@@ -55,9 +55,11 @@ export default function UserDashboard() {
     query: { refetchInterval: 10_000 },
   });
 
-  const activeProjects = Array.isArray(projects) ? projects.filter((p: any) => p.status === "active").length : 0;
-  const pendingTasks = Array.isArray(tasks) ? tasks.filter((t: any) => !t.userStatus || t.userStatus === "pending").length : 0;
-  const recentTasks = Array.isArray(tasks) ? tasks.slice(0, 5) : [];
+  const projectList: any[] = Array.isArray(projects) ? projects : ((projects as any)?.projects ?? []);
+  const taskList: any[] = Array.isArray(tasks) ? tasks : [];
+  const activeProjects = projectList.filter((p: any) => p.status === "active").length;
+  const pendingTasks = taskList.filter((t: any) => !t.userStatus || t.userStatus === "pending").length;
+  const recentTasks = taskList.slice(0, 5);
 
   return (
     <div className="space-y-6 page-enter">
@@ -202,12 +204,12 @@ export default function UserDashboard() {
                   </div>
                 </div>
               ))
-            ) : !projects || (projects as any[]).length === 0 ? (
+            ) : projectList.length === 0 ? (
               <div className="px-5 py-8 text-center text-xs font-mono text-muted-foreground/50">
                 No protocols — admin will add them soon
               </div>
             ) : (
-              (projects as any[]).slice(0, 5).map((proj) => (
+              projectList.slice(0, 5).map((proj) => (
                 <div key={proj.id} className="px-5 py-3 flex items-center gap-3 hover:bg-primary/3 transition-colors">
                   <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center border border-primary/20 text-[10px] font-mono font-bold text-primary flex-shrink-0">
                     {proj.name?.slice(0, 2).toUpperCase()}

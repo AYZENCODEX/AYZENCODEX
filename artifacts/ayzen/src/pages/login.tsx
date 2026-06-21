@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useLogin } from "@workspace/api-client-react";
-import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "@/lib/firebase";
+import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Terminal, ArrowRight, Loader2, Mail } from "lucide-react";
+import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -36,33 +35,47 @@ async function firebaseSyncToBackend(idToken: string): Promise<{ token: string; 
   }
 }
 
+async function backendLogin(email: string, password: string): Promise<{ token: string; user: any } | null> {
+  try {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function backendRegister(username: string, email: string, password: string, refCode?: string): Promise<{ token: string; user: any; error?: string } | null> {
+  try {
+    const res = await fetch(`${BASE}/api/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, email, password, ...(refCode ? { refCode } : {}) }),
+    });
+    const data = await res.json();
+    if (!res.ok) return { token: "", user: null, error: data.error ?? "Registration failed" };
+    return data;
+  } catch {
+    return null;
+  }
+}
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login: setAuthContext } = useAuth();
   const { toast } = useToast();
-  const loginMutation = useLogin();
-  const [tab, setTab] = useState<"signin" | "signup">("signin");
 
+  const [tab, setTab] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [firebaseLoading, setFirebaseLoading] = useState(false);
-
-  const doBackendLogin = (emailVal: string, passwordVal: string) => {
-    loginMutation.mutate(
-      { data: { email: emailVal, password: passwordVal } },
-      {
-        onSuccess: (data) => {
-          setAuthContext(data.user, data.token);
-          toast({ title: "Access granted", description: "Welcome back, operator." });
-          if (data.user.role === "admin") setLocation("/admin/dashboard");
-          else setLocation("/dashboard");
-        },
-        onError: () => toast({ variant: "destructive", title: "Access denied", description: "Invalid credentials." }),
-      }
-    );
-  };
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -70,73 +83,102 @@ export default function Login() {
       const result = await signInWithPopup(auth, googleProvider);
       const idToken = await result.user.getIdToken();
       const data = await firebaseSyncToBackend(idToken);
-      if (!data) throw new Error("Backend sync failed");
+      if (!data) throw new Error("Could not sync account with server");
       setAuthContext(data.user, data.token);
       toast({ title: "Access granted", description: `Welcome, ${data.user.username}!` });
       if (data.user.role === "admin") setLocation("/admin/dashboard");
       else setLocation("/dashboard");
     } catch (err: any) {
       if (err?.code !== "auth/popup-closed-by-user") {
-        toast({ variant: "destructive", title: "Google sign-in failed", description: err?.message ?? "Try again." });
+        const msg = err?.code === "auth/unauthorized-domain"
+          ? "Google sign-in not available on this domain. Use email/password instead."
+          : (err?.message ?? "Google sign-in failed. Try again.");
+        toast({ variant: "destructive", title: "Google sign-in failed", description: msg });
       }
     }
     setGoogleLoading(false);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (tab === "signin") {
-      setFirebaseLoading(true);
-      try {
-        const cred = await signInWithEmailAndPassword(auth, email, password);
-        const idToken = await cred.user.getIdToken();
-        const data = await firebaseSyncToBackend(idToken);
-        if (data) {
-          setAuthContext(data.user, data.token);
-          toast({ title: "Access granted", description: "Welcome back, operator." });
-          if (data.user.role === "admin") setLocation("/admin/dashboard");
-          else setLocation("/dashboard");
-        } else {
-          doBackendLogin(email, password);
-        }
-      } catch {
-        doBackendLogin(email, password);
-      }
-      setFirebaseLoading(false);
-    } else {
-      handleFirebaseSignup();
-    }
-  };
-
-  const handleFirebaseSignup = async () => {
     if (!email || !password) return;
-    setFirebaseLoading(true);
+    setLoading(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      const idToken = await cred.user.getIdToken();
-      const data = await firebaseSyncToBackend(idToken);
+      const data = await backendLogin(email, password);
       if (data) {
         setAuthContext(data.user, data.token);
-        toast({ title: "Account created", description: "Welcome to AYZEN." });
-        setLocation("/dashboard");
+        toast({ title: "Access granted", description: "Welcome back, operator." });
+        if (data.user.role === "admin") setLocation("/admin/dashboard");
+        else setLocation("/dashboard");
+        try {
+          const cred = await signInWithEmailAndPassword(auth, email, password);
+          if (cred.user) {
+            const idToken = await cred.user.getIdToken();
+            await firebaseSyncToBackend(idToken);
+          }
+        } catch { }
       } else {
-        toast({ variant: "destructive", title: "Signup failed", description: "Could not sync account." });
+        toast({ variant: "destructive", title: "Access denied", description: "Invalid credentials. Check email and password." });
       }
-    } catch (err: any) {
-      if (err?.code === "auth/email-already-in-use") {
-        toast({ variant: "destructive", title: "Email already registered", description: "Try signing in instead." });
-        setTab("signin");
-      } else {
-        toast({ variant: "destructive", title: "Signup failed", description: err?.message ?? "Try again." });
-      }
+    } catch {
+      toast({ variant: "destructive", title: "Connection error", description: "Could not reach server. Try again." });
     }
-    setFirebaseLoading(false);
+    setLoading(false);
   };
 
-  const handleDemoAdmin = () => doBackendLogin("support@ayzen.tech", "1234578@Ba1");
-  const handleDemoUser = () => doBackendLogin("user@ayzen.io", "demo123");
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !email || !password) {
+      toast({ variant: "destructive", title: "Fill all fields", description: "Username, email and password are required." });
+      return;
+    }
+    if (password.length < 6) {
+      toast({ variant: "destructive", title: "Password too short", description: "Minimum 6 characters required." });
+      return;
+    }
+    setLoading(true);
+    try {
+      const data = await backendRegister(username, email, password);
+      if (!data) {
+        toast({ variant: "destructive", title: "Registration failed", description: "Server error. Try again." });
+        setLoading(false);
+        return;
+      }
+      if (data.error) {
+        toast({ variant: "destructive", title: "Registration failed", description: data.error });
+        setLoading(false);
+        return;
+      }
+      setAuthContext(data.user, data.token);
+      toast({ title: "Account created!", description: "Welcome to AYZEN, Operator." });
+      setLocation("/dashboard");
+    } catch {
+      toast({ variant: "destructive", title: "Registration failed", description: "Try again." });
+    }
+    setLoading(false);
+  };
 
-  const isLoading = loginMutation.isPending || firebaseLoading || googleLoading;
+  const handleDemoAdmin = async () => {
+    setLoading(true);
+    const data = await backendLogin("support@ayzen.tech", "1234578@Ba1");
+    if (data) {
+      setAuthContext(data.user, data.token);
+      setLocation("/admin/dashboard");
+    }
+    setLoading(false);
+  };
+
+  const handleDemoUser = async () => {
+    setLoading(true);
+    const data = await backendLogin("user@ayzen.io", "demo123");
+    if (data) {
+      setAuthContext(data.user, data.token);
+      setLocation("/dashboard");
+    }
+    setLoading(false);
+  };
+
+  const isLoading = loading || googleLoading;
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
@@ -190,30 +232,34 @@ export default function Login() {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={tab === "signin" ? handleSignIn : handleSignUp} className="space-y-4">
             {tab === "signup" && (
               <div className="space-y-2">
                 <Label htmlFor="username" className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Username</Label>
-                <Input
-                  id="username"
-                  type="text"
-                  placeholder="operator_handle"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="bg-input border-border font-mono h-11 focus-visible:ring-primary/50 focus-visible:border-primary"
-                />
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="username"
+                    type="text"
+                    placeholder="operator_handle"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    className="bg-input border-border font-mono h-11 pl-9 focus-visible:ring-primary/50 focus-visible:border-primary"
+                    required
+                  />
+                </div>
               </div>
             )}
             <div className="space-y-2">
               <Label htmlFor="email" className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                {tab === "signin" ? "Identify" : "Email"}
+                {tab === "signin" ? "Email / Identifier" : "Email"}
               </Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="email"
                   type="email"
-                  placeholder="system@operator.com"
+                  placeholder="operator@command.io"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="bg-input border-border font-mono h-11 pl-9 focus-visible:ring-primary/50 focus-visible:border-primary"
@@ -223,14 +269,24 @@ export default function Login() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password" className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Passphrase</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="bg-input border-border font-mono h-11 focus-visible:ring-primary/50 focus-visible:border-primary"
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPass ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="bg-input border-border font-mono h-11 pr-10 focus-visible:ring-primary/50 focus-visible:border-primary"
+                  required
+                  minLength={6}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPass(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             <Button
@@ -238,7 +294,7 @@ export default function Login() {
               className="w-full h-11 font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90"
               disabled={isLoading}
             >
-              {(loginMutation.isPending || firebaseLoading) ? (
+              {loading ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <span className="flex items-center gap-2">
@@ -252,10 +308,10 @@ export default function Login() {
             <div className="text-[10px] font-mono text-center text-muted-foreground mb-3 uppercase tracking-widest">Demo Override</div>
             <div className="grid grid-cols-2 gap-3">
               <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-primary/40 hover:text-primary" onClick={handleDemoAdmin} disabled={isLoading}>
-                {loginMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Admin Init"}
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Admin Init"}
               </Button>
               <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-violet-500/40 hover:text-violet-400" onClick={handleDemoUser} disabled={isLoading}>
-                {loginMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "User Init"}
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "User Init"}
               </Button>
             </div>
           </div>
