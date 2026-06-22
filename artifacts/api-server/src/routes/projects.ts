@@ -160,6 +160,50 @@ router.get("/projects/:id/stats", async (req, res): Promise<void> => {
   res.json({ totalTasks: Number(taskCount), completedTasks: 0, activeUsers: Number(memberCount), totalRoiDistributed: Number(roiResult?.roi ?? 0) });
 });
 
+// ─── GET /api/projects/:id/entity-tasks — per-entity task completion ──────────
+router.get("/projects/:id/entity-tasks", async (req, res): Promise<void> => {
+  const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const userId = getUserId(req);
+
+  try {
+    const tasks = await db.execute(sql.raw(
+      `SELECT id, name, description, reward_amount, verification_type, task_type, cost, profit FROM tasks WHERE project_id = ${projectId} ORDER BY id ASC`
+    ));
+    const enrollments = await db.execute(sql.raw(
+      `SELECT pe.*, ve.entity_serial, ve.project_name as entity_name, ve.category, ve.twitter_username, ve.discord_username, ve.email
+       FROM project_enrollments pe
+       LEFT JOIN vault_entries ve ON ve.id = pe.vault_entry_id
+       WHERE pe.project_id = ${projectId} AND pe.user_id = ${userId}`
+    ));
+
+    const result = await Promise.all((enrollments.rows as any[]).map(async (enr) => {
+      const taskStatuses = await Promise.all((tasks.rows as any[]).map(async (task) => {
+        const sub = await db.execute(sql.raw(
+          `SELECT status FROM task_submissions WHERE task_id = ${task.id} AND user_id = ${userId} ORDER BY submitted_at DESC LIMIT 1`
+        ));
+        return {
+          taskId: task.id, taskName: task.name, taskType: task.task_type,
+          rewardAmount: task.reward_amount, cost: task.cost ?? 0, profit: task.profit ?? 0,
+          status: sub.rows[0] ? (sub.rows[0] as any).status : null,
+        };
+      }));
+      const done = taskStatuses.filter(t => t.status === "approved" || t.status === "completed").length;
+      return {
+        enrollmentId: enr.id, vaultEntryId: enr.vault_entry_id,
+        entitySerial: enr.entity_serial, entityName: enr.entity_name,
+        category: enr.category, email: enr.email,
+        twitterUsername: enr.twitter_username, discordUsername: enr.discord_username,
+        status: enr.status,
+        tasks: taskStatuses, completedTasks: done, totalTasks: tasks.rows.length,
+      };
+    }));
+
+    res.json({ tasks: tasks.rows, entities: result });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
 router.get("/projects/:id/members", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const members = await db.select({ up: userProjectsTable, u: usersTable })
