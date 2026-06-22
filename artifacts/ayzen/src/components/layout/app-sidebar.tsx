@@ -51,6 +51,7 @@ const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
       { href: "/admin/support", label: "Support", icon: HelpCircle, pluginSlug: "support" },
       { href: "/admin/credits", label: "Credit Approvals", icon: Coins },
+      { href: "/admin/subscriptions", label: "Subscriptions", icon: Star },
       { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
       { href: "/admin/developer", label: "Developer", icon: Code2 },

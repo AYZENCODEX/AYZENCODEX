@@ -44,6 +44,7 @@ import UserWallets from "@/pages/user/wallets";
 import SubscriptionPage from "@/pages/user/subscription";
 import CreditsPage from "@/pages/user/credits";
 import AdminCreditsPage from "@/pages/admin/credits";
+import AdminSubscriptions from "@/pages/admin/subscriptions";
 
 import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
@@ -115,6 +116,7 @@ function Router() {
       <Route path="/subscription">{() => <ProtectedRoute component={SubscriptionPage} />}</Route>
       <Route path="/credits">{() => <ProtectedRoute component={CreditsPage} />}</Route>
       <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
+      <Route path="/admin/subscriptions">{() => <ProtectedRoute component={AdminSubscriptions} adminOnly />}</Route>
 
       <Route component={NotFound} />
     </Switch>

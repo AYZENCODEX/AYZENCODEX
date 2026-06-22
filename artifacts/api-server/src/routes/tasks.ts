@@ -23,6 +23,7 @@ function formatTask(t: any, projectName?: string | null, userStatus?: string | n
     userStatus: userStatus ?? null,
     cost: t.cost ?? 0,
     profit: t.profit ?? 0,
+    category: t.category ?? "Social",
   };
 }
 
@@ -49,7 +50,20 @@ router.get("/tasks", async (req, res): Promise<void> => {
           .where(and(eq(taskSubmissionsTable.taskId, t.id), eq(taskSubmissionsTable.userId, parseInt(userId, 10))));
         userStatus = sub?.status ?? null;
       }
-      return formatTask({ ...t, projectId: t.project_id, completionCount: t.completion_count, rewardAmount: t.reward_amount, verificationType: t.verification_type, taskType: t.task_type, createdAt: t.created_at }, t.project_name, userStatus);
+      // For daily tasks: if last submission was before today, treat as not yet submitted
+      let effectiveStatus = userStatus;
+      if (userStatus && (t.task_type === "Daily" || t.task_type === "daily")) {
+        const [lastSub] = await db.execute(sql.raw(
+          `SELECT submitted_at FROM task_submissions WHERE task_id = ${t.id} AND user_id = ${parseInt(userId!, 10)} ORDER BY submitted_at DESC LIMIT 1`
+        ));
+        const submittedAt = (lastSub.rows[0] as any)?.submitted_at;
+        if (submittedAt) {
+          const today = new Date(); today.setHours(0,0,0,0);
+          const subDate = new Date(submittedAt); subDate.setHours(0,0,0,0);
+          if (subDate < today) effectiveStatus = null; // reset daily task
+        }
+      }
+      return formatTask({ ...t, projectId: t.project_id, completionCount: t.completion_count, rewardAmount: t.reward_amount, verificationType: t.verification_type, taskType: t.task_type, createdAt: t.created_at, category: t.category }, t.project_name, effectiveStatus);
     }));
 
     res.json(enriched);
@@ -59,22 +73,23 @@ router.get("/tasks", async (req, res): Promise<void> => {
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
-  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit } = req.body;
+  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category } = req.body;
   if (!projectId || !name) { res.status(400).json({ error: "projectId and name are required" }); return; }
   try {
     const result = await db.execute(sql.raw(
-      `INSERT INTO tasks (project_id, name, description, reward_amount, verification_type, task_type, cost, profit)
+      `INSERT INTO tasks (project_id, name, description, reward_amount, verification_type, task_type, cost, profit, category)
        VALUES (${Number(projectId)}, '${name.replace(/'/g, "''")}',
          ${description ? `'${description.replace(/'/g, "''")}'` : "NULL"},
          ${rewardAmount != null ? Number(rewardAmount) : "NULL"},
          '${(verificationType ?? "manual").replace(/'/g, "''")}',
          '${(taskType ?? "One-time").replace(/'/g, "''")}',
-         ${Number(cost ?? 0)}, ${Number(profit ?? 0)})
+         ${Number(cost ?? 0)}, ${Number(profit ?? 0)},
+         '${(category ?? "Social").replace(/'/g, "''")}')
        RETURNING *`
     ));
     const task = result.rows[0] as any;
     broadcastEvent("tasks_updated", { action: "created", taskId: task.id });
-    res.status(201).json(formatTask({ ...task, projectId: task.project_id, completionCount: task.completion_count, rewardAmount: task.reward_amount, verificationType: task.verification_type, taskType: task.task_type, createdAt: task.created_at }));
+    res.status(201).json(formatTask({ ...task, projectId: task.project_id, completionCount: task.completion_count, rewardAmount: task.reward_amount, verificationType: task.verification_type, taskType: task.task_type, createdAt: task.created_at, category: task.category }));
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });
   }
@@ -136,6 +151,15 @@ router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
     }
 
     broadcastEvent("tasks_updated", { action: "submitted", taskId, userId, status });
+
+    // Send confirmation email
+    const [user] = await db.select({ email: usersTable.email, username: usersTable.username })
+      .from(usersTable).where(eq(usersTable.id, userId));
+    if (user && status === "pending") {
+      const { sendTaskSubmittedEmail } = await import("../lib/email");
+      sendTaskSubmittedEmail(user.email, user.username, task.name).catch(() => {});
+    }
+
     res.json({
       id: sub.id, taskId: sub.task_id, taskName: task.name, userId: sub.user_id,
       status: sub.status, proofUrl: sub.proof_url, notes: sub.notes,
@@ -172,6 +196,9 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
         .from(usersTable).where(eq(usersTable.id, sub.userId));
       if (user && approved) {
         sendTaskApprovedEmail(user.email, user.username, taskName, rewardAmount).catch(() => {});
+      } else if (user && !approved) {
+        const { sendTaskRejectedEmail } = await import("../lib/email");
+        sendTaskRejectedEmail(user.email, user.username, taskName ?? "", rejectionReason ?? undefined).catch(() => {});
       }
     }
   }

@@ -1,8 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { subscriptionsTable } from "@workspace/db";
+import { subscriptionsTable, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
+import { broadcastToUser } from "./events";
 
 const router = Router();
 
@@ -182,38 +183,39 @@ router.post("/subscription/manual-upgrade", async (req, res): Promise<void> => {
 
   const planInfo = PLANS[plan as keyof typeof PLANS];
   const expiresAt = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+  const safeRef = referenceId.trim().replace(/'/g, "''");
+  const safeMethod = method.replace(/'/g, "''");
+  const safeSender = (senderNumber ?? "").replace(/'/g, "''");
 
   try {
-    const existing = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, userId));
-    if (existing.length > 0) {
-      await db.update(subscriptionsTable).set({
-        plan, status: "pending",
-        coingateOrderId: `manual_${referenceId.trim()}`,
-        coingatePaymentUrl: null,
-        expiresAt, updatedAt: new Date(),
-      }).where(eq(subscriptionsTable.userId, userId));
-    } else {
-      await db.insert(subscriptionsTable).values({
-        userId, plan, status: "pending",
-        coingateOrderId: `manual_${referenceId.trim()}`,
-        expiresAt,
-      });
-    }
+    await db.execute(sql.raw(
+      `INSERT INTO subscriptions (user_id, plan, status, coingate_order_id, expires_at, payment_method, sender_number)
+       VALUES (${userId}, '${plan}', 'pending', 'manual_${safeRef}', '${expiresAt.toISOString()}', '${safeMethod}', '${safeSender}')
+       ON CONFLICT (user_id) DO UPDATE SET
+         plan = EXCLUDED.plan, status = 'pending',
+         coingate_order_id = EXCLUDED.coingate_order_id,
+         coingate_payment_url = NULL,
+         expires_at = EXCLUDED.expires_at,
+         payment_method = EXCLUDED.payment_method,
+         sender_number = EXCLUDED.sender_number,
+         rejection_reason = NULL,
+         updated_at = NOW()`
+    ));
   } catch (err: any) {
     res.status(500).json({ error: "Database error. Please try again.", detail: err?.message });
     return;
   }
 
+  // Notify user via SSE
+  broadcastToUser(userId, "subscription_updated", { plan, status: "pending" });
+
   res.status(201).json({
-    success: true,
-    plan,
-    planName: planInfo.name,
-    price: planInfo.price,
-    message: `Payment submitted for ${planInfo.name} plan. Admin will activate your subscription after verification (usually within 1-2 hours).`,
+    success: true, plan, planName: planInfo.name, price: planInfo.price,
+    message: `Payment submitted for ${planInfo.name} plan. Admin will activate within 1-2 hours.`,
   });
 });
 
-// ─── ADMIN: GET /api/admin/subscriptions — pending manual payments ────────────
+// ─── ADMIN: GET /api/admin/subscriptions ─────────────────────────────────────
 router.get("/admin/subscriptions", async (req, res): Promise<void> => {
   const authHeader = req.headers.authorization;
   if (!authHeader) { res.status(401).json({ error: "Unauthorized" }); return; }
@@ -222,9 +224,14 @@ router.get("/admin/subscriptions", async (req, res): Promise<void> => {
     if (payload.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
   } catch { res.status(401).json({ error: "Invalid token" }); return; }
 
-  const pending = await db.select().from(subscriptionsTable)
-    .where(eq(subscriptionsTable.status, "pending"));
-  res.json(pending);
+  const rows = await db.execute(sql.raw(
+    `SELECT s.*, u.username, u.email
+     FROM subscriptions s
+     LEFT JOIN users u ON u.id = s.user_id
+     WHERE s.status IN ('pending', 'active', 'rejected')
+     ORDER BY s.updated_at DESC`
+  ));
+  res.json(rows.rows);
 });
 
 // ─── ADMIN: POST /api/admin/subscriptions/:userId/approve ────────────────────
@@ -237,8 +244,49 @@ router.post("/admin/subscriptions/:userId/approve", async (req, res): Promise<vo
   } catch { res.status(401).json({ error: "Invalid token" }); return; }
 
   const targetUserId = parseInt(Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId, 10);
+  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, targetUserId));
   await db.update(subscriptionsTable).set({ status: "active", updatedAt: new Date() })
     .where(eq(subscriptionsTable.userId, targetUserId));
+
+  // Email + real-time notification
+  const [user] = await db.select({ email: usersTable.email, username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, targetUserId));
+  if (user && sub) {
+    const planInfo = PLANS[sub.plan as keyof typeof PLANS] ?? { name: sub.plan };
+    const { sendSubscriptionApprovedEmail } = await import("../lib/email");
+    sendSubscriptionApprovedEmail(user.email, user.username, planInfo.name).catch(() => {});
+  }
+  broadcastToUser(targetUserId, "subscription_updated", { status: "active", plan: sub?.plan });
+  res.json({ success: true });
+});
+
+// ─── ADMIN: POST /api/admin/subscriptions/:userId/reject ─────────────────────
+router.post("/admin/subscriptions/:userId/reject", async (req, res): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const payload = JSON.parse(Buffer.from(authHeader.replace("Bearer ", ""), "base64").toString());
+    if (payload.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
+  } catch { res.status(401).json({ error: "Invalid token" }); return; }
+
+  const targetUserId = parseInt(Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId, 10);
+  const { reason } = req.body as { reason?: string };
+  const [sub] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, targetUserId));
+
+  await db.execute(sql.raw(
+    `UPDATE subscriptions SET status = 'rejected', rejection_reason = ${reason ? `'${reason.replace(/'/g, "''")}'` : "NULL"}, updated_at = NOW()
+     WHERE user_id = ${targetUserId}`
+  ));
+
+  // Email + real-time notification
+  const [user] = await db.select({ email: usersTable.email, username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.id, targetUserId));
+  if (user && sub) {
+    const planInfo = PLANS[sub.plan as keyof typeof PLANS] ?? { name: sub.plan };
+    const { sendSubscriptionRejectedEmail } = await import("../lib/email");
+    sendSubscriptionRejectedEmail(user.email, user.username, planInfo.name, reason).catch(() => {});
+  }
+  broadcastToUser(targetUserId, "subscription_updated", { status: "rejected", reason });
   res.json({ success: true });
 });
 

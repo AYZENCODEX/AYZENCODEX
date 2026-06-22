@@ -131,6 +131,52 @@ export async function sendTaskApprovedEmail(to: string, username: string, taskNa
   await sendEmail({ to, subject: `AYZEN — Task Approved: ${taskName}`, html });
 }
 
+export async function sendSubscriptionApprovedEmail(to: string, username: string, planName: string): Promise<void> {
+  const html = baseTemplate(`
+    <h2>Subscription Activated ✓</h2>
+    <p>Hi <strong>${username}</strong>, your subscription has been approved by our team!</p>
+    <p>🚀 Plan: <strong style="color:#00d4cc;">${planName}</strong> — now active on your account.</p>
+    <p>All premium features are unlocked. Start maximizing your airdrop campaigns.</p>
+    <div class="divider"></div>
+    <a href="https://ayzen.replit.app/subscription" class="btn">View My Plan</a>
+  `);
+  await sendEmail({ to, subject: `AYZEN — ${planName} Plan Activated ✓`, html });
+}
+
+export async function sendSubscriptionRejectedEmail(to: string, username: string, planName: string, reason?: string): Promise<void> {
+  const reasonStr = reason ? `<p>📋 Reason: <em>${reason}</em></p>` : "";
+  const html = baseTemplate(`
+    <h2>Payment Not Verified</h2>
+    <p>Hi <strong>${username}</strong>, we could not verify your payment for the <strong>${planName}</strong> plan.</p>
+    ${reasonStr}
+    <p>Please double-check your transaction ID and contact support if you believe this is an error.</p>
+    <div class="divider"></div>
+    <a href="https://ayzen.replit.app/subscription" class="btn">Try Again</a>
+  `);
+  await sendEmail({ to, subject: `AYZEN — Payment Verification Failed`, html });
+}
+
+export async function sendTaskSubmittedEmail(to: string, username: string, taskName: string): Promise<void> {
+  const html = baseTemplate(`
+    <h2>Task Submitted ✓</h2>
+    <p>Hi <strong>${username}</strong>, your submission is under review.</p>
+    <p>📋 Task: <strong>${taskName}</strong></p>
+    <p>Our team will verify your submission shortly. You'll receive another notification when it's approved.</p>
+  `);
+  await sendEmail({ to, subject: `AYZEN — Task Submitted: ${taskName}`, html });
+}
+
+export async function sendTaskRejectedEmail(to: string, username: string, taskName: string, reason?: string): Promise<void> {
+  const reasonStr = reason ? `<p>📋 Reason: <em>${reason}</em></p>` : "";
+  const html = baseTemplate(`
+    <h2>Task Submission Rejected</h2>
+    <p>Hi <strong>${username}</strong>, your submission for <strong>${taskName}</strong> was not approved.</p>
+    ${reasonStr}
+    <p>Please review the task requirements and resubmit with proper proof.</p>
+  `);
+  await sendEmail({ to, subject: `AYZEN — Task Rejected: ${taskName}`, html });
+}
+
 export async function sendTestEmail(to: string): Promise<SendResult> {
   const html = baseTemplate(`
     <h2>Test Transmission</h2>
