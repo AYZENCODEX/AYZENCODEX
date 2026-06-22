@@ -58,7 +58,7 @@ export default function CreditsPage() {
   const { toast } = useToast();
   const [data, setData] = useState<CreditsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"buy" | "swap" | "history">("buy");
+  const [activeTab, setActiveTab] = useState<"buy" | "swap" | "sell" | "history">("buy");
 
   const [selectedPkg, setSelectedPkg] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<string>("bkash");
@@ -70,9 +70,35 @@ export default function CreditsPage() {
   const [swapAmount, setSwapAmount] = useState("");
   const [swapping, setSwapping] = useState(false);
 
-  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [sellAmount, setSellAmount] = useState("");
+  const [sellMethod, setSellMethod] = useState("bkash");
+  const [sellAccount, setSellAccount] = useState("");
+  const [selling, setSelling] = useState(false);
 
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  const handleSellAzn = async () => {
+    const amount = parseFloat(sellAmount);
+    if (!amount || amount < 1) { toast({ variant: "destructive", title: "Minimum sell is 1 AZN" }); return; }
+    if (!sellAccount.trim()) { toast({ variant: "destructive", title: "Enter your account number / wallet address" }); return; }
+    setSelling(true);
+    try {
+      const r = await fetch(`${BASE}/api/credits/sell-azn`, {
+        method: "POST", headers,
+        body: JSON.stringify({ aznAmount: amount, method: sellMethod, accountNumber: sellAccount.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast({ title: "✅ Sell Request Submitted!", description: d.message });
+        setSellAmount(""); setSellAccount("");
+        await fetchData();
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Sell failed" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setSelling(false);
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -171,7 +197,7 @@ export default function CreditsPage() {
 
       {/* Tabs */}
       <div className="flex border border-border rounded-lg overflow-hidden bg-card">
-        {(["buy", "swap", "history"] as const).map(t => (
+        {(["buy", "swap", "sell", "history"] as const).map(t => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -180,7 +206,7 @@ export default function CreditsPage() {
               activeTab === t ? "bg-primary/15 text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {t === "buy" ? "💳 Buy Credits" : t === "swap" ? "⚡ Swap → AZN" : "📋 History"}
+            {t === "buy" ? "💳 Buy" : t === "swap" ? "⚡ Swap" : t === "sell" ? "💰 Sell AZN" : "📋 History"}
           </button>
         ))}
       </div>
@@ -452,6 +478,110 @@ export default function CreditsPage() {
           <div className="flex items-start gap-2 text-[10px] font-mono text-muted-foreground/50">
             <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span>AZN tokens are stored server-side. On-chain AZN (Base L2) can be claimed after KYC is complete.</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── SELL AZN TAB ─────────────────────────────────────────────────────── */}
+      {activeTab === "sell" && (
+        <div className="space-y-5">
+          <div className="bg-amber-400/5 border border-amber-400/20 rounded-xl overflow-hidden">
+            <div className="bg-amber-400/10 border-b border-amber-400/15 px-5 py-4">
+              <div className="font-mono font-bold text-sm text-amber-400 flex items-center gap-2">
+                <Coins className="w-4 h-4" /> Sell AZN → Cash
+              </div>
+              <div className="font-mono text-[10px] text-muted-foreground mt-1">
+                Convert your AZN back to BDT/USDT. Admin sends payment within 24 hours.
+              </div>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              <div className="grid grid-cols-3 gap-3 bg-background rounded-lg border border-card-border p-3">
+                <div className="text-center">
+                  <div className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest mb-1">AZN Balance</div>
+                  <div className="font-mono font-bold text-amber-400">{(data?.credits.aznBalance ?? 0).toFixed(2)}</div>
+                </div>
+                <div className="text-center border-x border-border">
+                  <div className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest mb-1">AZN Price</div>
+                  <div className="font-mono font-bold text-primary">$0.01</div>
+                </div>
+                <div className="text-center">
+                  <div className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest mb-1">Rate</div>
+                  <div className="font-mono font-bold text-emerald-400">৳1.30</div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">AZN Amount to Sell</label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={sellAmount}
+                    onChange={e => setSellAmount(e.target.value)}
+                    placeholder="Min 1 AZN"
+                    min={1}
+                    step={1}
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                  />
+                  <div className="flex gap-1">
+                    {[10, 50, 100, 500].map(amt => (
+                      <button key={amt} onClick={() => setSellAmount(String(amt))}
+                        className="px-2 h-10 rounded-md border border-border text-[9px] font-mono text-muted-foreground hover:border-amber-400/30 hover:text-amber-400 transition-all">
+                        {amt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {sellAmount && parseFloat(sellAmount) > 0 && (
+                  <div className="font-mono text-[10px] text-amber-400 mt-1">
+                    ≈ ৳{(parseFloat(sellAmount) * 1.30).toFixed(2)} BDT &nbsp;|&nbsp; ${(parseFloat(sellAmount) * 0.01).toFixed(4)} USD
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Withdrawal Method</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["bkash", "nagad", "binance_usdt"] as const).map(m => (
+                    <button key={m} onClick={() => setSellMethod(m)}
+                      className={cn("flex flex-col items-center gap-1 rounded-lg border px-2 py-3 transition-all",
+                        sellMethod === m ? "border-amber-400/50 bg-amber-400/10 text-amber-400" : "border-card-border bg-card text-muted-foreground hover:border-amber-400/20")}>
+                      <span className="text-lg">{METHOD_ICONS[m]}</span>
+                      <span className="font-mono text-[9px] uppercase tracking-wider">{METHOD_LABELS[m]}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {sellMethod === "binance_usdt" ? "Binance Wallet Address" : `Your ${METHOD_LABELS[sellMethod]} Number`}
+                </label>
+                <Input
+                  value={sellAccount}
+                  onChange={e => setSellAccount(e.target.value)}
+                  placeholder={sellMethod === "binance_usdt" ? "0x... or Binance UID" : "+880 1X XXXX XXXX"}
+                  className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                />
+              </div>
+
+              <div className="bg-background border border-amber-400/20 rounded-md px-4 py-3 font-mono text-[10px] text-muted-foreground">
+                <span className="text-amber-400 font-bold">ℹ Note:</span> AZN is deducted immediately. Admin sends payment within 24 hours. Minimum: 1 AZN.
+              </div>
+
+              <Button
+                onClick={handleSellAzn}
+                disabled={selling || !sellAmount || parseFloat(sellAmount) < 1 || !sellAccount.trim()}
+                className="w-full font-mono text-xs gap-2 h-11 bg-amber-500 hover:bg-amber-500/90 text-black"
+              >
+                {selling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
+                {selling ? "Processing..." : `Request Withdrawal — ${sellAmount || "0"} AZN`}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 text-[10px] font-mono text-muted-foreground/50">
+            <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>All sell requests are reviewed by admin. On-chain redemption will be available after KYC launch.</span>
           </div>
         </div>
       )}

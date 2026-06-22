@@ -232,4 +232,57 @@ router.post("/admin/credits/:id/reject", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+// ─── POST /api/credits/sell-azn — request to sell AZN tokens ─────────────────
+router.post("/credits/sell-azn", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { aznAmount, method, accountNumber } = req.body as { aznAmount?: number; method?: string; accountNumber?: string };
+  if (!aznAmount || aznAmount < 1) {
+    res.status(400).json({ error: "Minimum sell is 1 AZN" }); return;
+  }
+  if (!method || !["bkash", "nagad", "binance_usdt"].includes(method)) {
+    res.status(400).json({ error: "Invalid withdrawal method" }); return;
+  }
+  if (!accountNumber?.trim()) {
+    res.status(400).json({ error: "Account number / wallet address required" }); return;
+  }
+
+  const creditRow = await getOrCreateCredits(authUser.id);
+  if (creditRow.aznBalance < aznAmount) {
+    res.status(400).json({ error: `Insufficient AZN. You have ${creditRow.aznBalance.toFixed(4)} AZN.` }); return;
+  }
+
+  const usdValue = +(aznAmount * AZN_PRICE_USD).toFixed(4);
+  const bdtValue = +(usdValue * USD_TO_BDT).toFixed(2);
+
+  // Deduct AZN immediately and create pending withdrawal
+  await db.update(creditsTable).set({
+    aznBalance: creditRow.aznBalance - aznAmount,
+    updatedAt: new Date(),
+  }).where(eq(creditsTable.userId, authUser.id));
+
+  const [tx] = await db.insert(creditTransactionsTable).values({
+    userId: authUser.id,
+    type: "azn_sell",
+    method,
+    credits: 0,
+    aznAmount: -aznAmount,
+    amountUSDT: method === "binance_usdt" ? usdValue : null,
+    amountBDT: method !== "binance_usdt" ? bdtValue : null,
+    status: "pending",
+    notes: `Sell ${aznAmount} AZN → ${method === "binance_usdt" ? `$${usdValue} USDT` : `৳${bdtValue}`} to: ${accountNumber.trim()}`,
+    referenceId: accountNumber.trim(),
+  }).returning();
+
+  broadcastEvent("credit_sell_requested", { userId: authUser.id, txId: tx.id, aznAmount });
+  res.status(201).json({
+    success: true,
+    transaction: tx,
+    usdValue,
+    bdtValue,
+    message: `Sell request submitted. Admin will send ${method !== "binance_usdt" ? `৳${bdtValue}` : `$${usdValue} USDT`} to your account within 24 hours.`,
+  });
+});
+
 export default router;

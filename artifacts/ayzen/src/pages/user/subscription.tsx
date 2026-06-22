@@ -3,10 +3,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   Crown, Zap, Shield, Check, Loader2, ExternalLink,
   RefreshCw, Star, Sparkles, Lock, Unlock, Coins, ArrowRightLeft,
+  CreditCard, Copy, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -85,6 +87,22 @@ export default function SubscriptionPage() {
   const [checking, setChecking] = useState(false);
   const [pendingOrderId, setPendingOrderId] = useState<string | null>(null);
 
+  const [manualPlan, setManualPlan] = useState<string | null>(null);
+  const [manualMethod, setManualMethod] = useState("bkash");
+  const [manualRefId, setManualRefId] = useState("");
+  const [manualSenderNum, setManualSenderNum] = useState("");
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [showManualForm, setShowManualForm] = useState(false);
+
+  const PAYMENT_INFO: Record<string, { bkash: string; nagad: string; usdt: string; usdtNetwork: string }> = {
+    default: { bkash: "01XXXXXXXXXX", nagad: "01XXXXXXXXXX", usdt: "0x...", usdtNetwork: "TRC20" },
+  };
+  const METHODS = [
+    { id: "bkash", label: "bKash", icon: "💳" },
+    { id: "nagad", label: "Nagad", icon: "📱" },
+    { id: "binance_usdt", label: "USDT", icon: "₮" },
+  ];
+
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
   const fetchData = async () => {
@@ -140,6 +158,28 @@ export default function SubscriptionPage() {
       toast({ variant: "destructive", title: "Upgrade failed" });
     }
     setUpgrading(null);
+  };
+
+  const handleManualUpgrade = async () => {
+    if (!manualPlan || !manualRefId.trim()) {
+      toast({ variant: "destructive", title: "Fill in all required fields" }); return;
+    }
+    setManualSubmitting(true);
+    try {
+      const res = await fetch(`${BASE}/api/subscription/manual-upgrade`, {
+        method: "POST", headers,
+        body: JSON.stringify({ plan: manualPlan, method: manualMethod, referenceId: manualRefId.trim(), senderNumber: manualSenderNum.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: "✅ Payment Submitted!", description: data.message });
+        setManualRefId(""); setManualSenderNum(""); setShowManualForm(false);
+        await fetchData();
+      } else {
+        toast({ variant: "destructive", title: data.error ?? "Submission failed" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setManualSubmitting(false);
   };
 
   const handleCheckPayment = async () => {
@@ -325,6 +365,101 @@ export default function SubscriptionPage() {
           })}
         </div>
       )}
+
+      {/* Manual Payment Section */}
+      <div className="border border-primary/20 rounded-xl overflow-hidden bg-primary/3">
+        <button
+          onClick={() => setShowManualForm(p => !p)}
+          className="w-full px-5 py-4 flex items-center justify-between hover:bg-primary/5 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-primary" />
+            <span className="font-mono font-bold text-sm text-primary">Pay Manually (BKash / Nagad / USDT)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] text-muted-foreground">Alternative to crypto gateway</span>
+            {showManualForm ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </div>
+        </button>
+
+        {showManualForm && (
+          <div className="border-t border-primary/10 px-5 py-5 space-y-4">
+            <div className="space-y-2">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Select Plan</div>
+              <div className="grid grid-cols-2 gap-2">
+                {plans.filter(p => p.price > 0).map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setManualPlan(p.id)}
+                    className={cn("text-left rounded-lg border px-4 py-3 transition-all",
+                      manualPlan === p.id ? "border-primary/50 bg-primary/10" : "border-card-border bg-card hover:border-primary/20")}
+                  >
+                    <div className={cn("font-mono font-bold text-xs mb-1", PLAN_COLORS[p.id])}>{p.name}</div>
+                    <div className="font-mono text-lg font-bold text-foreground">${p.price}<span className="text-xs text-muted-foreground ml-1">/mo</span></div>
+                    {manualPlan === p.id && <Check className="w-3.5 h-3.5 text-primary mt-1" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {manualPlan && (
+              <>
+                <div className="space-y-2">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Payment Method</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {METHODS.map(m => (
+                      <button key={m.id} onClick={() => setManualMethod(m.id)}
+                        className={cn("flex flex-col items-center gap-1 rounded-lg border px-2 py-3 transition-all",
+                          manualMethod === m.id ? "border-primary/50 bg-primary/10 text-primary" : "border-card-border bg-card text-muted-foreground hover:border-primary/20")}>
+                        <span className="text-lg">{m.icon}</span>
+                        <span className="font-mono text-[9px] uppercase tracking-wider">{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-card border border-card-border rounded-lg px-4 py-3 font-mono text-xs space-y-1">
+                  <div className="text-muted-foreground text-[10px] uppercase tracking-widest mb-2">Send Payment To</div>
+                  {manualMethod !== "binance_usdt" ? (
+                    <div className="text-foreground font-bold">
+                      {manualMethod === "bkash" ? "bKash:" : "Nagad:"} Contact admin for payment number → <Link href="/support"><span className="text-primary underline">Support</span></Link>
+                    </div>
+                  ) : (
+                    <div className="text-foreground">Contact admin for USDT wallet → <Link href="/support"><span className="text-primary underline">Support</span></Link></div>
+                  )}
+                  <div className="text-muted-foreground">
+                    Amount: <span className="text-primary font-bold">${plans.find(p => p.id === manualPlan)?.price} USD</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Transaction ID / TX Hash <span className="text-red-400">*</span>
+                  </label>
+                  <Input value={manualRefId} onChange={e => setManualRefId(e.target.value)}
+                    placeholder={manualMethod === "binance_usdt" ? "0x... or TXID" : "TrxID from your app"}
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50" />
+                </div>
+
+                {manualMethod !== "binance_usdt" && (
+                  <div className="space-y-1.5">
+                    <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Your {METHODS.find(m => m.id === manualMethod)?.label} Number</label>
+                    <Input value={manualSenderNum} onChange={e => setManualSenderNum(e.target.value)}
+                      placeholder="+880 1X XXXX XXXX"
+                      className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50" />
+                  </div>
+                )}
+
+                <Button onClick={handleManualUpgrade} disabled={manualSubmitting || !manualRefId.trim()}
+                  className="w-full font-mono text-xs gap-2 h-11">
+                  {manualSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  {manualSubmitting ? "Submitting..." : `Submit Payment for ${plans.find(p => p.id === manualPlan)?.name} Plan`}
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* AZN Token Payment */}
       <div className="border border-amber-400/20 rounded-xl overflow-hidden bg-amber-400/5">

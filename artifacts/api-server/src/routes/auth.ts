@@ -269,6 +269,67 @@ router.post("/auth/refresh", async (req, res): Promise<void> => {
   res.json({ token, refreshToken: token, user: sanitizeUser(user) });
 });
 
+// ─── POST /auth/forgot-password — send reset OTP ─────────────────────────────
+router.post("/auth/forgot-password", async (req, res): Promise<void> => {
+  const { email } = req.body;
+  if (!email) { res.status(400).json({ error: "email is required" }); return; }
+
+  const [user] = await db.select({ id: usersTable.id, username: usersTable.username }).from(usersTable).where(eq(usersTable.email, email));
+  if (!user) {
+    res.json({ message: "If this email exists, a reset code has been sent." });
+    return;
+  }
+
+  const code = generateOtp();
+  storeOtp(`reset:${email}`, code);
+
+  const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><style>
+  body{margin:0;padding:0;background:#0a0d12;font-family:'Courier New',monospace;}
+  .wrap{max-width:520px;margin:40px auto;background:#0d1117;border:1px solid #1a3a3a;border-radius:8px;}
+  .header{padding:24px 32px;border-bottom:1px solid #1a3a3a;background:#070a0f;}
+  .logo{font-size:20px;font-weight:bold;letter-spacing:4px;color:#00d4cc;}
+  .body{padding:32px;}
+  h2{color:#ff6b6b;font-size:16px;letter-spacing:2px;text-transform:uppercase;margin:0 0 16px;}
+  p{color:#a0c8c8;font-size:13px;line-height:1.7;margin:0 0 12px;}
+  .otp{display:block;font-size:36px;font-weight:bold;letter-spacing:12px;color:#ff6b6b;margin:24px 0;text-align:center;background:#070a0f;padding:20px;border-radius:6px;border:1px solid #3a1a1a;}
+  .footer{padding:20px 32px;border-top:1px solid #1a3a3a;font-size:10px;color:#2a5050;}
+</style></head>
+<body><div class="wrap">
+  <div class="header"><div class="logo">&gt;_ AYZEN</div></div>
+  <div class="body">
+    <h2>Password Reset</h2>
+    <p>Hi <strong>${user.username}</strong>, use this code to reset your password:</p>
+    <span class="otp">${code}</span>
+    <p>This code expires in <strong>10 minutes</strong>. If you didn't request this, ignore this email.</p>
+  </div>
+  <div class="footer">&copy; 2026 AYZEN</div>
+</div></body></html>`;
+
+  await sendEmail({ to: email, subject: "AYZEN — Password Reset Code", html, text: `Your AYZEN password reset code: ${code}` });
+  res.json({ message: "If this email exists, a reset code has been sent." });
+});
+
+// ─── POST /auth/reset-password — verify OTP + set new password ────────────────
+router.post("/auth/reset-password", async (req, res): Promise<void> => {
+  const { email, code, newPassword } = req.body;
+  if (!email || !code || !newPassword) {
+    res.status(400).json({ error: "email, code, and newPassword are required" }); return;
+  }
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" }); return;
+  }
+  if (!verifyOtp(`reset:${email}`, code)) {
+    res.status(400).json({ error: "Invalid or expired reset code" }); return;
+  }
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  if (!user) { res.status(404).json({ error: "User not found" }); return; }
+
+  await db.update(usersTable).set({ passwordHash: hashPassword(newPassword), lastActiveAt: new Date() }).where(eq(usersTable.id, user.id));
+  const token = generateToken(user.id, user.role);
+  res.json({ message: "Password reset successful", token, refreshToken: token, user: sanitizeUser(user) });
+});
+
 router.post("/auth/setup-2fa", async (_req, res): Promise<void> => {
   const secret = crypto.randomBytes(20).toString("base64").replace(/[^A-Z2-7]/gi, "A").slice(0, 32).toUpperCase();
   const otpauthUrl = `otpauth://totp/AYZEN:user@ayzen.io?secret=${secret}&issuer=AYZEN`;

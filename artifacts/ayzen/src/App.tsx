@@ -9,6 +9,7 @@ import { AiChat } from "@/components/ai-chat";
 import { useRealtime } from "@/hooks/use-realtime";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
+import ForgotPassword from "@/pages/forgot-password";
 import AdminDashboard from "@/pages/admin/dashboard";
 import AdminUsers from "@/pages/admin/users";
 import AdminProjects from "@/pages/admin/projects";
@@ -75,6 +76,7 @@ function Router() {
 
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
+      <Route path="/forgot-password" component={ForgotPassword} />
 
       {/* Admin Routes */}
       <Route path="/admin/dashboard">{() => <ProtectedRoute component={AdminDashboard} adminOnly />}</Route>

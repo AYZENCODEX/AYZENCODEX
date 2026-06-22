@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, hasFirebase } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff, Sparkles, Check, RefreshCw } from "lucide-react";
+import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff, Sparkles, Check, RefreshCw, KeyRound } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SuccessAnimation } from "@/components/success-animation";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -89,6 +90,10 @@ export default function Login() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
+  const [magicCode, setMagicCode] = useState("");
+  const [magicVerifyLoading, setMagicVerifyLoading] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMsg, setSuccessMsg] = useState("");
 
   const [captcha, setCaptcha] = useState(makeCaptcha);
   const [captchaInput, setCaptchaInput] = useState("");
@@ -102,9 +107,12 @@ export default function Login() {
       const data = await firebaseSyncToBackend(idToken);
       if (!data) throw new Error("Could not sync account with server");
       setAuthContext(data.user, data.token);
-      toast({ title: "Access granted", description: `Welcome, ${data.user.username}!` });
-      if (data.user.role === "admin") setLocation("/admin/dashboard");
-      else setLocation("/dashboard");
+      setSuccessMsg(`Welcome, ${data.user.username}!`);
+      setShowSuccess(true);
+      setTimeout(() => {
+        if (data.user.role === "admin") setLocation("/admin/dashboard");
+        else setLocation("/dashboard");
+      }, 1600);
     } catch (err: any) {
       if (err?.code !== "auth/popup-closed-by-user") {
         const msg = err?.code === "auth/unauthorized-domain"
@@ -116,6 +124,34 @@ export default function Login() {
     setGoogleLoading(false);
   };
 
+  const handleMagicVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!magicCode.trim()) return;
+    setMagicVerifyLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/magic-link/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: magicCode.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok && data.token) {
+        setAuthContext(data.user, data.token);
+        setSuccessMsg(`Access granted, ${data.user.username}!`);
+        setShowSuccess(true);
+        setTimeout(() => {
+          if (data.user.role === "admin") setLocation("/admin/dashboard");
+          else setLocation("/dashboard");
+        }, 1600);
+      } else {
+        toast({ variant: "destructive", title: data.error ?? "Invalid code" });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Connection error" });
+    }
+    setMagicVerifyLoading(false);
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
@@ -124,9 +160,12 @@ export default function Login() {
       const data = await backendLogin(email, password);
       if (data) {
         setAuthContext(data.user, data.token);
-        toast({ title: "Access granted", description: "Welcome back, operator." });
-        if (data.user.role === "admin") setLocation("/admin/dashboard");
-        else setLocation("/dashboard");
+        setSuccessMsg(`Welcome back, ${data.user.username}!`);
+        setShowSuccess(true);
+        setTimeout(() => {
+          if (data.user.role === "admin") setLocation("/admin/dashboard");
+          else setLocation("/dashboard");
+        }, 1600);
         try {
           const cred = await signInWithEmailAndPassword(auth, email, password);
           if (cred.user) {
@@ -175,8 +214,9 @@ export default function Login() {
         return;
       }
       setAuthContext(data.user, data.token);
-      toast({ title: "Account created!", description: "Welcome to AYZEN, Operator." });
-      setLocation("/dashboard");
+      setSuccessMsg("Welcome to AYZEN, Operator!");
+      setShowSuccess(true);
+      setTimeout(() => setLocation("/dashboard"), 1800);
     } catch {
       toast({ variant: "destructive", title: "Registration failed", description: "Try again." });
     }
@@ -229,6 +269,12 @@ export default function Login() {
 
   return (
     <div className="min-h-screen w-full bg-background flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      <SuccessAnimation
+        show={showSuccess}
+        message={tab === "signup" ? "Account Created!" : "Access Granted!"}
+        subMessage={successMsg}
+        type={tab === "signup" ? "success" : "login"}
+      />
       <div className="absolute inset-0 z-0 opacity-[0.02]"
         style={{ backgroundImage: "linear-gradient(to right, #808080 1px, transparent 1px), linear-gradient(to bottom, #808080 1px, transparent 1px)", backgroundSize: "40px 40px" }}
       />
@@ -284,19 +330,31 @@ export default function Login() {
           {tab === "magic" ? (
             <div className="space-y-4">
               {magicSent ? (
-                <div className="py-8 flex flex-col items-center gap-4 text-center">
-                  <div className="w-14 h-14 rounded-full bg-emerald-400/10 border border-emerald-400/30 flex items-center justify-center">
-                    <Check className="w-7 h-7 text-emerald-400" />
+                <div className="space-y-4">
+                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">
+                    <div className="font-mono text-xs text-muted-foreground">Code sent to</div>
+                    <div className="font-mono text-sm text-foreground font-bold">{email}</div>
                   </div>
-                  <div>
-                    <div className="font-mono font-bold text-foreground mb-1">Check your inbox</div>
-                    <div className="font-mono text-xs text-muted-foreground">
-                      We sent a magic link to <span className="text-primary">{email}</span>.<br />
-                      Click the link to sign in instantly — no password needed.
+                  <form onSubmit={handleMagicVerify} className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Enter 6-Digit Code</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="000000"
+                        maxLength={6}
+                        value={magicCode}
+                        onChange={e => setMagicCode(e.target.value.replace(/\D/g, ""))}
+                        className="bg-input border-border font-mono h-14 text-center text-2xl tracking-[0.5em] focus-visible:ring-primary/50"
+                        autoFocus required
+                      />
                     </div>
-                  </div>
-                  <Button variant="outline" className="font-mono text-xs w-full" onClick={() => { setMagicSent(false); setEmail(""); }}>
-                    Send to different email
+                    <Button type="submit" disabled={magicCode.length !== 6 || magicVerifyLoading} className="w-full h-11 font-mono font-bold uppercase tracking-widest">
+                      {magicVerifyLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="flex items-center gap-2">Verify & Enter <Sparkles className="w-4 h-4" /></span>}
+                    </Button>
+                  </form>
+                  <Button variant="ghost" size="sm" className="w-full font-mono text-xs text-muted-foreground" onClick={() => { setMagicSent(false); setMagicCode(""); setEmail(""); }}>
+                    ← Try different email
                   </Button>
                 </div>
               ) : (
@@ -308,7 +366,7 @@ export default function Login() {
                       </div>
                     </div>
                     <div className="font-mono text-xs text-muted-foreground">
-                      Enter your email — we'll send you a one-click sign-in link. No password needed.
+                      Enter your email — we'll send you a 6-digit code. No password needed.
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -320,7 +378,7 @@ export default function Login() {
                     </div>
                   </div>
                   <Button type="submit" className="w-full h-11 font-mono font-bold uppercase tracking-widest" disabled={magicLoading}>
-                    {magicLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="flex items-center gap-2">Send Magic Link <Sparkles className="w-4 h-4" /></span>}
+                    {magicLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="flex items-center gap-2">Send Code <Sparkles className="w-4 h-4" /></span>}
                   </Button>
                 </form>
               )}
@@ -426,6 +484,13 @@ export default function Login() {
                 </span>
               )}
             </Button>
+            {tab === "signin" && (
+              <div className="text-right">
+                <Link href="/forgot-password" className="font-mono text-[10px] text-muted-foreground hover:text-primary flex items-center justify-end gap-1">
+                  <KeyRound className="w-3 h-3" /> Forgot password?
+                </Link>
+              </div>
+            )}
           </form>
           )}
 

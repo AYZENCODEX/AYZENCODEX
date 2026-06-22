@@ -164,4 +164,82 @@ router.post("/subscription/check", async (req, res): Promise<void> => {
   }
 });
 
+// ─── POST /api/subscription/manual-upgrade — pay via BKash/Nagad/USDT ────────
+router.post("/subscription/manual-upgrade", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const { plan, method, referenceId, senderNumber } = req.body as {
+    plan?: string; method?: string; referenceId?: string; senderNumber?: string;
+  };
+  if (!plan || !PLANS[plan as keyof typeof PLANS] || plan === "free") {
+    res.status(400).json({ error: "Invalid plan" }); return;
+  }
+  if (!method || !["bkash", "nagad", "binance_usdt"].includes(method)) {
+    res.status(400).json({ error: "Invalid payment method" }); return;
+  }
+  if (!referenceId?.trim()) {
+    res.status(400).json({ error: "Transaction ID / TX hash required" }); return;
+  }
+
+  const planInfo = PLANS[plan as keyof typeof PLANS];
+  const expiresAt = new Date(Date.now() + 31 * 24 * 60 * 60 * 1000);
+
+  try {
+    const existing = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, userId));
+    if (existing.length > 0) {
+      await db.update(subscriptionsTable).set({
+        plan, status: "pending",
+        coingateOrderId: `manual_${referenceId.trim()}`,
+        coingatePaymentUrl: null,
+        expiresAt, updatedAt: new Date(),
+      }).where(eq(subscriptionsTable.userId, userId));
+    } else {
+      await db.insert(subscriptionsTable).values({
+        userId, plan, status: "pending",
+        coingateOrderId: `manual_${referenceId.trim()}`,
+        expiresAt,
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({ error: "Database error. Please try again.", detail: err?.message });
+    return;
+  }
+
+  res.status(201).json({
+    success: true,
+    plan,
+    planName: planInfo.name,
+    price: planInfo.price,
+    message: `Payment submitted for ${planInfo.name} plan. Admin will activate your subscription after verification (usually within 1-2 hours).`,
+  });
+});
+
+// ─── ADMIN: GET /api/admin/subscriptions — pending manual payments ────────────
+router.get("/admin/subscriptions", async (req, res): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const payload = JSON.parse(Buffer.from(authHeader.replace("Bearer ", ""), "base64").toString());
+    if (payload.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
+  } catch { res.status(401).json({ error: "Invalid token" }); return; }
+
+  const pending = await db.select().from(subscriptionsTable)
+    .where(eq(subscriptionsTable.status, "pending"));
+  res.json(pending);
+});
+
+// ─── ADMIN: POST /api/admin/subscriptions/:userId/approve ────────────────────
+router.post("/admin/subscriptions/:userId/approve", async (req, res): Promise<void> => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const payload = JSON.parse(Buffer.from(authHeader.replace("Bearer ", ""), "base64").toString());
+    if (payload.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
+  } catch { res.status(401).json({ error: "Invalid token" }); return; }
+
+  const targetUserId = parseInt(Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId, 10);
+  await db.update(subscriptionsTable).set({ status: "active", updatedAt: new Date() })
+    .where(eq(subscriptionsTable.userId, targetUserId));
+  res.json({ success: true });
+});
+
 export default router;
