@@ -13,11 +13,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import {
   Plus, KeyRound, Trash2, Eye, EyeOff,
   Copy, Check, Mail, Hash, Lock, Shield,
-  ChevronDown, Users, Phone, AtSign, UserPlus, X,
+  ChevronDown, Users, Phone, AtSign, UserPlus, X, Smartphone,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import LocalAccounts from "@/components/local-accounts";
 
 const CATEGORIES = ["DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Social", "Other"];
 
@@ -166,7 +167,8 @@ export default function UserVault() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [otherAccounts, setOtherAccounts] = useState<OtherAccount[]>([]);
-  const [activeTab, setActiveTab] = useState("main");
+  const [formTab, setFormTab] = useState("main");
+  const [activeTab, setActiveTab] = useState<"entities" | "local">("entities");
 
   const f = (key: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }));
@@ -174,7 +176,7 @@ export default function UserVault() {
   const resetForm = () => {
     setForm({ ...EMPTY_FORM });
     setOtherAccounts([]);
-    setActiveTab("main");
+    setFormTab("main");
   };
 
   const addOtherAccount = () => setOtherAccounts(prev => [...prev, newOtherAccount()]);
@@ -228,25 +230,58 @@ export default function UserVault() {
   };
 
   return (
-    <div className="space-y-6 page-enter">
+    <div className="space-y-4 page-enter">
+      {/* ── Top header with section switcher ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
             <KeyRound className="w-6 h-6 text-primary" /> Secure Vault
           </h1>
           <p className="text-muted-foreground font-mono text-xs mt-1">
-            Each entity holds all credentials for one complete account identity
+            Entities for projects · Local accounts for farming
           </p>
         </div>
-        <Button
-          className="font-mono uppercase text-xs tracking-wider gap-2 self-start sm:self-auto animate-glow-pulse"
-          onClick={() => setOpen(true)}
-        >
-          <Plus className="h-4 w-4" /> New Entity
-        </Button>
+        {activeTab === "entities" && (
+          <Button
+            className="font-mono uppercase text-xs tracking-wider gap-2 self-start sm:self-auto animate-glow-pulse"
+            onClick={() => setOpen(true)}
+          >
+            <Plus className="h-4 w-4" /> New Entity
+          </Button>
+        )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* ── Section tabs ── */}
+      <div className="flex gap-1 p-1 bg-muted/20 rounded-xl border border-border/30 w-fit">
+        <button
+          onClick={() => setActiveTab("entities")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all",
+            activeTab === "entities"
+              ? "bg-card text-primary font-bold shadow-sm border border-border/40"
+              : "text-muted-foreground/50 hover:text-muted-foreground"
+          )}
+        >
+          <Hash className="w-3.5 h-3.5" /> Entities
+        </button>
+        <button
+          onClick={() => setActiveTab("local")}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all",
+            activeTab === "local"
+              ? "bg-card text-primary font-bold shadow-sm border border-border/40"
+              : "text-muted-foreground/50 hover:text-muted-foreground"
+          )}
+        >
+          <Smartphone className="w-3.5 h-3.5" /> Local Accounts
+        </button>
+      </div>
+
+      {/* ── Local Accounts section ── */}
+      {activeTab === "local" && <LocalAccounts />}
+
+      {/* ── Entities section ── */}
+      {activeTab === "entities" && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {isLoading ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -399,7 +434,7 @@ export default function UserVault() {
             );
           })
         )}
-      </div>
+      </div>}
 
       {/* ── Create Dialog ── */}
       <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) resetForm(); }}>
@@ -439,7 +474,7 @@ export default function UserVault() {
             </div>
 
             {/* Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <Tabs value={formTab} onValueChange={setFormTab}>
               <TabsList className="w-full grid grid-cols-5 h-8 font-mono text-[10px]">
                 <TabsTrigger value="main" className="text-[10px] uppercase">Email</TabsTrigger>
                 <TabsTrigger value="twitter" className="text-[10px] uppercase">Twitter</TabsTrigger>
