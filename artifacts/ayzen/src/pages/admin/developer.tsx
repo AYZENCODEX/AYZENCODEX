@@ -47,7 +47,7 @@ function AiChatTab({ token }: { token: string }) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/ai/models", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${BASE}/api/ai/models`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { setModels(Array.isArray(d) ? d : []); setAiReady(true); })
       .catch(() => setAiReady(false));
@@ -66,7 +66,7 @@ function AiChatTab({ token }: { token: string }) {
     setLoading(true);
     try {
       const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }));
-      const res = await fetch("/api/ai/chat", {
+      const res = await fetch(`${BASE}/api/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ model, messages: history }),
@@ -211,11 +211,18 @@ function LiveConsoleTab({ token }: { token: string }) {
   }, [logs, paused]);
 
   useEffect(() => {
-    const es = new EventSource(`/api/admin/logs/stream`);
+    const token = localStorage.getItem("ayzen_token") ?? "";
+    const es = new EventSource(`${BASE}/api/admin/logs/stream?token=${encodeURIComponent(token)}`);
     esRef.current = es;
 
     es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
+    es.onerror = () => {
+      setConnected(false);
+      // auto-reconnect after 5s
+      setTimeout(() => {
+        if (esRef.current) { esRef.current.close(); esRef.current = null; }
+      }, 5000);
+    };
 
     es.onmessage = (ev) => {
       try {
@@ -609,7 +616,7 @@ export default function AdminDeveloper() {
   const token = localStorage.getItem("ayzen_token") ?? "";
 
   useEffect(() => {
-    fetch("/api/ai/models", { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`${BASE}/api/ai/models`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => { setModels(Array.isArray(d) ? d : []); })
       .catch(() => setModels([]))
@@ -618,7 +625,7 @@ export default function AdminDeveloper() {
 
   const testModel = async (modelId: string) => {
     setActiveModel(modelId);
-    const res = await fetch("/api/ai/chat", {
+    const res = await fetch(`${BASE}/api/ai/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: "ping" }] }),

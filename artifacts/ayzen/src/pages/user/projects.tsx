@@ -17,43 +17,56 @@ function useProjectPresence() {
   const [online, setOnline] = useState<Record<number, number[]>>({});
   const [connected, setConnected] = useState(false);
   const esRef = useRef<EventSource | null>(null);
+  const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unmounted = useRef(false);
 
-  useEffect(() => {
-    if (!token) return;
-    const es = new EventSource(`${BASE}/api/events`);
+  const openES = (url: string, onMsg: (d: any) => void) => {
+    if (esRef.current) esRef.current.close();
+    const es = new EventSource(url);
     esRef.current = es;
     es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-
-    const handler = (e: MessageEvent) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.projectId && d.online) {
-          setOnline(prev => ({ ...prev, [d.projectId]: d.online }));
-        }
-      } catch {}
+    es.addEventListener("presence_updated", (e: MessageEvent) => {
+      try { const d = JSON.parse(e.data); onMsg(d); } catch {}
+    });
+    // Also listen for projects_updated to refresh online count
+    es.addEventListener("projects_updated", () => setConnected(c => c));
+    let retries = 0;
+    es.onerror = () => {
+      setConnected(false);
+      es.close();
+      if (unmounted.current) return;
+      const delay = Math.min(1000 * Math.pow(2, retries++), 30_000);
+      retryRef.current = setTimeout(() => {
+        if (!unmounted.current) openES(url, onMsg);
+      }, delay);
     };
-    es.addEventListener("presence_updated", handler);
+    return es;
+  };
 
-    return () => { es.close(); setConnected(false); };
+  useEffect(() => {
+    unmounted.current = false;
+    if (!token) return;
+    const encodedToken = encodeURIComponent(token);
+    openES(
+      `${BASE}/api/events?token=${encodedToken}`,
+      (d) => { if (d.projectId && d.online) setOnline(prev => ({ ...prev, [d.projectId]: d.online })); }
+    );
+    return () => {
+      unmounted.current = true;
+      if (retryRef.current) clearTimeout(retryRef.current);
+      esRef.current?.close();
+      setConnected(false);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   const joinProject = (projectId: number) => {
-    if (esRef.current) {
-      esRef.current.close();
-    }
-    const es = new EventSource(`${BASE}/api/events?projectId=${projectId}`);
-    esRef.current = es;
-    es.onopen = () => setConnected(true);
-    es.onerror = () => setConnected(false);
-    es.addEventListener("presence_updated", (e: MessageEvent) => {
-      try {
-        const d = JSON.parse(e.data);
-        if (d.projectId && d.online) {
-          setOnline(prev => ({ ...prev, [d.projectId]: d.online }));
-        }
-      } catch {}
-    });
+    if (!token) return;
+    const encodedToken = encodeURIComponent(token);
+    openES(
+      `${BASE}/api/events?projectId=${projectId}&token=${encodedToken}`,
+      (d) => { if (d.projectId && d.online) setOnline(prev => ({ ...prev, [d.projectId]: d.online })); }
+    );
   };
 
   return { online, connected, joinProject };

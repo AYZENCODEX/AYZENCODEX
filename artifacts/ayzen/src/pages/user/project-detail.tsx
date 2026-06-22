@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useGetProject, useListVaultEntries } from "@workspace/api-client-react";
 import { useParams, Link } from "wouter";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -333,6 +333,52 @@ export default function UserProjectDetail() {
     query: { enabled: !!projectId, queryKey: ["project", projectId] },
   });
   const { data: vaultEntries } = useListVaultEntries();
+
+  // ── SSE live refresh for this project ──────────────────────────────────────
+  const sseRef = useRef<EventSource | null>(null);
+  const sseRetry = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sseRetries = useRef(0);
+
+  useEffect(() => {
+    if (!projectId) return;
+    let unmounted = false;
+
+    const connect = () => {
+      if (unmounted) return;
+      const tok = localStorage.getItem("ayzen_token") ?? "";
+      const url = `${BASE}/api/events?projectId=${projectId}&token=${encodeURIComponent(tok)}`;
+      const es = new EventSource(url);
+      sseRef.current = es;
+
+      const refresh = () => { refetchProject(); };
+      const refreshEntity = () => { if (activeTab === "entities") loadEntityData(); };
+
+      es.addEventListener("tasks_updated", refresh);
+      es.addEventListener("submissions_updated", () => { refresh(); refreshEntity(); });
+      es.addEventListener("projects_updated", refresh);
+      es.addEventListener("presence_updated", () => {}); // handled by presence bar if needed
+
+      es.onerror = () => {
+        es.close();
+        sseRef.current = null;
+        if (unmounted) return;
+        const delay = Math.min(1000 * Math.pow(2, sseRetries.current++), 30_000);
+        sseRetry.current = setTimeout(connect, delay);
+      };
+
+      es.addEventListener("connected", () => { sseRetries.current = 0; });
+    };
+
+    connect();
+
+    return () => {
+      unmounted = true;
+      if (sseRetry.current) clearTimeout(sseRetry.current);
+      sseRef.current?.close();
+      sseRef.current = null;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
 
   const token = localStorage.getItem("ayzen_token") || "";
   const xpName = (project as any)?.xpName;

@@ -1,5 +1,4 @@
 import { Router, Request, Response } from "express";
-import { getUserIdSync } from "../lib/auth-utils";
 
 const router = Router();
 
@@ -16,27 +15,76 @@ const clients: SSEClient[] = [];
 // ─── Presence: projectId → Set of userIds ─────────────────────────────────────
 const projectPresence = new Map<number, Set<number>>();
 
-export function broadcastEvent(event: string, data: Record<string, unknown> = {}) {
-  const payload = `event: ${event}\ndata: ${JSON.stringify({ ...data, ts: Date.now() })}\n\n`;
-  for (let i = clients.length - 1; i >= 0; i--) {
+// ─── Token parser: reads from Authorization header OR ?token= query param ─────
+// EventSource API cannot send custom headers, so we must support query param auth
+function getUserIdFromReq(req: Request): number {
+  // 1. Authorization header (REST / fetch calls)
+  const authHeader = req.headers.authorization;
+  if (authHeader) {
     try {
-      clients[i].res.write(payload);
-    } catch {
-      clients.splice(i, 1);
-    }
+      const payload = JSON.parse(
+        Buffer.from(authHeader.replace("Bearer ", "").trim(), "base64").toString()
+      );
+      if (payload.userId) return Number(payload.userId);
+    } catch {}
+  }
+  // 2. ?token= query param (EventSource — cannot send headers)
+  const tokenParam = req.query.token as string | undefined;
+  if (tokenParam) {
+    try {
+      const payload = JSON.parse(
+        Buffer.from(decodeURIComponent(tokenParam), "base64").toString()
+      );
+      if (payload.userId) return Number(payload.userId);
+    } catch {}
+  }
+  return 1;
+}
+
+// ─── Flush-aware write — critical for Replit deployment proxy ─────────────────
+function sseWrite(res: Response, event: string, data: Record<string, unknown>): boolean {
+  try {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    // Force flush through Nginx / Replit's mTLS proxy — without this, events
+    // are buffered and only delivered in bursts or after connection closes
+    if (typeof (res as any).flush === "function") (res as any).flush();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sseHeartbeat(res: Response): boolean {
+  try {
+    res.write(`: heartbeat\n\n`);
+    if (typeof (res as any).flush === "function") (res as any).flush();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ─── Broadcast helpers ────────────────────────────────────────────────────────
+export function broadcastEvent(event: string, data: Record<string, unknown> = {}) {
+  const payload = { ...data, ts: Date.now() };
+  for (let i = clients.length - 1; i >= 0; i--) {
+    if (!sseWrite(clients[i].res, event, payload)) clients.splice(i, 1);
   }
 }
 
 export function broadcastToProject(projectId: number, event: string, data: Record<string, unknown> = {}) {
-  const payload = `event: ${event}\ndata: ${JSON.stringify({ ...data, projectId, ts: Date.now() })}\n\n`;
+  const payload = { ...data, projectId, ts: Date.now() };
   for (let i = clients.length - 1; i >= 0; i--) {
-    if (clients[i].projectId === projectId) {
-      try {
-        clients[i].res.write(payload);
-      } catch {
-        clients.splice(i, 1);
-      }
-    }
+    if (clients[i].projectId !== projectId) continue;
+    if (!sseWrite(clients[i].res, event, payload)) clients.splice(i, 1);
+  }
+}
+
+export function broadcastToUser(userId: number, event: string, data: Record<string, unknown> = {}) {
+  const payload = { ...data, ts: Date.now() };
+  for (let i = clients.length - 1; i >= 0; i--) {
+    if (clients[i].userId !== userId) continue;
+    if (!sseWrite(clients[i].res, event, payload)) clients.splice(i, 1);
   }
 }
 
@@ -50,35 +98,40 @@ export function getAllProjectPresence() {
 
 // ─── SSE endpoint ─────────────────────────────────────────────────────────────
 router.get("/events", (req: Request, res: Response) => {
-  const userId = getUserIdSync(req);
+  const userId = getUserIdFromReq(req);
   const projectId = req.query.projectId ? Number(req.query.projectId) : undefined;
 
+  // Headers that make SSE work through proxies and Replit's deployment layer
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
+  res.setHeader("X-Accel-Buffering", "no");   // Nginx: don't buffer
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.flushHeaders(); // Immediately send headers (starts the stream)
 
-  const clientId = `${userId}-${Date.now()}`;
+  const clientId = `${userId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const client: SSEClient = { id: clientId, userId, res, connectedAt: Date.now(), projectId };
   clients.push(client);
 
-  // Join project presence if specified
+  // Join project presence room
   if (projectId) {
     if (!projectPresence.has(projectId)) projectPresence.set(projectId, new Set());
     projectPresence.get(projectId)!.add(userId);
-    broadcastToProject(projectId, "presence_updated", { projectId, online: getProjectPresence(projectId) });
+    broadcastToProject(projectId, "presence_updated", {
+      projectId, online: getProjectPresence(projectId),
+    });
   }
 
-  res.write(`event: connected\ndata: ${JSON.stringify({ clientId, userId, projectId })}\n\n`);
+  // Send initial connection confirmation
+  sseWrite(res, "connected", {
+    clientId, userId, projectId: projectId ?? null, connections: clients.length,
+  });
 
+  // Heartbeat every 15s — keeps the TCP connection alive through proxies
+  // (Replit's deployment proxy has ~30s idle timeout, so 15s gives a safe margin)
   const heartbeat = setInterval(() => {
-    try {
-      res.write(`: heartbeat\n\n`);
-    } catch {
-      clearInterval(heartbeat);
-    }
-  }, 25000);
+    if (!sseHeartbeat(res)) clearInterval(heartbeat);
+  }, 15000);
 
   req.on("close", () => {
     clearInterval(heartbeat);
@@ -87,15 +140,20 @@ router.get("/events", (req: Request, res: Response) => {
 
     if (projectId) {
       projectPresence.get(projectId)?.delete(userId);
-      if (projectPresence.get(projectId)?.size === 0) projectPresence.delete(projectId);
-      else broadcastToProject(projectId, "presence_updated", { projectId, online: getProjectPresence(projectId) });
+      if ((projectPresence.get(projectId)?.size ?? 0) === 0) {
+        projectPresence.delete(projectId);
+      } else {
+        broadcastToProject(projectId, "presence_updated", {
+          projectId, online: getProjectPresence(projectId),
+        });
+      }
     }
   });
 });
 
 // ─── Project presence REST endpoint ──────────────────────────────────────────
 router.get("/projects/:id/presence", (req: Request, res: Response) => {
-  const id = Number(req.params[Array.isArray(req.params) ? 0 : "id"]);
+  const id = Number(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id);
   res.json({ projectId: id, online: getProjectPresence(id), count: getProjectPresence(id).length });
 });
 

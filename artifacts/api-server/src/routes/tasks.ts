@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, tasksTable, taskSubmissionsTable, projectsTable, usersTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
-import { broadcastEvent } from "./events";
+import { broadcastEvent, broadcastToUser } from "./events";
 import { notifyTaskVerified } from "../lib/telegram";
 
 const router = Router();
@@ -177,7 +177,9 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
   }
 
   broadcastEvent("tasks_updated", { action: "verified", submissionId, status });
+  broadcastEvent("submissions_updated", { submissionId, status });
   broadcastEvent("users_updated", { reason: "task_verified" });
+  if (sub) broadcastToUser(sub.userId, "submissions_updated", { submissionId, status, taskName });
   res.json({ message: `Submission ${status}` });
 });
 
