@@ -23,11 +23,12 @@ interface CreateForm {
   discordUrl: string;
   websiteUrl: string;
   experienceLevel: string;
+  tutorialLink: string;
 }
 
 const EMPTY_FORM: CreateForm = {
   name: "", description: "", xpName: "", tier: "1", fundingAmount: "", rewardEstimate: "",
-  twitterHandle: "", discordUrl: "", websiteUrl: "", experienceLevel: "Beginner",
+  twitterHandle: "", discordUrl: "", websiteUrl: "", experienceLevel: "Beginner", tutorialLink: "",
 };
 
 export default function AdminProjects() {
@@ -58,6 +59,7 @@ export default function AdminProjects() {
           discordUrl: form.discordUrl || undefined,
           websiteUrl: form.websiteUrl || undefined,
           experienceLevel: form.experienceLevel as any,
+          tutorialLink: form.tutorialLink || undefined,
         } as any,
       },
       {
@@ -176,6 +178,20 @@ export default function AdminProjects() {
                   <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Website URL</Label>
                   <Input value={form.websiteUrl} onChange={setField("websiteUrl")} placeholder="https://..." className="bg-input border-border font-mono" />
                 </div>
+              </div>
+
+              <div className="space-y-2 p-3 rounded-lg border border-violet-500/20 bg-violet-500/3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Activity className="w-3 h-3 text-violet-400" />
+                  <Label className="font-mono text-[10px] uppercase tracking-widest text-violet-400 font-bold">Tutorial Link</Label>
+                </div>
+                <Input
+                  value={form.tutorialLink}
+                  onChange={setField("tutorialLink")}
+                  placeholder="https://youtube.com/watch?v=... or https://docs...."
+                  className="bg-input border-border font-mono"
+                />
+                <p className="text-[10px] font-mono text-muted-foreground/60">Operators will see this guide when they open the project</p>
               </div>
 
               <div className="flex gap-3 pt-2">

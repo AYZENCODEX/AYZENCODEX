@@ -637,6 +637,26 @@ export default function UserProjectDetail() {
             </p>
           </div>
 
+          {/* Tutorial Link */}
+          {(project as any).tutorialLink && (
+            <div className="bg-violet-500/5 border border-violet-500/20 rounded-xl p-4 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center flex-shrink-0">
+                <Link2 className="w-4 h-4 text-violet-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-[10px] uppercase tracking-wider text-violet-400/70 mb-0.5">Tutorial / Guide</div>
+                <a href={(project as any).tutorialLink} target="_blank" rel="noreferrer"
+                  className="font-mono text-xs text-violet-300 hover:text-violet-100 transition-colors truncate block">
+                  {(project as any).tutorialLink}
+                </a>
+              </div>
+              <a href={(project as any).tutorialLink} target="_blank" rel="noreferrer"
+                className="font-mono text-[10px] border border-violet-500/30 text-violet-400 hover:bg-violet-500/10 rounded px-2 py-1 transition-colors flex-shrink-0">
+                Open →
+              </a>
+            </div>
+          )}
+
           {/* Links */}
           <div className="bg-card border border-card-border rounded-xl p-4 space-y-2">
             <div className="font-mono text-[10px] uppercase tracking-wider text-primary/60 mb-2">Links</div>

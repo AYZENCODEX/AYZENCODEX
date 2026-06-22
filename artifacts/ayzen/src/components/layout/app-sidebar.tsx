@@ -76,9 +76,14 @@ const USER_NAV: NavGroup[] = [
     items: [
       { href: "/wallets", label: "My Wallets", icon: Wallet, pluginSlug: "wallets" },
       { href: "/vault", label: "Vault", icon: Vault, pluginSlug: "vault" },
-      { href: "/ayzen-email", label: "AYZEN Email", icon: AtSign, pluginSlug: "ayzen-email" },
-      { href: "/email-accounts", label: "Email Manager", icon: Mail, pluginSlug: "email-manager" },
       { href: "/authenticator", label: "2FA Codes", icon: ShieldCheck, pluginSlug: "authenticator" },
+    ],
+  },
+  {
+    label: "Mail", icon: Mail,
+    items: [
+      { href: "/ayzen-email", label: "AYZEN", icon: AtSign, pluginSlug: "ayzen-email" },
+      { href: "/email-accounts", label: "LOCAL", icon: Mail, pluginSlug: "email-manager" },
     ],
   },
   {

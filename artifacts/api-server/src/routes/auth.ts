@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db, usersTable } from "@workspace/db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as crypto from "crypto";
 import { referralsTable } from "@workspace/db";
 import { getUserFromToken } from "../lib/auth-utils";
@@ -144,6 +144,18 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     });
   }
 
+  // Auto-create built-in ETH wallet for every new user
+  db.execute(sql.raw(
+    `INSERT INTO wallets (user_id, label, address, chain, chain_id, is_primary, balance, balance_usd, created_at, updated_at)
+     VALUES (${user.id}, 'My Wallet', 'pending', 'ETH', 1, true, 0, 0, NOW(), NOW())`
+  )).catch(() => {});
+
+  // Auto-create built-in AYZEN email for every new user
+  db.execute(sql.raw(
+    `INSERT INTO email_accounts (user_id, label, email_address, is_default, protocol, use_ssl, username, password, created_at, updated_at)
+     VALUES (${user.id}, 'AYZEN Mail', '${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@ayzen.io', true, 'IMAP', true, '${username.toLowerCase().replace(/[^a-z0-9]/g, '')}@ayzen.io', '', NOW(), NOW())`
+  )).catch(() => {});
+
   const token = generateToken(user.id, user.role);
 
   import("../lib/email").then(({ sendWelcomeEmail }) => {
@@ -161,9 +173,36 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   if (!user || user.passwordHash !== hashPassword(password)) {
     res.status(401).json({ error: "Invalid credentials" }); return;
   }
-  await db.update(usersTable).set({ lastActiveAt: new Date() }).where(eq(usersTable.id, user.id));
+
+  // Real-time streak tracking: check last active date
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const lastActive = user.lastActiveAt;
+  const lastDate = lastActive ? lastActive.toISOString().slice(0, 10) : null;
+  let newStreak = user.streak ?? 0;
+  let newLongest = user.longestStreak ?? 0;
+
+  if (!lastDate) {
+    newStreak = 1;
+  } else if (lastDate === today) {
+    // Already active today — no change
+  } else {
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const yStr = yesterday.toISOString().slice(0, 10);
+    if (lastDate === yStr) {
+      newStreak = (user.streak ?? 0) + 1;
+    } else {
+      newStreak = 1;
+    }
+  }
+  newLongest = Math.max(newLongest, newStreak);
+
+  await db.update(usersTable)
+    .set({ lastActiveAt: now, streak: newStreak, longestStreak: newLongest })
+    .where(eq(usersTable.id, user.id));
+
   const token = generateToken(user.id, user.role);
-  res.json({ token, refreshToken: token, user: sanitizeUser(user) });
+  res.json({ token, refreshToken: token, user: { ...sanitizeUser(user), streak: newStreak, longestStreak: newLongest } });
 });
 
 // ─── POST /auth/magic-link — send OTP via Resend (replaces Supabase) ─────────

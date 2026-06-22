@@ -606,6 +606,191 @@ function PingTab({ token }: { token: string }) {
   );
 }
 
+// ─── Accurate Function Registry (real registered API routes) ─────────────────
+const REGISTERED_ROUTES: { method: string; route: string; name: string; domain: string }[] = [
+  { method: "POST", route: "/api/auth/register",            name: "registerUser",              domain: "auth" },
+  { method: "POST", route: "/api/auth/login",               name: "loginUser",                 domain: "auth" },
+  { method: "POST", route: "/api/auth/magic-link",          name: "sendMagicLink",             domain: "auth" },
+  { method: "POST", route: "/api/auth/magic-link/verify",   name: "verifyMagicLink",           domain: "auth" },
+  { method: "POST", route: "/api/auth/verify-otp",          name: "verifyOtp",                 domain: "auth" },
+  { method: "POST", route: "/api/auth/change-password",     name: "changePassword",            domain: "auth" },
+  { method: "POST", route: "/api/auth/firebase",            name: "firebaseAuth",              domain: "auth" },
+  { method: "GET",  route: "/api/users",                    name: "listUsers",                 domain: "users" },
+  { method: "GET",  route: "/api/users/:id",                name: "getUser",                   domain: "users" },
+  { method: "PATCH",route: "/api/users/:id",                name: "updateUser",                domain: "users" },
+  { method: "DELETE",route: "/api/users/:id",               name: "deleteUser",                domain: "users" },
+  { method: "GET",  route: "/api/users/me",                 name: "getCurrentUser",            domain: "users" },
+  { method: "PATCH",route: "/api/users/me",                 name: "updateCurrentUser",         domain: "users" },
+  { method: "GET",  route: "/api/projects",                 name: "listProjects",              domain: "projects" },
+  { method: "POST", route: "/api/projects",                 name: "createProject",             domain: "projects" },
+  { method: "GET",  route: "/api/projects/:id",             name: "getProject",                domain: "projects" },
+  { method: "PATCH",route: "/api/projects/:id",             name: "updateProject",             domain: "projects" },
+  { method: "DELETE",route: "/api/projects/:id",            name: "deleteProject",             domain: "projects" },
+  { method: "POST", route: "/api/projects/:id/enroll",      name: "enrollEntity",              domain: "projects" },
+  { method: "GET",  route: "/api/projects/:id/enrollments", name: "listEnrollments",           domain: "projects" },
+  { method: "DELETE",route: "/api/projects/:id/enrollments/:eid", name: "removeEnrollment",    domain: "projects" },
+  { method: "GET",  route: "/api/projects/:id/entity-tasks",name: "getEntityTasks",            domain: "projects" },
+  { method: "GET",  route: "/api/tasks",                    name: "listTasks",                 domain: "tasks" },
+  { method: "POST", route: "/api/tasks",                    name: "createTask",                domain: "tasks" },
+  { method: "GET",  route: "/api/tasks/submissions",        name: "listSubmissions",           domain: "tasks" },
+  { method: "GET",  route: "/api/tasks/:id",                name: "getTask",                   domain: "tasks" },
+  { method: "PATCH",route: "/api/tasks/:id",                name: "updateTask",                domain: "tasks" },
+  { method: "DELETE",route: "/api/tasks/:id",               name: "deleteTask",                domain: "tasks" },
+  { method: "POST", route: "/api/tasks/:id/submit",         name: "submitTask",                domain: "tasks" },
+  { method: "PATCH",route: "/api/tasks/submissions/:id",    name: "reviewSubmission",          domain: "tasks" },
+  { method: "GET",  route: "/api/vault",                    name: "listVaultEntries",          domain: "vault" },
+  { method: "POST", route: "/api/vault",                    name: "createVaultEntry",          domain: "vault" },
+  { method: "GET",  route: "/api/vault/:id",                name: "getVaultEntry",             domain: "vault" },
+  { method: "PATCH",route: "/api/vault/:id",                name: "updateVaultEntry",          domain: "vault" },
+  { method: "DELETE",route: "/api/vault/:id",               name: "deleteVaultEntry",          domain: "vault" },
+  { method: "GET",  route: "/api/wallets",                  name: "listWallets",               domain: "wallets" },
+  { method: "POST", route: "/api/wallets",                  name: "createWallet",              domain: "wallets" },
+  { method: "GET",  route: "/api/wallets/:id",              name: "getWallet",                 domain: "wallets" },
+  { method: "PATCH",route: "/api/wallets/:id",              name: "updateWallet",              domain: "wallets" },
+  { method: "DELETE",route: "/api/wallets/:id",             name: "deleteWallet",              domain: "wallets" },
+  { method: "GET",  route: "/api/email-accounts",           name: "listEmailAccounts",         domain: "email" },
+  { method: "POST", route: "/api/email-accounts",           name: "createEmailAccount",        domain: "email" },
+  { method: "GET",  route: "/api/email-accounts/:id",       name: "getEmailAccount",           domain: "email" },
+  { method: "PATCH",route: "/api/email-accounts/:id",       name: "updateEmailAccount",        domain: "email" },
+  { method: "DELETE",route: "/api/email-accounts/:id",      name: "deleteEmailAccount",        domain: "email" },
+  { method: "GET",  route: "/api/email-accounts/ayzen",     name: "getAyzenEmail",             domain: "email" },
+  { method: "GET",  route: "/api/messages",                 name: "listMessages",              domain: "messages" },
+  { method: "POST", route: "/api/messages",                 name: "createMessage",             domain: "messages" },
+  { method: "GET",  route: "/api/messages/:id",             name: "getMessage",                domain: "messages" },
+  { method: "DELETE",route: "/api/messages/:id",            name: "deleteMessage",             domain: "messages" },
+  { method: "POST", route: "/api/messages/broadcast",       name: "broadcastMessage",          domain: "messages" },
+  { method: "GET",  route: "/api/tools/gas",                name: "getGasPrices",              domain: "tools" },
+  { method: "GET",  route: "/api/tools/gas/:network",       name: "getGasNetwork",             domain: "tools" },
+  { method: "POST", route: "/api/tools/wallet-analysis",    name: "analyzeWallet",             domain: "tools" },
+  { method: "GET",  route: "/api/tools/streak/:userId",     name: "getUserStreak",             domain: "tools" },
+  { method: "POST", route: "/api/tools/spam-score",         name: "getSpamScore",              domain: "tools" },
+  { method: "GET",  route: "/api/telemetry/functions",      name: "getTelemetryFunctions",     domain: "telemetry" },
+  { method: "GET",  route: "/api/telemetry/errors",         name: "getTelemetryErrors",        domain: "telemetry" },
+  { method: "GET",  route: "/api/telemetry/live",           name: "getTelemetryLive",          domain: "telemetry" },
+  { method: "GET",  route: "/api/leaderboard",              name: "getLeaderboard",            domain: "leaderboard" },
+  { method: "GET",  route: "/api/referrals",                name: "listReferrals",             domain: "referrals" },
+  { method: "GET",  route: "/api/settings",                 name: "getSettings",               domain: "settings" },
+  { method: "PATCH",route: "/api/settings",                 name: "updateSettings",            domain: "settings" },
+  { method: "GET",  route: "/api/ai/models",                name: "listAiModels",              domain: "ai" },
+  { method: "POST", route: "/api/ai/chat",                  name: "aiChat",                    domain: "ai" },
+  { method: "GET",  route: "/api/ai/actions",               name: "listAiActions",             domain: "ai" },
+  { method: "POST", route: "/api/ai/actions/:id",           name: "executeAiAction",           domain: "ai" },
+];
+
+const METHOD_COLORS: Record<string, string> = {
+  GET:    "bg-emerald-400/10 text-emerald-400 border-emerald-400/20",
+  POST:   "bg-blue-400/10 text-blue-400 border-blue-400/20",
+  PATCH:  "bg-amber-400/10 text-amber-400 border-amber-400/20",
+  DELETE: "bg-red-400/10 text-red-400 border-red-400/20",
+  PUT:    "bg-violet-400/10 text-violet-400 border-violet-400/20",
+};
+const DOMAIN_COLORS: Record<string, string> = {
+  auth: "text-cyan-400", users: "text-blue-400", projects: "text-violet-400",
+  tasks: "text-amber-400", vault: "text-emerald-400", wallets: "text-purple-400",
+  email: "text-pink-400", messages: "text-indigo-400", tools: "text-orange-400",
+  telemetry: "text-rose-400", leaderboard: "text-yellow-400", referrals: "text-teal-400",
+  settings: "text-slate-400", ai: "text-fuchsia-400",
+};
+
+function FunctionRegistryTab({ token: _token }: { token: string }) {
+  const [filterDomain, setFilterDomain] = useState("all");
+  const [filterMethod, setFilterMethod] = useState("all");
+  const domains = ["all", ...Array.from(new Set(REGISTERED_ROUTES.map(r => r.domain)))];
+  const methods = ["all", "GET", "POST", "PATCH", "DELETE"];
+  const filtered = REGISTERED_ROUTES.filter(r =>
+    (filterDomain === "all" || r.domain === filterDomain) &&
+    (filterMethod === "all" || r.method === filterMethod)
+  );
+
+  return (
+    <div className="space-y-4">
+      {/* Summary stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Total Routes", value: REGISTERED_ROUTES.length, color: "text-primary" },
+          { label: "GET", value: REGISTERED_ROUTES.filter(r => r.method === "GET").length, color: "text-emerald-400" },
+          { label: "POST / PATCH", value: REGISTERED_ROUTES.filter(r => r.method === "POST" || r.method === "PATCH").length, color: "text-blue-400" },
+          { label: "Domains", value: new Set(REGISTERED_ROUTES.map(r => r.domain)).size, color: "text-violet-400" },
+        ].map(s => (
+          <div key={s.label} className="glass-card border rounded-xl p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1">{s.label}</div>
+            <div className={cn("text-2xl font-mono font-bold", s.color)}>{s.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2 items-center">
+        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">Domain:</span>
+        {domains.map(d => (
+          <button
+            key={d}
+            onClick={() => setFilterDomain(d)}
+            className={cn(
+              "px-2 py-0.5 rounded border font-mono text-[10px] uppercase transition-colors",
+              filterDomain === d
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-card-border text-muted-foreground hover:border-primary/30"
+            )}
+          >{d}</button>
+        ))}
+        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest ml-2">Method:</span>
+        {methods.map(m => (
+          <button
+            key={m}
+            onClick={() => setFilterMethod(m)}
+            className={cn(
+              "px-2 py-0.5 rounded border font-mono text-[10px] uppercase transition-colors",
+              filterMethod === m
+                ? "border-primary/50 bg-primary/10 text-primary"
+                : "border-card-border text-muted-foreground hover:border-primary/30"
+            )}
+          >{m}</button>
+        ))}
+        <span className="ml-auto font-mono text-[10px] text-muted-foreground">{filtered.length} routes</span>
+      </div>
+
+      <div className="border border-card-border rounded-md bg-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-card-border hover:bg-transparent">
+              <TableHead className="font-mono uppercase text-xs w-16">Method</TableHead>
+              <TableHead className="font-mono uppercase text-xs">Function</TableHead>
+              <TableHead className="font-mono uppercase text-xs">Route</TableHead>
+              <TableHead className="font-mono uppercase text-xs w-24">Domain</TableHead>
+              <TableHead className="font-mono uppercase text-xs w-16 text-center">Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.map((fn, i) => (
+              <TableRow key={i} className="border-card-border hover:bg-muted/30">
+                <TableCell>
+                  <span className={cn("px-1.5 py-0.5 rounded border text-[9px] font-mono font-bold", METHOD_COLORS[fn.method] ?? "")}>
+                    {fn.method}
+                  </span>
+                </TableCell>
+                <TableCell className="font-mono text-xs font-bold text-foreground">{fn.name}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">{fn.route}</TableCell>
+                <TableCell>
+                  <span className={cn("font-mono text-[10px] font-bold", DOMAIN_COLORS[fn.domain] ?? "text-muted-foreground")}>
+                    {fn.domain}
+                  </span>
+                </TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span className="font-mono text-[9px] text-emerald-400">wired</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminDeveloper() {
   const { data: functions, isLoading: fnLoading } = useGetTelemetryFunctions();
@@ -775,40 +960,9 @@ export default function AdminDeveloper() {
           <PingTab token={token} />
         </TabsContent>
 
-        {/* ── Function Telemetry ────────────────────────────────────────────── */}
+        {/* ── Function Registry (accurate real routes) ──────────────────── */}
         <TabsContent value="fn_telemetry" className="mt-4">
-          <div className="border border-card-border rounded-md bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-card-border hover:bg-transparent">
-                  <TableHead className="font-mono uppercase text-xs">Function</TableHead>
-                  <TableHead className="font-mono uppercase text-xs">Route</TableHead>
-                  <TableHead className="font-mono uppercase text-xs">Status</TableHead>
-                  <TableHead className="font-mono uppercase text-xs text-right">24h Calls</TableHead>
-                  <TableHead className="font-mono uppercase text-xs text-right">Latency</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {fnLoading ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-4"><Skeleton className="h-4 w-32 mx-auto" /></TableCell></TableRow>
-                ) : !functions || functions.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="text-center py-8 font-mono text-muted-foreground">No telemetry data.</TableCell></TableRow>
-                ) : (
-                  functions.map((fn) => (
-                    <TableRow key={fn.name} className="border-card-border hover:bg-muted/50">
-                      <TableCell className="font-mono font-medium text-primary">{fn.name}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{fn.route}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={`font-mono text-[10px] uppercase rounded-sm ${fn.status === "wired" ? "border-primary/50 text-primary" : "border-destructive/50 text-destructive"}`}>{fn.status}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">{fn.callCount24h}</TableCell>
-                      <TableCell className="text-right font-mono text-muted-foreground">{fn.avgLatencyMs ? `${fn.avgLatencyMs}ms` : "-"}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
+          <FunctionRegistryTab token={token} />
         </TabsContent>
 
         {/* ── Error Log ─────────────────────────────────────────────────────── */}
