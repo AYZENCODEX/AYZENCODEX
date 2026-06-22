@@ -4,10 +4,11 @@ import { z } from "zod/v4";
 
 export const tasksTable = pgTable("tasks", {
   id: serial("id").primaryKey(),
-  projectId: integer("project_id").notNull(),
+  projectId: integer("project_id"),
   name: text("name").notNull(),
   description: text("description"),
   rewardAmount: real("reward_amount"),
+  xpAmount: real("xp_amount").notNull().default(0),
   verificationType: text("verification_type").notNull().default("manual"),
   taskType: text("task_type").notNull().default("One-time"),
   completionCount: integer("completion_count").notNull().default(0),

@@ -10,3 +10,4 @@ export * from "./referrals";
 export * from "./wallets";
 export * from "./subscriptions";
 export * from "./credits";
+export * from "./notifications";

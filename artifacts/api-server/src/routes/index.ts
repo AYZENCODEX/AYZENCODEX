@@ -29,6 +29,7 @@ import telemetryStreamRouter from "./telemetry-stream";
 import localAccountsRouter from "./local-accounts";
 import messagesRouter from "./messages";
 import aiActionsRouter from "./ai-actions";
+import notificationsRouter from "./notifications";
 
 const router: IRouter = Router();
 
@@ -62,5 +63,6 @@ router.use(telemetryStreamRouter);
 router.use(localAccountsRouter);
 router.use(messagesRouter);
 router.use(aiActionsRouter);
+router.use(notificationsRouter);
 
 export default router;

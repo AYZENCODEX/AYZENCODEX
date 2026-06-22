@@ -232,6 +232,77 @@ router.post("/admin/credits/:id/reject", async (req, res): Promise<void> => {
   res.json({ success: true });
 });
 
+// ─── POST /api/credits/transfer — user-to-user AZN transfer ──────────────────
+router.post("/credits/transfer", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { toUsername, amount } = req.body as { toUsername?: string; amount?: number };
+  if (!toUsername?.trim()) { res.status(400).json({ error: "toUsername is required" }); return; }
+  if (!amount || amount <= 0) { res.status(400).json({ error: "amount must be greater than 0" }); return; }
+  if (amount < 0.01) { res.status(400).json({ error: "Minimum transfer is 0.01 AZN" }); return; }
+
+  // Find recipient
+  const { usersTable } = await import("@workspace/db");
+  const { eq } = await import("drizzle-orm");
+  const [recipient] = await db.select({ id: usersTable.id, username: usersTable.username })
+    .from(usersTable).where(eq(usersTable.username, toUsername.trim()));
+  if (!recipient) { res.status(404).json({ error: "User not found" }); return; }
+  if (recipient.id === authUser.id) { res.status(400).json({ error: "Cannot transfer to yourself" }); return; }
+
+  const senderCredits = await getOrCreateCredits(authUser.id);
+  if (senderCredits.aznBalance < amount) {
+    res.status(400).json({ error: `Insufficient AZN. You have ${senderCredits.aznBalance.toFixed(4)} AZN.` }); return;
+  }
+
+  // Deduct from sender
+  await db.update(creditsTable).set({
+    aznBalance: senderCredits.aznBalance - amount,
+    updatedAt: new Date(),
+  }).where(eq(creditsTable.userId, authUser.id));
+
+  // Credit recipient
+  const recipientCredits = await getOrCreateCredits(recipient.id);
+  await db.update(creditsTable).set({
+    aznBalance: recipientCredits.aznBalance + amount,
+    updatedAt: new Date(),
+  }).where(eq(creditsTable.userId, recipient.id));
+
+  // Log transactions for both
+  await db.insert(creditTransactionsTable).values({
+    userId: authUser.id, type: "azn_transfer_out", method: "transfer",
+    credits: 0, aznAmount: -amount, status: "approved",
+    notes: `Sent ${amount} AZN to @${recipient.username}`,
+    referenceId: String(recipient.id), approvedAt: new Date(),
+  });
+  await db.insert(creditTransactionsTable).values({
+    userId: recipient.id, type: "azn_transfer_in", method: "transfer",
+    credits: 0, aznAmount: amount, status: "approved",
+    notes: `Received ${amount} AZN from @${senderCredits.userId}`,
+    referenceId: String(authUser.id), approvedAt: new Date(),
+  });
+
+  // Notify recipient
+  try {
+    const { createNotification } = await import("./notifications");
+    const [sender] = await db.select({ username: usersTable.username }).from(usersTable).where(eq(usersTable.id, authUser.id));
+    await createNotification(recipient.id, "azn_transfer", `+${amount} AZN Received 💸`,
+      `@${sender?.username ?? "someone"} sent you ${amount} AZN tokens.`,
+      { from: authUser.id, amount });
+  } catch {}
+
+  broadcastEvent("credits_updated", { userId: authUser.id });
+  broadcastEvent("credits_updated", { userId: recipient.id });
+
+  res.json({
+    success: true,
+    sent: amount,
+    to: recipient.username,
+    newBalance: +(senderCredits.aznBalance - amount).toFixed(6),
+    message: `Successfully sent ${amount} AZN to @${recipient.username}`,
+  });
+});
+
 // ─── POST /api/credits/sell-azn — request to sell AZN tokens ─────────────────
 router.post("/credits/sell-azn", async (req, res): Promise<void> => {
   const authUser = getAuthUser(req);

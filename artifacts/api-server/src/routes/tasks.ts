@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { db, tasksTable, taskSubmissionsTable, projectsTable, usersTable } from "@workspace/db";
+import { db, tasksTable, taskSubmissionsTable, projectsTable, usersTable, creditsTable } from "@workspace/db";
 import { eq, and, sql } from "drizzle-orm";
 import { broadcastEvent, broadcastToUser } from "./events";
 import { notifyTaskVerified } from "../lib/telegram";
+import { createNotification } from "./notifications";
 
 const router = Router();
 
@@ -15,9 +16,12 @@ function getUserId(req: { headers: { authorization?: string } }): number {
   } catch { return 1; }
 }
 
+function taskId(id: number): string { return `#TSK-${String(id).padStart(4, "0")}`; }
+
 function formatTask(t: any, projectName?: string | null, userStatus?: string | null) {
   return {
     ...t,
+    taskId: taskId(t.id),
     createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
     deadline: t.deadline instanceof Date ? t.deadline.toISOString() : (t.deadline ?? null),
     projectName: projectName ?? null,
@@ -27,21 +31,20 @@ function formatTask(t: any, projectName?: string | null, userStatus?: string | n
     category: t.category ?? "Social",
     taskCategory: t.taskCategory ?? t.task_category ?? t.category ?? "B1",
     timeLimitMinutes: t.timeLimitMinutes ?? t.time_limit_minutes ?? null,
+    xpAmount: t.xpAmount ?? t.xp_amount ?? 0,
   };
 }
 
 router.get("/tasks", async (req, res): Promise<void> => {
   const { projectId, userId } = req.query as Record<string, string>;
-  const conditions = [];
-  if (projectId) conditions.push(eq(tasksTable.projectId, parseInt(projectId, 10)));
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   try {
+    const whereClause = projectId ? `WHERE t.project_id = ${parseInt(projectId, 10)}` : "";
     const rawTasks = await db.execute(sql.raw(
-      `SELECT t.*, p.name as project_name
+      `SELECT t.*, p.name as project_name, p.xp_name as project_xp_name, p.xp_price as project_xp_price
        FROM tasks t
        LEFT JOIN projects p ON p.id = t.project_id
-       ${where ? `WHERE t.project_id = ${parseInt(projectId!, 10)}` : ""}
+       ${whereClause}
        ORDER BY t.created_at DESC`
     ));
 
@@ -52,21 +55,24 @@ router.get("/tasks", async (req, res): Promise<void> => {
         const [sub] = await db.select().from(taskSubmissionsTable)
           .where(and(eq(taskSubmissionsTable.taskId, t.id), eq(taskSubmissionsTable.userId, parseInt(userId, 10))));
         userStatus = sub?.status ?? null;
-      }
-      // For daily tasks: if last submission was before today, treat as not yet submitted
-      let effectiveStatus = userStatus;
-      if (userStatus && (t.task_type === "Daily" || t.task_type === "daily")) {
-        const [lastSub] = await db.execute(sql.raw(
-          `SELECT submitted_at FROM task_submissions WHERE task_id = ${t.id} AND user_id = ${parseInt(userId!, 10)} ORDER BY submitted_at DESC LIMIT 1`
-        ));
-        const submittedAt = (lastSub.rows[0] as any)?.submitted_at;
-        if (submittedAt) {
-          const today = new Date(); today.setHours(0,0,0,0);
-          const subDate = new Date(submittedAt); subDate.setHours(0,0,0,0);
-          if (subDate < today) effectiveStatus = null; // reset daily task
+        if (userStatus && (t.task_type === "Daily" || t.task_type === "daily")) {
+          const [lastSub] = await db.execute(sql.raw(
+            `SELECT submitted_at FROM task_submissions WHERE task_id = ${t.id} AND user_id = ${parseInt(userId!, 10)} ORDER BY submitted_at DESC LIMIT 1`
+          ));
+          const submittedAt = (lastSub.rows[0] as any)?.submitted_at;
+          if (submittedAt) {
+            const today = new Date(); today.setHours(0,0,0,0);
+            const subDate = new Date(submittedAt); subDate.setHours(0,0,0,0);
+            if (subDate < today) userStatus = null;
+          }
         }
       }
-      return formatTask({ ...t, projectId: t.project_id, completionCount: t.completion_count, rewardAmount: t.reward_amount, verificationType: t.verification_type, taskType: t.task_type, createdAt: t.created_at, category: t.category }, t.project_name, effectiveStatus);
+      return formatTask({
+        ...t, projectId: t.project_id, completionCount: t.completion_count,
+        rewardAmount: t.reward_amount, verificationType: t.verification_type,
+        taskType: t.task_type, createdAt: t.created_at, category: t.category,
+        xpAmount: t.xp_amount ?? 0,
+      }, t.project_name, userStatus);
     }));
 
     res.json(enriched);
@@ -76,14 +82,16 @@ router.get("/tasks", async (req, res): Promise<void> => {
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
-  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes } = req.body;
-  if (!projectId || !name) { res.status(400).json({ error: "projectId and name are required" }); return; }
+  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes, xpAmount } = req.body;
+  if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  const projIdSql = projectId ? `${Number(projectId)}` : "NULL";
   try {
     const result = await db.execute(sql.raw(
-      `INSERT INTO tasks (project_id, name, description, reward_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes)
-       VALUES (${Number(projectId)}, '${name.replace(/'/g, "''")}',
+      `INSERT INTO tasks (project_id, name, description, reward_amount, xp_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes)
+       VALUES (${projIdSql}, '${name.replace(/'/g, "''")}',
          ${description ? `'${description.replace(/'/g, "''")}'` : "NULL"},
          ${rewardAmount != null ? Number(rewardAmount) : "NULL"},
+         ${Number(xpAmount ?? 0)},
          '${(verificationType ?? "manual").replace(/'/g, "''")}',
          '${(taskType ?? "One-time").replace(/'/g, "''")}',
          ${Number(cost ?? 0)}, ${Number(profit ?? 0)},
@@ -95,7 +103,12 @@ router.post("/tasks", async (req, res): Promise<void> => {
     ));
     const task = result.rows[0] as any;
     broadcastEvent("tasks_updated", { action: "created", taskId: task.id });
-    res.status(201).json(formatTask({ ...task, projectId: task.project_id, completionCount: task.completion_count, rewardAmount: task.reward_amount, verificationType: task.verification_type, taskType: task.task_type, createdAt: task.created_at, category: task.category, taskCategory: task.task_category ?? task.category }));
+    res.status(201).json(formatTask({
+      ...task, projectId: task.project_id, completionCount: task.completion_count,
+      rewardAmount: task.reward_amount, verificationType: task.verification_type,
+      taskType: task.task_type, createdAt: task.created_at, category: task.category,
+      taskCategory: task.task_category ?? task.category, xpAmount: task.xp_amount ?? 0,
+    }));
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });
   }
@@ -105,22 +118,26 @@ router.get("/tasks/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, id));
   if (!task) { res.status(404).json({ error: "Task not found" }); return; }
-  const [proj] = await db.select({ name: projectsTable.name }).from(projectsTable).where(eq(projectsTable.id, task.projectId));
-  res.json(formatTask(task, proj?.name));
+  let projName: string | null = null;
+  if (task.projectId) {
+    const [proj] = await db.select({ name: projectsTable.name }).from(projectsTable).where(eq(projectsTable.id, task.projectId));
+    projName = proj?.name ?? null;
+  }
+  res.json(formatTask(task, projName));
 });
 
 router.patch("/tasks/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const allowedFields = ["name", "description", "rewardAmount", "verificationType", "taskType", "cost", "profit", "category"];
+  const allowedFields = ["name", "description", "rewardAmount", "verificationType", "taskType", "cost", "profit", "category", "xpAmount"];
   const updates: Record<string, unknown> = {};
   for (const f of allowedFields) {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   }
-  // Handle extra fields via raw SQL for columns not in Drizzle schema yet
   const rawSets: string[] = [];
   if (req.body.taskCategory !== undefined) rawSets.push(`task_category = '${String(req.body.taskCategory).replace(/'/g, "''")}'`);
   if (req.body.deadline !== undefined) rawSets.push(`deadline = ${req.body.deadline ? `'${req.body.deadline}'` : "NULL"}`);
   if (req.body.timeLimitMinutes !== undefined) rawSets.push(`time_limit_minutes = ${req.body.timeLimitMinutes ? Number(req.body.timeLimitMinutes) : "NULL"}`);
+  if (req.body.projectId !== undefined) rawSets.push(`project_id = ${req.body.projectId ? Number(req.body.projectId) : "NULL"}`);
 
   try {
     let task: any;
@@ -135,7 +152,13 @@ router.patch("/tasks/:id", async (req, res): Promise<void> => {
     if (!task) { res.status(404).json({ error: "Task not found" }); return; }
     broadcastEvent("tasks_updated", { action: "updated", taskId: id });
     const t = task as any;
-    res.json(formatTask({ ...t, projectId: t.project_id ?? t.projectId, completionCount: t.completion_count ?? t.completionCount, rewardAmount: t.reward_amount ?? t.rewardAmount, verificationType: t.verification_type ?? t.verificationType, taskType: t.task_type ?? t.taskType, createdAt: t.created_at ?? t.createdAt, category: t.category, taskCategory: t.task_category ?? t.taskCategory ?? t.category }));
+    res.json(formatTask({
+      ...t, projectId: t.project_id ?? t.projectId, completionCount: t.completion_count ?? t.completionCount,
+      rewardAmount: t.reward_amount ?? t.rewardAmount, verificationType: t.verification_type ?? t.verificationType,
+      taskType: t.task_type ?? t.taskType, createdAt: t.created_at ?? t.createdAt,
+      category: t.category, taskCategory: t.task_category ?? t.taskCategory ?? t.category,
+      xpAmount: t.xp_amount ?? t.xpAmount ?? 0,
+    }));
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });
   }
@@ -154,9 +177,7 @@ router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
   const userId = getUserId(req);
 
   try {
-    const result = await db.execute(sql.raw(
-      `SELECT * FROM tasks WHERE id = ${taskId}`
-    ));
+    const result = await db.execute(sql.raw(`SELECT * FROM tasks WHERE id = ${taskId}`));
     const task = result.rows[0] as any;
     if (!task) { res.status(404).json({ error: "Task not found" }); return; }
 
@@ -174,11 +195,18 @@ router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
 
     if (status === "approved") {
       await db.execute(sql.raw(`UPDATE tasks SET completion_count = completion_count + 1 WHERE id = ${taskId}`));
+      // Auto-award XP as AZN
+      await awardXpAsAzn(userId, task);
+      await createNotification(userId, "task_approved", "Task Auto-Approved ✓",
+        `"${task.name}" was auto-verified. XP awarded to your balance.`,
+        { taskId, xpAmount: task.xp_amount ?? 0 });
+    } else {
+      await createNotification(userId, "task_submitted", "Task Submitted",
+        `"${task.name}" submitted for review. Pending admin verification.`, { taskId });
     }
 
     broadcastEvent("tasks_updated", { action: "submitted", taskId, userId, status });
 
-    // Send confirmation email
     const [user] = await db.select({ email: usersTable.email, username: usersTable.username })
       .from(usersTable).where(eq(usersTable.id, userId));
     if (user && status === "pending") {
@@ -197,6 +225,29 @@ router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
   }
 });
 
+// ── Helper: award XP as AZN on task approval ──────────────────────────────────
+async function awardXpAsAzn(userId: number, task: any) {
+  const xpAmt = Number(task.xp_amount ?? task.xpAmount ?? 0);
+  if (!xpAmt || xpAmt <= 0) return;
+  try {
+    let xpPrice = 0.01;
+    if (task.project_id || task.projectId) {
+      const projId = task.project_id ?? task.projectId;
+      const [proj] = await db.execute(sql.raw(`SELECT xp_price FROM projects WHERE id = ${projId}`));
+      xpPrice = Number((proj.rows[0] as any)?.xp_price ?? 0.01);
+    }
+    const aznEarned = +(xpAmt * xpPrice).toFixed(6);
+    if (aznEarned <= 0) return;
+
+    // Upsert credit row and add AZN
+    await db.execute(sql.raw(
+      `INSERT INTO credits (user_id, balance, azn_balance, total_purchased, total_spent, created_at, updated_at)
+       VALUES (${userId}, 0, ${aznEarned}, 0, 0, NOW(), NOW())
+       ON CONFLICT (user_id) DO UPDATE SET azn_balance = credits.azn_balance + ${aznEarned}, updated_at = NOW()`
+    ));
+  } catch {}
+}
+
 router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
   const { submissionId, approved, rejectionReason } = req.body;
   const status = approved ? "approved" : "rejected";
@@ -213,8 +264,21 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
       rewardAmount = task.rewardAmount ?? null;
       if (approved) {
         await db.update(tasksTable).set({ completionCount: task.completionCount + 1 }).where(eq(tasksTable.id, sub.taskId));
+        // Award XP as AZN
+        await awardXpAsAzn(sub.userId, task);
       }
     }
+
+    if (approved) {
+      await createNotification(sub.userId, "task_approved", "Task Approved ✓",
+        taskName ? `"${taskName}" approved by admin. XP credited to your balance.` : "Your task was approved.",
+        { submissionId, taskId: sub.taskId, xpAmount: task?.xpAmount ?? 0 });
+    } else {
+      await createNotification(sub.userId, "task_rejected", "Task Rejected",
+        taskName ? `"${taskName}" was rejected. Reason: ${rejectionReason || "See admin notes."}` : "Your task was rejected.",
+        { submissionId, taskId: sub.taskId, reason: rejectionReason });
+    }
+
     if (taskName) {
       notifyTaskVerified(sub.userId, taskName, !!approved, rewardAmount).catch(() => {});
       const { sendTaskApprovedEmail } = await import("../lib/email");
@@ -236,6 +300,7 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
   res.json({ message: `Submission ${status}` });
 });
 
+// GET /api/tasks/submissions — MUST be registered before GET /tasks/:id
 router.get("/tasks/submissions", async (req, res): Promise<void> => {
   const { status, projectId } = req.query as Record<string, string>;
   const subs = await db.select({

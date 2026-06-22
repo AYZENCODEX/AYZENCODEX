@@ -7,6 +7,7 @@ export const projectsTable = pgTable("projects", {
   name: text("name").notNull(),
   description: text("description"),
   xpName: text("xp_name"),
+  xpPrice: real("xp_price").notNull().default(0.01),
   twitterHandle: text("twitter_handle"),
   discordUrl: text("discord_url"),
   websiteUrl: text("website_url"),
