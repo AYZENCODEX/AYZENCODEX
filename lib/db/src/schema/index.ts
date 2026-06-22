@@ -8,3 +8,4 @@ export * from "./email-accounts";
 export * from "./support";
 export * from "./referrals";
 export * from "./wallets";
+export * from "./subscriptions";

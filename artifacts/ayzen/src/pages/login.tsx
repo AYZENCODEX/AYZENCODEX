@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword } from "@/lib/firebase";
+import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, hasFirebase } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff } from "lucide-react";
+import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff, Sparkles, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -69,13 +69,15 @@ export default function Login() {
   const { login: setAuthContext } = useAuth();
   const { toast } = useToast();
 
-  const [tab, setTab] = useState<"signin" | "signup">("signin");
+  const [tab, setTab] = useState<"signin" | "signup" | "magic">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [magicSent, setMagicSent] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -158,6 +160,28 @@ export default function Login() {
     setLoading(false);
   };
 
+  const handleMagicLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) { toast({ variant: "destructive", title: "Enter your email" }); return; }
+    setMagicLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/magic-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ variant: "destructive", title: data.error ?? "Failed to send magic link" });
+      } else {
+        setMagicSent(true);
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Failed to send magic link" });
+    }
+    setMagicLoading(false);
+  };
+
   const handleDemoAdmin = async () => {
     setLoading(true);
     const data = await backendLogin("support@ayzen.tech", "1234578@Ba1");
@@ -204,18 +228,17 @@ export default function Login() {
             <button
               onClick={() => setTab("signin")}
               className={`flex-1 py-2 text-xs font-mono uppercase tracking-widest transition-colors ${tab === "signin" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Sign In
-            </button>
+            >Sign In</button>
             <button
               onClick={() => setTab("signup")}
               className={`flex-1 py-2 text-xs font-mono uppercase tracking-widest transition-colors ${tab === "signup" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              Sign Up
-            </button>
+            >Sign Up</button>
+            <button
+              onClick={() => { setTab("magic"); setMagicSent(false); }}
+              className={`flex-1 py-2 text-xs font-mono uppercase tracking-widest transition-colors flex items-center justify-center gap-1 ${tab === "magic" ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"}`}
+            ><Sparkles className="w-3 h-3" /> Magic</button>
           </div>
-
-          {import.meta.env.VITE_FIREBASE_API_KEY && (
+          {tab !== "magic" && hasFirebase && (
             <>
               <Button
                 type="button"
@@ -227,7 +250,6 @@ export default function Login() {
                 {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
                 Continue with Google
               </Button>
-
               <div className="flex items-center gap-3 mb-5">
                 <div className="flex-1 h-px bg-border" />
                 <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">or</span>
@@ -236,6 +258,51 @@ export default function Login() {
             </>
           )}
 
+          {tab === "magic" ? (
+            <div className="space-y-4">
+              {magicSent ? (
+                <div className="py-8 flex flex-col items-center gap-4 text-center">
+                  <div className="w-14 h-14 rounded-full bg-emerald-400/10 border border-emerald-400/30 flex items-center justify-center">
+                    <Check className="w-7 h-7 text-emerald-400" />
+                  </div>
+                  <div>
+                    <div className="font-mono font-bold text-foreground mb-1">Check your inbox</div>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      We sent a magic link to <span className="text-primary">{email}</span>.<br />
+                      Click the link to sign in instantly — no password needed.
+                    </div>
+                  </div>
+                  <Button variant="outline" className="font-mono text-xs w-full" onClick={() => { setMagicSent(false); setEmail(""); }}>
+                    Send to different email
+                  </Button>
+                </div>
+              ) : (
+                <form onSubmit={handleMagicLink} className="space-y-4">
+                  <div className="text-center pb-2">
+                    <div className="flex justify-center mb-3">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center">
+                        <Sparkles className="w-5 h-5 text-primary" />
+                      </div>
+                    </div>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      Enter your email — we'll send you a one-click sign-in link. No password needed.
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                      <Input type="email" placeholder="operator@command.io" value={email} onChange={e => setEmail(e.target.value)}
+                        className="bg-input border-border font-mono h-11 pl-9 focus-visible:ring-primary/50 focus-visible:border-primary" required />
+                    </div>
+                  </div>
+                  <Button type="submit" className="w-full h-11 font-mono font-bold uppercase tracking-widest" disabled={magicLoading}>
+                    {magicLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="flex items-center gap-2">Send Magic Link <Sparkles className="w-4 h-4" /></span>}
+                  </Button>
+                </form>
+              )}
+            </div>
+          ) : (
           <form onSubmit={tab === "signin" ? handleSignIn : handleSignUp} className="space-y-4">
             {tab === "signup" && (
               <div className="space-y-2">
@@ -307,6 +374,7 @@ export default function Login() {
               )}
             </Button>
           </form>
+          )}
 
           <div className="mt-6 border-t border-border pt-5">
             <div className="text-[10px] font-mono text-center text-muted-foreground mb-3 uppercase tracking-widest">Demo Override</div>
@@ -324,8 +392,10 @@ export default function Login() {
         <div className="text-center text-sm text-muted-foreground font-mono">
           {tab === "signin" ? (
             <>Unregistered entity?{" "}<button onClick={() => setTab("signup")} className="text-primary hover:underline">Request access</button></>
-          ) : (
+          ) : tab === "signup" ? (
             <>Already have access?{" "}<button onClick={() => setTab("signin")} className="text-primary hover:underline">Sign in</button></>
+          ) : (
+            <>Prefer password?{" "}<button onClick={() => setTab("signin")} className="text-primary hover:underline">Sign in</button></>
           )}
         </div>
       </div>

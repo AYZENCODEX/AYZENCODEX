@@ -2,6 +2,24 @@ import { Router } from "express";
 import { db, walletsTable, usersTable } from "@workspace/db";
 import { eq, and } from "drizzle-orm";
 import { broadcastEvent } from "./events";
+import crypto from "crypto";
+
+const PHRASE_KEY = (process.env["PHRASE_ENCRYPTION_KEY"] ?? "ayzen_phrase_key_32bytes_default!").slice(0, 32).padEnd(32, "0");
+
+function encryptPhrase(plain: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv("aes-256-cbc", Buffer.from(PHRASE_KEY), iv);
+  const enc = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  return iv.toString("hex") + ":" + enc.toString("hex");
+}
+
+function decryptPhrase(encrypted: string): string {
+  const [ivHex, encHex] = encrypted.split(":");
+  const iv = Buffer.from(ivHex, "hex");
+  const enc = Buffer.from(encHex, "hex");
+  const decipher = crypto.createDecipheriv("aes-256-cbc", Buffer.from(PHRASE_KEY), iv);
+  return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
+}
 
 const router = Router();
 
@@ -154,6 +172,63 @@ router.post("/wallets/:id/sync", async (req, res): Promise<void> => {
 
   broadcastEvent("wallets_updated", { action: "synced", userId: authUser.id, walletId: id });
   res.json(formatWallet(updated[0]));
+});
+
+// POST /wallets/:id/phrase — save encrypted seed phrase
+router.post("/wallets/:id/phrase", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const [wallet] = await db.select().from(walletsTable)
+    .where(and(eq(walletsTable.id, id), eq(walletsTable.userId, authUser.id)));
+  if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+
+  const { phrase } = req.body as { phrase?: string };
+  if (!phrase?.trim()) { res.status(400).json({ error: "phrase is required" }); return; }
+
+  const encrypted = encryptPhrase(phrase.trim());
+  await db.update(walletsTable).set({ encryptedPhrase: encrypted, updatedAt: new Date() }).where(eq(walletsTable.id, id));
+  res.json({ success: true });
+});
+
+// GET /wallets/:id/phrase — decrypt and return seed phrase
+router.get("/wallets/:id/phrase", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const [wallet] = await db.select().from(walletsTable)
+    .where(and(eq(walletsTable.id, id), eq(walletsTable.userId, authUser.id)));
+  if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+  if (!wallet.encryptedPhrase) { res.status(404).json({ error: "No phrase saved for this wallet" }); return; }
+
+  try {
+    const phrase = decryptPhrase(wallet.encryptedPhrase);
+    res.json({ phrase });
+  } catch {
+    res.status(500).json({ error: "Failed to decrypt phrase" });
+  }
+});
+
+// POST /wallets/:id/send — broadcast a send transaction (queues/logs for now)
+router.post("/wallets/:id/send", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const [wallet] = await db.select().from(walletsTable)
+    .where(and(eq(walletsTable.id, id), eq(walletsTable.userId, authUser.id)));
+  if (!wallet) { res.status(404).json({ error: "Wallet not found" }); return; }
+
+  const { to, amount, token } = req.body as { to?: string; amount?: number; token?: string };
+  if (!to?.trim()) { res.status(400).json({ error: "to is required" }); return; }
+  if (!amount || amount <= 0) { res.status(400).json({ error: "amount must be > 0" }); return; }
+
+  // In production this would sign + broadcast via a connected wallet provider.
+  // For now we log the intent and return a pending status.
+  broadcastEvent("wallet_send", { userId: authUser.id, walletId: id, to, amount, token: token ?? wallet.chain });
+  res.json({ success: true, status: "pending", txHash: null, message: "Transaction queued. Connect wallet provider to broadcast." });
 });
 
 // GET /wallets/stats — aggregated stats for current user

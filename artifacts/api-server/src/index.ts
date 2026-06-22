@@ -21,6 +21,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const MIGRATIONS = [
+  "CREATE TABLE IF NOT EXISTS subscriptions (id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL UNIQUE, plan TEXT NOT NULL DEFAULT 'free', status TEXT NOT NULL DEFAULT 'active', coingate_order_id TEXT, coingate_payment_url TEXT, expires_at TIMESTAMP, cancelled_at TIMESTAMP, is_lifetime BOOLEAN NOT NULL DEFAULT FALSE, created_at TIMESTAMP NOT NULL DEFAULT NOW(), updated_at TIMESTAMP NOT NULL DEFAULT NOW())",
+  "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS other_accounts TEXT",
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS xp_name TEXT",
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS email_recovery TEXT",
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS email_recovery_password TEXT",
@@ -39,6 +41,7 @@ const MIGRATIONS = [
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS telegram_2fa TEXT",
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS telegram_linked_email TEXT",
   "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS telegram_linked_email_password TEXT",
+  "ALTER TABLE wallets ADD COLUMN IF NOT EXISTS encrypted_phrase TEXT",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

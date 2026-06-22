@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Wallet, Plus, Trash2, RefreshCw, Star, Copy, Check,
   ChevronDown, ChevronUp, ExternalLink, Shield, AlertCircle, Loader2,
+  Key, Send, Eye, EyeOff, ArrowUpRight, X, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,6 +28,7 @@ interface WalletEntry {
   isPrimary: boolean;
   lastSyncedAt: string | null;
   notes: string | null;
+  encryptedPhrase?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -77,6 +79,294 @@ function explorerUrl(address: string, chain: string): string {
   return map[chain] ?? `https://etherscan.io/address/${address}`;
 }
 
+// ─── Phrase Modal ─────────────────────────────────────────────────────────────
+function PhraseModal({ wallet, token, onClose }: { wallet: WalletEntry; token: string; onClose: () => void }) {
+  const { toast } = useToast();
+  const [phrase, setPhrase] = useState("");
+  const [showPhrase, setShowPhrase] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [hasSaved, setHasSaved] = useState(!!wallet.encryptedPhrase);
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  const handleSave = async () => {
+    if (!phrase.trim()) { toast({ variant: "destructive", title: "Enter a seed phrase or private key" }); return; }
+    const words = phrase.trim().split(/\s+/);
+    if (words.length !== 12 && words.length !== 24 && !phrase.trim().startsWith("0x")) {
+      toast({ variant: "destructive", title: "Invalid phrase", description: "Expected 12/24 words or a 0x private key" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/wallets/${wallet.id}/phrase`, {
+        method: "POST", headers, body: JSON.stringify({ phrase: phrase.trim() }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast({ title: "🔒 Phrase encrypted & saved" });
+        setHasSaved(true);
+        setPhrase("");
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Failed to save" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setLoading(false);
+  };
+
+  const handleReveal = async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/wallets/${wallet.id}/phrase`, { headers: { Authorization: `Bearer ${token}` } });
+      const d = await r.json();
+      if (r.ok) {
+        setPhrase(d.phrase);
+        setShowPhrase(true);
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Failed to decrypt" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-primary/20 rounded-xl w-full max-w-md mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-card-border">
+          <div className="flex items-center gap-2">
+            <Key className="w-4 h-4 text-primary" />
+            <span className="font-mono font-bold text-sm">Seed Phrase Vault</span>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-5 space-y-4">
+          <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <p className="font-mono text-[10px] text-amber-300/80 leading-relaxed">
+              Phrase is encrypted server-side with AES-256. Never share with anyone. AYZEN staff will never ask for your phrase.
+            </p>
+          </div>
+
+          <div className="bg-background border border-card-border rounded-md px-3 py-2.5">
+            <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">Wallet</div>
+            <div className="font-mono text-xs font-bold text-foreground">{wallet.label}</div>
+            <div className="font-mono text-[10px] text-muted-foreground">{shortenAddr(wallet.address)} · {wallet.chain}</div>
+          </div>
+
+          {hasSaved ? (
+            <div className="space-y-3">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-3 text-center">
+                <div className="font-mono text-xs text-primary mb-1">🔒 Phrase saved & encrypted</div>
+                <div className="font-mono text-[10px] text-muted-foreground">Encrypted with AES-256-CBC</div>
+              </div>
+              {showPhrase && phrase ? (
+                <div className="bg-red-900/10 border border-red-500/20 rounded-md p-3">
+                  <div className="text-[9px] font-mono uppercase tracking-widest text-red-400 mb-2">⚠ Phrase (keep private)</div>
+                  <div className="font-mono text-xs text-foreground break-all leading-relaxed">{phrase}</div>
+                </div>
+              ) : (
+                <Button
+                  variant="outline"
+                  className="w-full font-mono text-xs gap-2 border-amber-500/20 text-amber-400 hover:bg-amber-500/10"
+                  onClick={handleReveal}
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                  Reveal Encrypted Phrase
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                className="w-full font-mono text-xs gap-2 border-primary/20 text-primary hover:bg-primary/10"
+                onClick={() => { setHasSaved(false); setPhrase(""); setShowPhrase(false); }}
+              >
+                <Key className="w-3.5 h-3.5" /> Update Phrase
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Seed Phrase / Private Key
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={phrase}
+                    onChange={e => setPhrase(e.target.value)}
+                    placeholder="word1 word2 word3 ... (12 or 24 words) or 0x private key"
+                    className="w-full bg-input border border-border rounded-md px-3 py-2.5 font-mono text-xs text-foreground placeholder-muted-foreground/40 resize-none h-20 focus:outline-none focus:ring-1 focus:ring-primary/50"
+                    style={{ filter: showPhrase ? "none" : "blur(3px)" }}
+                    onFocus={() => setShowPhrase(true)}
+                  />
+                  {!showPhrase && (
+                    <button
+                      className="absolute inset-0 flex items-center justify-center text-muted-foreground font-mono text-xs"
+                      onClick={() => setShowPhrase(true)}
+                    >
+                      <Eye className="w-4 h-4 mr-1" /> Click to reveal input
+                    </button>
+                  )}
+                </div>
+              </div>
+              <Button
+                onClick={handleSave}
+                disabled={loading || !phrase.trim()}
+                className="w-full font-mono text-xs gap-2"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+                Encrypt & Save Phrase
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Send Modal ────────────────────────────────────────────────────────────────
+function SendModal({ wallet, token, onClose }: { wallet: WalletEntry; token: string; onClose: () => void }) {
+  const { toast } = useToast();
+  const [form, setForm] = useState({ to: "", amount: "", token: wallet.chain });
+  const [sending, setSending] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  const handleSend = async () => {
+    if (!form.to.trim()) { toast({ variant: "destructive", title: "Enter recipient address" }); return; }
+    if (!form.amount || parseFloat(form.amount) <= 0) { toast({ variant: "destructive", title: "Enter a valid amount" }); return; }
+    setSending(true);
+    try {
+      const r = await fetch(`${BASE}/api/wallets/${wallet.id}/send`, {
+        method: "POST", headers,
+        body: JSON.stringify({ to: form.to.trim(), amount: parseFloat(form.amount), token: form.token }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        setTxHash(d.txHash ?? "pending");
+        toast({ title: "📤 Transaction broadcast", description: d.txHash ? `TX: ${d.txHash.slice(0, 16)}…` : "Queued" });
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Send failed" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setSending(false);
+  };
+
+  const info = chainInfo(wallet.chain);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-primary/20 rounded-xl w-full max-w-md mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-card-border">
+          <div className="flex items-center gap-2">
+            <Send className="w-4 h-4 text-primary" />
+            <span className="font-mono font-bold text-sm">Send Transaction</span>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-5 space-y-4">
+          {txHash ? (
+            <div className="text-center space-y-4 py-4">
+              <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
+                <ArrowUpRight className="w-6 h-6 text-primary" />
+              </div>
+              <div>
+                <div className="font-mono font-bold text-sm text-foreground">Transaction Broadcast</div>
+                <div className="font-mono text-xs text-muted-foreground mt-1">
+                  {form.amount} {form.token} → {shortenAddr(form.to)}
+                </div>
+              </div>
+              {txHash !== "pending" && (
+                <a
+                  href={`https://etherscan.io/tx/${txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                >
+                  <ExternalLink className="w-3 h-3" /> View on Explorer
+                </a>
+              )}
+              <Button onClick={onClose} className="w-full font-mono text-xs">Close</Button>
+            </div>
+          ) : (
+            <>
+              <div className="bg-background border border-card-border rounded-md px-3 py-2.5">
+                <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">From</div>
+                <div className="font-mono text-xs font-bold text-foreground">{wallet.label}</div>
+                <div className="font-mono text-[10px] text-muted-foreground">{shortenAddr(wallet.address)}</div>
+                {wallet.balanceUsd > 0 && (
+                  <div className="font-mono text-[10px] text-primary mt-0.5">
+                    Balance: {wallet.balance.toFixed(6)} {wallet.chain} (${wallet.balanceUsd.toFixed(2)})
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Recipient Address <span className="text-red-400">*</span>
+                </label>
+                <Input
+                  value={form.to}
+                  onChange={e => setForm(f => ({ ...f, to: e.target.value.trim() }))}
+                  placeholder={`${info.prefix}recipient...`}
+                  className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Amount <span className="text-red-400">*</span>
+                  </label>
+                  <Input
+                    type="number"
+                    value={form.amount}
+                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                    placeholder="0.0"
+                    min="0"
+                    step="any"
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Token</label>
+                  <Input
+                    value={form.token}
+                    onChange={e => setForm(f => ({ ...f, token: e.target.value.toUpperCase() }))}
+                    placeholder={wallet.chain}
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                  />
+                </div>
+              </div>
+
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3 flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="font-mono text-[10px] text-amber-300/80 leading-relaxed">
+                  This requires your wallet to be connected via WalletConnect or MetaMask extension in production. Transactions are signed client-side.
+                </p>
+              </div>
+
+              <Button
+                onClick={handleSend}
+                disabled={sending || !form.to.trim() || !form.amount}
+                className="w-full font-mono text-xs gap-2"
+              >
+                {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {sending ? "Broadcasting..." : `Send ${form.token || wallet.chain}`}
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 export default function UserWallets() {
   const { token } = useAuth();
   const { toast } = useToast();
@@ -87,12 +377,16 @@ export default function UserWallets() {
   const [deleting, setDeleting] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [phraseWallet, setPhraseWallet] = useState<WalletEntry | null>(null);
+  const [sendWallet, setSendWallet] = useState<WalletEntry | null>(null);
+  const [liveIndicator, setLiveIndicator] = useState(false);
 
   const [form, setForm] = useState({ address: "", chain: "ETH", label: "", notes: "" });
   const [adding, setAdding] = useState(false);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  const sseRef = useRef<EventSource | null>(null);
 
   const fetchWallets = useCallback(async () => {
     setLoading(true);
@@ -104,6 +398,26 @@ export default function UserWallets() {
   }, [token]);
 
   useEffect(() => { fetchWallets(); }, [fetchWallets]);
+
+  // Real-time SSE updates
+  useEffect(() => {
+    if (!token) return;
+    const url = `${BASE}/api/events?token=${encodeURIComponent(token)}`;
+    const es = new EventSource(url);
+    sseRef.current = es;
+
+    es.addEventListener("wallets_updated", () => {
+      setLiveIndicator(true);
+      setTimeout(() => setLiveIndicator(false), 2000);
+      fetchWallets();
+    });
+
+    es.onerror = () => {
+      es.close();
+    };
+
+    return () => { es.close(); };
+  }, [token, fetchWallets]);
 
   const copyAddr = (id: number, addr: string) => {
     navigator.clipboard.writeText(addr).then(() => {
@@ -176,12 +490,19 @@ export default function UserWallets() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
+      {phraseWallet && <PhraseModal wallet={phraseWallet} token={token ?? ""} onClose={() => setPhraseWallet(null)} />}
+      {sendWallet && <SendModal wallet={sendWallet} token={token ?? ""} onClose={() => setSendWallet(null)} />}
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
             <Wallet className="w-6 h-6 text-primary" /> My Wallets
+            {liveIndicator && (
+              <span className="flex items-center gap-1 text-[9px] font-mono text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5 animate-pulse">
+                <Zap className="w-2.5 h-2.5" /> LIVE
+              </span>
+            )}
           </h1>
           <p className="text-muted-foreground font-mono text-xs mt-1">
             {wallets.length} wallet{wallets.length !== 1 ? "s" : ""} · {chains.length} chain{chains.length !== 1 ? "s" : ""}
@@ -332,6 +653,11 @@ export default function UserWallets() {
                             ★ Primary
                           </Badge>
                         )}
+                        {wallet.encryptedPhrase && (
+                          <Badge className="font-mono text-[9px] uppercase px-1.5 py-0 bg-amber-500/10 text-amber-400 border-amber-500/20">
+                            🔒 Phrase
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5">
                         <span className="font-mono text-xs text-muted-foreground">{shortenAddr(wallet.address)}</span>
@@ -356,8 +682,15 @@ export default function UserWallets() {
                       )}
                     </div>
 
-                    {/* Actions */}
+                    {/* Quick actions */}
                     <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => setSendWallet(wallet)}
+                        className="w-7 h-7 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary/30 flex items-center justify-center transition-all"
+                        title="Send"
+                      >
+                        <Send className="w-3 h-3" />
+                      </button>
                       <button
                         onClick={() => handleSync(wallet.id)}
                         disabled={isSyncing}
@@ -423,6 +756,12 @@ export default function UserWallets() {
                         <RefreshCw className={cn("w-3 h-3", isSyncing && "animate-spin")} />
                         {isSyncing ? "Syncing..." : "Sync Now"}
                       </Button>
+                      <Button variant="outline" size="sm" onClick={() => setSendWallet(wallet)} className="font-mono text-[10px] gap-1.5 h-7 px-3 border-primary/20 text-primary hover:bg-primary/10">
+                        <Send className="w-3 h-3" /> Send
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setPhraseWallet(wallet)} className="font-mono text-[10px] gap-1.5 h-7 px-3 border-amber-500/20 text-amber-400 hover:bg-amber-500/10">
+                        <Key className="w-3 h-3" /> {wallet.encryptedPhrase ? "View Phrase" : "Save Phrase"}
+                      </Button>
                       <a href={explorerUrl(wallet.address, wallet.chain)} target="_blank" rel="noopener noreferrer">
                         <Button variant="outline" size="sm" className="font-mono text-[10px] gap-1.5 h-7 px-3">
                           <ExternalLink className="w-3 h-3" /> Explorer
@@ -447,12 +786,10 @@ export default function UserWallets() {
       )}
 
       {/* Security note */}
-      {wallets.length > 0 && (
-        <div className="flex items-start gap-2 text-[10px] font-mono text-muted-foreground/40">
-          <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-          <span>Only public addresses are stored. No private keys or seed phrases are ever requested.</span>
-        </div>
-      )}
+      <div className="flex items-start gap-2 text-[10px] font-mono text-muted-foreground/40">
+        <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+        <span>Public addresses are tracked for activity monitoring. Seed phrases are encrypted with AES-256-CBC before storage.</span>
+      </div>
     </div>
   );
 }

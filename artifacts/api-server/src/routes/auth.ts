@@ -38,7 +38,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
   const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
   if (existing.length > 0) { res.status(409).json({ error: "Email already registered" }); return; }
 
-  // Generate unique referral code
   let referralCode = generateReferralCode();
   let codeExists = true;
   while (codeExists) {
@@ -47,7 +46,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     else referralCode = generateReferralCode();
   }
 
-  // Resolve referrer if refCode provided
   let referredBy: number | null = null;
   let referrer: typeof usersTable.$inferSelect | null = null;
   if (refCode) {
@@ -62,7 +60,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     ...(referredBy ? { referredBy } : {}),
   }).returning();
 
-  // Create referral record
   if (referrer) {
     await db.insert(referralsTable).values({
       referrerId: referrer.id,
@@ -75,7 +72,6 @@ router.post("/auth/register", async (req, res): Promise<void> => {
 
   const token = generateToken(user.id, user.role);
 
-  // Send welcome email (fire and forget)
   import("../lib/email").then(({ sendWelcomeEmail }) => {
     sendWelcomeEmail(user.email, user.username).catch(() => {});
   }).catch(() => {});
@@ -93,6 +89,82 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   await db.update(usersTable).set({ lastActiveAt: new Date() }).where(eq(usersTable.id, user.id));
   const token = generateToken(user.id, user.role);
   res.json({ token, refreshToken: token, user: sanitizeUser(user) });
+});
+
+// Magic link — send via Supabase
+router.post("/auth/magic-link", async (req, res): Promise<void> => {
+  const { email } = req.body;
+  if (!email) { res.status(400).json({ error: "email is required" }); return; }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseKey) {
+    res.status(503).json({ error: "Magic link not configured" }); return;
+  }
+
+  try {
+    const resp = await fetch(`${supabaseUrl}/auth/v1/otp`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({ email, create_user: true }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json() as any;
+      res.status(400).json({ error: err.msg ?? "Failed to send magic link" }); return;
+    }
+    res.json({ message: "Magic link sent to your email" });
+  } catch {
+    res.status(500).json({ error: "Failed to send magic link" });
+  }
+});
+
+// Magic link verify — exchange Supabase token for AYZEN session
+router.post("/auth/magic-link/verify", async (req, res): Promise<void> => {
+  const { access_token, email } = req.body;
+  if (!access_token || !email) { res.status(400).json({ error: "access_token and email are required" }); return; }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !supabaseServiceKey) {
+    res.status(503).json({ error: "Auth not configured" }); return;
+  }
+
+  try {
+    // Verify the access token with Supabase
+    const resp = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        apikey: supabaseServiceKey,
+      },
+    });
+    if (!resp.ok) { res.status(401).json({ error: "Invalid token" }); return; }
+    const supaUser = await resp.json() as any;
+    const userEmail = supaUser.email ?? email;
+
+    // Find or create AYZEN user
+    let [user] = await db.select().from(usersTable).where(eq(usersTable.email, userEmail));
+    if (!user) {
+      const username = userEmail.split("@")[0].replace(/[^a-z0-9_]/gi, "_").toLowerCase().slice(0, 20) + "_" + crypto.randomBytes(2).toString("hex");
+      const referralCode = "AYZN" + crypto.randomBytes(3).toString("hex").toUpperCase();
+      [user] = await db.insert(usersTable).values({
+        username, email: userEmail,
+        passwordHash: hashPassword(crypto.randomBytes(16).toString("hex")),
+        role: "user", status: "active", emailVerified: true, twoFaEnabled: false,
+        referralCode,
+      }).returning();
+    } else {
+      await db.update(usersTable).set({ lastActiveAt: new Date(), emailVerified: true }).where(eq(usersTable.id, user.id));
+    }
+
+    const token = generateToken(user.id, user.role);
+    res.json({ token, refreshToken: token, user: sanitizeUser(user) });
+  } catch (err: any) {
+    res.status(500).json({ error: "Verification failed", detail: err?.message });
+  }
 });
 
 // Firebase OAuth sync — called by frontend after Firebase sign-in

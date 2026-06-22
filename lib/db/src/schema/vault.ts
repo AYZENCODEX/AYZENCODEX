@@ -45,6 +45,7 @@ export const vaultEntriesTable = pgTable("vault_entries", {
   walletAddresses: text("wallet_addresses"),
   backupCodes: text("backup_codes"),
   notes: text("notes"),
+  otherAccounts: text("other_accounts"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

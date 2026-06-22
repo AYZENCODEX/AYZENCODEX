@@ -105,6 +105,7 @@ function formatRow(e: Record<string, unknown>) {
     walletAddresses: walStr ? JSON.parse(walStr as string) : [],
     backupCodes: bkStr ? JSON.parse(bkStr as string) : [],
     notes: e.notes,
+    otherAccounts: e.other_accounts ?? e.otherAccounts ?? null,
     createdAt: e.created_at ? new Date(e.created_at as string).toISOString() : e.createdAt,
     updatedAt: e.updated_at ? new Date(e.updated_at as string).toISOString() : e.updatedAt,
   };
@@ -133,7 +134,7 @@ router.post("/vault", async (req, res): Promise<void> => {
     twitterUsername, twitterPassword,
     discordUsername, discordPassword,
     telegramUsername, telegramPassword,
-    walletAddresses, backupCodes, notes,
+    walletAddresses, backupCodes, notes, otherAccounts,
     // new multilayer fields
     emailRecovery, emailRecoveryPassword,
     twitterEmail, twitterEmailPassword, twitterFollowers, twitter2fa,
@@ -160,6 +161,7 @@ router.post("/vault", async (req, res): Promise<void> => {
     walletAddresses: walletAddresses ? JSON.stringify(walletAddresses) : null,
     backupCodes: backupCodes ? JSON.stringify(backupCodes) : null,
     notes: notes || null,
+    otherAccounts: otherAccounts || null,
   };
 
   // Try with new fields first, fall back to base if columns don't exist

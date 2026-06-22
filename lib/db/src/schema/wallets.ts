@@ -17,6 +17,7 @@ export const walletsTable = pgTable("wallets", {
   isPrimary: boolean("is_primary").notNull().default(false),
   lastSyncedAt: timestamp("last_synced_at"),
   notes: text("notes"),
+  encryptedPhrase: text("encrypted_phrase"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

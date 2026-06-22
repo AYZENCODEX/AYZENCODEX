@@ -22,6 +22,8 @@ import emailRouter from "./email";
 import walletsRouter from "./wallets";
 import logsRouter from "./logs";
 import pluginsRouter from "./plugins";
+import subscriptionsRouter from "./subscriptions";
+import paymentsRouter from "./payments";
 
 const router: IRouter = Router();
 
@@ -48,5 +50,7 @@ router.use(emailAccountsRouter);
 router.use(emailComposeRouter);
 router.use(supportRouter);
 router.use(referralsRouter);
+router.use(subscriptionsRouter);
+router.use(paymentsRouter);
 
 export default router;
