@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   Wallet, Plus, Trash2, RefreshCw, Star, Copy, Check,
   ChevronDown, ChevronUp, ExternalLink, Shield, AlertCircle, Loader2,
-  Key, Send, Eye, EyeOff, ArrowUpRight, X, Zap,
+  Key, Send, Eye, EyeOff, ArrowUpRight, X, Zap, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useWalletConnect } from "@/hooks/use-wallet-connect";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -228,15 +229,43 @@ function PhraseModal({ wallet, token, onClose }: { wallet: WalletEntry; token: s
 // ─── Send Modal ────────────────────────────────────────────────────────────────
 function SendModal({ wallet, token, onClose }: { wallet: WalletEntry; token: string; onClose: () => void }) {
   const { toast } = useToast();
+  const { state: wc, connect, sendTransaction, hasMetaMask } = useWalletConnect();
   const [form, setForm] = useState({ to: "", amount: "", token: wallet.chain });
   const [sending, setSending] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
 
+  const handleConnect = async () => {
+    const addr = await connect();
+    if (!addr) toast({ variant: "destructive", title: wc.error ?? "Wallet connection failed" });
+  };
+
   const handleSend = async () => {
     if (!form.to.trim()) { toast({ variant: "destructive", title: "Enter recipient address" }); return; }
     if (!form.amount || parseFloat(form.amount) <= 0) { toast({ variant: "destructive", title: "Enter a valid amount" }); return; }
     setSending(true);
+
+    // If wallet is connected via MetaMask, sign on-chain
+    if (wc.isConnected && wc.address) {
+      const hash = await sendTransaction(form.to.trim(), form.amount, wc.address);
+      if (hash) {
+        setTxHash(hash);
+        // Log to backend
+        await fetch(`${BASE}/api/wallets/${wallet.id}/send`, {
+          method: "POST", headers,
+          body: JSON.stringify({ to: form.to.trim(), amount: parseFloat(form.amount), token: form.token, txHash: hash }),
+        }).catch(() => {});
+        toast({ title: "✅ Transaction sent!", description: `TX: ${hash.slice(0, 20)}…` });
+        setSending(false);
+        return;
+      } else {
+        toast({ variant: "destructive", title: "Transaction rejected or failed" });
+        setSending(false);
+        return;
+      }
+    }
+
+    // Fallback: log intent to backend
     try {
       const r = await fetch(`${BASE}/api/wallets/${wallet.id}/send`, {
         method: "POST", headers,
@@ -244,8 +273,8 @@ function SendModal({ wallet, token, onClose }: { wallet: WalletEntry; token: str
       });
       const d = await r.json();
       if (r.ok) {
-        setTxHash(d.txHash ?? "pending");
-        toast({ title: "📤 Transaction broadcast", description: d.txHash ? `TX: ${d.txHash.slice(0, 16)}…` : "Queued" });
+        setTxHash("pending");
+        toast({ title: "📤 Transaction queued", description: "Connect MetaMask to broadcast on-chain." });
       } else {
         toast({ variant: "destructive", title: d.error ?? "Send failed" });
       }
@@ -269,94 +298,98 @@ function SendModal({ wallet, token, onClose }: { wallet: WalletEntry; token: str
         </div>
 
         <div className="px-5 py-5 space-y-4">
-          {txHash ? (
+          {txHash && txHash !== "pending" ? (
             <div className="text-center space-y-4 py-4">
-              <div className="w-14 h-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
-                <ArrowUpRight className="w-6 h-6 text-primary" />
+              <div className="w-14 h-14 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto">
+                <Check className="w-6 h-6 text-emerald-400" />
               </div>
               <div>
-                <div className="font-mono font-bold text-sm text-foreground">Transaction Broadcast</div>
+                <div className="font-mono font-bold text-sm text-foreground">Transaction Sent!</div>
                 <div className="font-mono text-xs text-muted-foreground mt-1">
                   {form.amount} {form.token} → {shortenAddr(form.to)}
                 </div>
               </div>
-              {txHash !== "pending" && (
-                <a
-                  href={`https://etherscan.io/tx/${txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
-                >
-                  <ExternalLink className="w-3 h-3" /> View on Explorer
-                </a>
-              )}
+              <a href={`${explorerUrl(form.to, wallet.chain).replace(/address.*/, `tx/${txHash}`)}`} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline">
+                <ExternalLink className="w-3 h-3" /> View on Explorer
+              </a>
               <Button onClick={onClose} className="w-full font-mono text-xs">Close</Button>
             </div>
           ) : (
             <>
+              {/* Wallet connect strip */}
+              <div className={cn(
+                "rounded-lg border px-3 py-2.5 flex items-center justify-between",
+                wc.isConnected ? "border-emerald-500/20 bg-emerald-500/5" : "border-border bg-background"
+              )}>
+                <div>
+                  <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-0.5">
+                    {wc.isConnected ? "Connected Wallet" : "Sign with Wallet"}
+                  </div>
+                  <div className="font-mono text-xs text-foreground">
+                    {wc.isConnected ? shortenAddr(wc.address ?? "") : hasMetaMask ? "MetaMask detected" : "No wallet detected"}
+                  </div>
+                  {wc.chainId && <div className="font-mono text-[9px] text-muted-foreground">Chain ID: {wc.chainId}</div>}
+                </div>
+                {!wc.isConnected ? (
+                  <Button size="sm" onClick={handleConnect} disabled={wc.isConnecting || !hasMetaMask}
+                    className="font-mono text-[10px] gap-1.5 h-7 px-3">
+                    {wc.isConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link2 className="w-3 h-3" />}
+                    {hasMetaMask ? "Connect" : "Install MetaMask"}
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-1 text-emerald-400">
+                    <Check className="w-3.5 h-3.5" />
+                    <span className="font-mono text-[10px]">Ready</span>
+                  </div>
+                )}
+              </div>
+
               <div className="bg-background border border-card-border rounded-md px-3 py-2.5">
-                <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">From</div>
+                <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">From Wallet</div>
                 <div className="font-mono text-xs font-bold text-foreground">{wallet.label}</div>
                 <div className="font-mono text-[10px] text-muted-foreground">{shortenAddr(wallet.address)}</div>
                 {wallet.balanceUsd > 0 && (
                   <div className="font-mono text-[10px] text-primary mt-0.5">
-                    Balance: {wallet.balance.toFixed(6)} {wallet.chain} (${wallet.balanceUsd.toFixed(2)})
+                    {wallet.balance.toFixed(6)} {wallet.chain} (${wallet.balanceUsd.toFixed(2)})
                   </div>
                 )}
               </div>
 
               <div className="space-y-1.5">
                 <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  Recipient Address <span className="text-red-400">*</span>
+                  Recipient <span className="text-red-400">*</span>
                 </label>
-                <Input
-                  value={form.to}
-                  onChange={e => setForm(f => ({ ...f, to: e.target.value.trim() }))}
-                  placeholder={`${info.prefix}recipient...`}
-                  className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
-                />
+                <Input value={form.to} onChange={e => setForm(f => ({ ...f, to: e.target.value.trim() }))}
+                  placeholder={`${info.prefix}address...`}
+                  className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Amount <span className="text-red-400">*</span>
-                  </label>
-                  <Input
-                    type="number"
-                    value={form.amount}
-                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
-                    placeholder="0.0"
-                    min="0"
-                    step="any"
-                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
-                  />
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Amount <span className="text-red-400">*</span></label>
+                  <Input type="number" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                    placeholder="0.0" min="0" step="any"
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Token</label>
-                  <Input
-                    value={form.token}
-                    onChange={e => setForm(f => ({ ...f, token: e.target.value.toUpperCase() }))}
+                  <Input value={form.token} onChange={e => setForm(f => ({ ...f, token: e.target.value.toUpperCase() }))}
                     placeholder={wallet.chain}
-                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
-                  />
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50" />
                 </div>
               </div>
 
-              <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3 flex items-start gap-2">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="font-mono text-[10px] text-amber-300/80 leading-relaxed">
-                  This requires your wallet to be connected via WalletConnect or MetaMask extension in production. Transactions are signed client-side.
-                </p>
-              </div>
+              {!wc.isConnected && (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-3 py-2.5 flex items-start gap-2">
+                  <AlertCircle className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <p className="font-mono text-[10px] text-amber-300/80">Connect MetaMask above to sign & broadcast on-chain. Otherwise the transaction will be queued.</p>
+                </div>
+              )}
 
-              <Button
-                onClick={handleSend}
-                disabled={sending || !form.to.trim() || !form.amount}
-                className="w-full font-mono text-xs gap-2"
-              >
+              <Button onClick={handleSend} disabled={sending || !form.to.trim() || !form.amount} className="w-full font-mono text-xs gap-2">
                 {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                {sending ? "Broadcasting..." : `Send ${form.token || wallet.chain}`}
+                {sending ? "Broadcasting..." : wc.isConnected ? `Sign & Send ${form.token || wallet.chain}` : `Queue Send`}
               </Button>
             </>
           )}

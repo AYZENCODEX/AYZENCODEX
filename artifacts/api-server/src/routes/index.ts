@@ -24,6 +24,7 @@ import logsRouter from "./logs";
 import pluginsRouter from "./plugins";
 import subscriptionsRouter from "./subscriptions";
 import paymentsRouter from "./payments";
+import creditsRouter from "./credits";
 
 const router: IRouter = Router();
 
@@ -52,5 +53,6 @@ router.use(supportRouter);
 router.use(referralsRouter);
 router.use(subscriptionsRouter);
 router.use(paymentsRouter);
+router.use(creditsRouter);
 
 export default router;

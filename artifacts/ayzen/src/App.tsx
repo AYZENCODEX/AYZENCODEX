@@ -41,6 +41,8 @@ import AdminReferrals from "@/pages/admin/referrals";
 import UserSettings from "@/pages/user/settings";
 import UserWallets from "@/pages/user/wallets";
 import SubscriptionPage from "@/pages/user/subscription";
+import CreditsPage from "@/pages/user/credits";
+import AdminCreditsPage from "@/pages/admin/credits";
 
 import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
@@ -109,6 +111,8 @@ function Router() {
       <Route path="/settings">{() => <ProtectedRoute component={UserSettings} />}</Route>
       <Route path="/wallets">{() => <ProtectedRoute component={UserWallets} />}</Route>
       <Route path="/subscription">{() => <ProtectedRoute component={SubscriptionPage} />}</Route>
+      <Route path="/credits">{() => <ProtectedRoute component={CreditsPage} />}</Route>
+      <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
 
       <Route component={NotFound} />
     </Switch>

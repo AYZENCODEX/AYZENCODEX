@@ -6,8 +6,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
   Crown, Zap, Shield, Check, Loader2, ExternalLink,
-  RefreshCw, Star, Sparkles, Lock, Unlock,
+  RefreshCw, Star, Sparkles, Lock, Unlock, Coins, ArrowRightLeft,
 } from "lucide-react";
+import { Link } from "wouter";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -40,6 +41,38 @@ const PLAN_BG: Record<string, string> = {
   pro: "bg-primary/5",
   enterprise: "bg-amber-400/5",
 };
+
+function AznBuyButton({ plan, aznCost, isActive, token, onSuccess, btnClass }: {
+  plan: string; aznCost: number; isActive: boolean; token: string; onSuccess: () => void; btnClass: string;
+}) {
+  const { toast } = useToast();
+  const [buying, setBuying] = useState(false);
+  const handleBuy = async () => {
+    setBuying(true);
+    try {
+      const r = await fetch(`${BASE}/api/credits/buy-subscription`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ plan }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast({ title: `✅ ${plan.charAt(0).toUpperCase() + plan.slice(1)} activated!`, description: `Spent ${aznCost} AZN. Expires ${new Date(d.expiresAt).toLocaleDateString()}.` });
+        onSuccess();
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Purchase failed" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setBuying(false);
+  };
+  return (
+    <Button size="sm" disabled={isActive || buying} onClick={handleBuy}
+      className={cn("w-full font-mono text-[10px] gap-1.5 h-8", btnClass)}>
+      {buying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Coins className="w-3 h-3" />}
+      {isActive ? "Active" : `Buy — ${aznCost} AZN`}
+    </Button>
+  );
+}
 
 export default function SubscriptionPage() {
   const { token } = useAuth();
@@ -292,6 +325,42 @@ export default function SubscriptionPage() {
           })}
         </div>
       )}
+
+      {/* AZN Token Payment */}
+      <div className="border border-amber-400/20 rounded-xl overflow-hidden bg-amber-400/5">
+        <div className="px-5 py-4 border-b border-amber-400/15 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Coins className="w-4 h-4 text-amber-400" />
+            <span className="font-mono font-bold text-sm text-amber-400">Pay with AZN Tokens</span>
+          </div>
+          <Link href="/credits">
+            <Button variant="outline" size="sm" className="font-mono text-[10px] gap-1.5 h-7 px-3 border-amber-400/20 text-amber-400 hover:bg-amber-400/10">
+              <ArrowRightLeft className="w-3 h-3" /> Get AZN
+            </Button>
+          </Link>
+        </div>
+        <div className="px-5 py-4">
+          <p className="font-mono text-[11px] text-muted-foreground mb-4">
+            Use AZN tokens to pay for subscriptions. Buy credits → swap to AZN → pay here.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { plan: "pro", label: "Pro Plan", aznCost: 200, color: "border-primary/30 text-primary", btnClass: "" },
+              { plan: "enterprise", label: "Enterprise Plan", aznCost: 1000, color: "border-amber-400/30 text-amber-400", btnClass: "bg-amber-500 hover:bg-amber-500/90 text-black border-0" },
+            ].map(({ plan, label, aznCost, color, btnClass }) => {
+              const isActive = currentPlan === plan && currentSub?.status === "active";
+              return (
+                <div key={plan} className={cn("bg-card border rounded-lg px-4 py-4 flex flex-col gap-3", color)}>
+                  <div className="font-mono font-bold text-sm">{label}</div>
+                  <div className="font-mono text-2xl font-bold text-foreground">{aznCost}<span className="text-xs text-muted-foreground ml-1">AZN</span></div>
+                  <div className="font-mono text-[10px] text-muted-foreground">per month</div>
+                  <AznBuyButton plan={plan} aznCost={aznCost} isActive={isActive} token={token ?? ""} onSuccess={fetchData} btnClass={btnClass} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
 
       <div className="border border-card-border rounded-xl p-4 bg-card/50">
         <div className="font-mono text-xs font-bold text-muted-foreground/60 uppercase tracking-widest mb-3">Plan Comparison</div>

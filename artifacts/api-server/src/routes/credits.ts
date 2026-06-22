@@ -1,0 +1,231 @@
+import { Router } from "express";
+import { db, creditsTable, creditTransactionsTable, subscriptionsTable } from "@workspace/db";
+import { eq, desc, and } from "drizzle-orm";
+import { broadcastEvent } from "./events";
+
+const router = Router();
+
+function getAuthUser(req: any): { id: number; role: string } | null {
+  const auth = req.headers.authorization as string | undefined;
+  if (!auth) return null;
+  try {
+    const p = JSON.parse(Buffer.from(auth.replace("Bearer ", ""), "base64").toString());
+    return { id: p.userId, role: p.role ?? "user" };
+  } catch { return null; }
+}
+
+// Credit packages
+export const CREDIT_PACKAGES = [
+  { id: "starter",    label: "Starter",    credits: 1_000,  priceBDT: 100,   priceUSDT: 1,    bonus: 0  },
+  { id: "basic",      label: "Basic",      credits: 5_500,  priceBDT: 450,   priceUSDT: 4.5,  bonus: 10 },
+  { id: "pro",        label: "Pro Pack",   credits: 18_000, priceBDT: 1_200, priceUSDT: 12,   bonus: 20 },
+  { id: "mega",       label: "Mega",       credits: 65_000, priceBDT: 3_500, priceUSDT: 35,   bonus: 30 },
+];
+
+// AZN rates
+const CREDITS_PER_AZN = 100;
+const AZN_FOR_PRO = 200;
+const AZN_FOR_ENTERPRISE = 1000;
+
+// Admin payment config (editable via env)
+const BKASH_NUMBER   = process.env["BKASH_NUMBER"]   ?? "01XXXXXXXXX";
+const NAGAD_NUMBER   = process.env["NAGAD_NUMBER"]   ?? "01XXXXXXXXX";
+const USDT_ADDRESS   = process.env["USDT_ADDRESS"]   ?? "TXxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
+const USDT_NETWORK   = process.env["USDT_NETWORK"]   ?? "TRC20";
+
+// ─── Helper: get or create credit row ─────────────────────────────────────────
+async function getOrCreateCredits(userId: number) {
+  const [row] = await db.select().from(creditsTable).where(eq(creditsTable.userId, userId));
+  if (row) return row;
+  const [created] = await db.insert(creditsTable).values({ userId }).returning();
+  return created;
+}
+
+// ─── GET /api/credits — my balance ────────────────────────────────────────────
+router.get("/credits", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const credits = await getOrCreateCredits(authUser.id);
+  const txs = await db.select().from(creditTransactionsTable)
+    .where(eq(creditTransactionsTable.userId, authUser.id))
+    .orderBy(desc(creditTransactionsTable.createdAt))
+    .limit(50);
+  res.json({ credits, transactions: txs, packages: CREDIT_PACKAGES, rates: { creditsPerAzn: CREDITS_PER_AZN, aznForPro: AZN_FOR_PRO, aznForEnterprise: AZN_FOR_ENTERPRISE }, paymentInfo: { bkash: BKASH_NUMBER, nagad: NAGAD_NUMBER, usdt: USDT_ADDRESS, usdtNetwork: USDT_NETWORK } });
+});
+
+// ─── POST /api/credits/purchase — submit payment proof ────────────────────────
+router.post("/credits/purchase", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { packageId, method, referenceId, senderNumber } = req.body as {
+    packageId?: string; method?: string; referenceId?: string; senderNumber?: string;
+  };
+
+  const pkg = CREDIT_PACKAGES.find(p => p.id === packageId);
+  if (!pkg) { res.status(400).json({ error: "Invalid package" }); return; }
+  if (!method || !["bkash", "nagad", "binance_usdt"].includes(method)) {
+    res.status(400).json({ error: "Invalid payment method" }); return;
+  }
+  if (!referenceId?.trim()) { res.status(400).json({ error: "Transaction ID / TX hash required" }); return; }
+
+  // Check for duplicate reference
+  const dup = await db.select({ id: creditTransactionsTable.id })
+    .from(creditTransactionsTable)
+    .where(and(
+      eq(creditTransactionsTable.referenceId, referenceId.trim()),
+      eq(creditTransactionsTable.method, method),
+    ));
+  if (dup.length > 0) { res.status(409).json({ error: "This transaction ID has already been submitted" }); return; }
+
+  const [tx] = await db.insert(creditTransactionsTable).values({
+    userId: authUser.id,
+    type: "purchase",
+    method,
+    credits: pkg.credits,
+    amountBDT: method !== "binance_usdt" ? pkg.priceBDT : null,
+    amountUSDT: method === "binance_usdt" ? pkg.priceUSDT : null,
+    referenceId: referenceId.trim(),
+    notes: senderNumber ? `Sender: ${senderNumber}` : `${pkg.label} package`,
+    status: "pending",
+  }).returning();
+
+  broadcastEvent("credit_purchase_submitted", { userId: authUser.id, txId: tx.id, method, credits: pkg.credits });
+  res.status(201).json({ success: true, transaction: tx, message: "Payment submitted. Credits will be added after verification (usually within 1-2 hours)." });
+});
+
+// ─── POST /api/credits/swap — credits → AZN tokens ────────────────────────────
+router.post("/credits/swap", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { credits: creditsToSwap } = req.body as { credits?: number };
+  if (!creditsToSwap || creditsToSwap < CREDITS_PER_AZN) {
+    res.status(400).json({ error: `Minimum swap is ${CREDITS_PER_AZN} credits (1 AZN)` }); return;
+  }
+  if (creditsToSwap % CREDITS_PER_AZN !== 0) {
+    res.status(400).json({ error: `Credits must be a multiple of ${CREDITS_PER_AZN}` }); return;
+  }
+
+  const creditRow = await getOrCreateCredits(authUser.id);
+  if (creditRow.balance < creditsToSwap) {
+    res.status(400).json({ error: `Insufficient credits. You have ${creditRow.balance} credits.` }); return;
+  }
+
+  const aznAmount = creditsToSwap / CREDITS_PER_AZN;
+
+  await db.update(creditsTable).set({
+    balance: creditRow.balance - creditsToSwap,
+    aznBalance: creditRow.aznBalance + aznAmount,
+    totalSpent: creditRow.totalSpent + creditsToSwap,
+    updatedAt: new Date(),
+  }).where(eq(creditsTable.userId, authUser.id));
+
+  const [tx] = await db.insert(creditTransactionsTable).values({
+    userId: authUser.id,
+    type: "swap_to_azn",
+    method: "system",
+    credits: -creditsToSwap,
+    aznAmount,
+    status: "approved",
+    notes: `Swapped ${creditsToSwap} credits → ${aznAmount} AZN`,
+    approvedAt: new Date(),
+  }).returning();
+
+  broadcastEvent("credits_updated", { userId: authUser.id });
+  res.json({ success: true, aznReceived: aznAmount, newCreditBalance: creditRow.balance - creditsToSwap, newAznBalance: creditRow.aznBalance + aznAmount, transaction: tx });
+});
+
+// ─── POST /api/credits/buy-subscription — AZN → subscription ──────────────────
+router.post("/credits/buy-subscription", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+
+  const { plan } = req.body as { plan?: string };
+  if (!plan || !["pro", "enterprise"].includes(plan)) {
+    res.status(400).json({ error: "Invalid plan. Choose pro or enterprise" }); return;
+  }
+
+  const aznCost = plan === "enterprise" ? AZN_FOR_ENTERPRISE : AZN_FOR_PRO;
+  const creditRow = await getOrCreateCredits(authUser.id);
+
+  if (creditRow.aznBalance < aznCost) {
+    res.status(400).json({ error: `Insufficient AZN. Need ${aznCost} AZN, you have ${creditRow.aznBalance.toFixed(2)} AZN.` }); return;
+  }
+
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+  // Upsert subscription
+  const existing = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.userId, authUser.id));
+  if (existing.length > 0) {
+    await db.update(subscriptionsTable).set({ plan, status: "active", expiresAt, updatedAt: new Date() }).where(eq(subscriptionsTable.userId, authUser.id));
+  } else {
+    await db.insert(subscriptionsTable).values({ userId: authUser.id, plan, status: "active", expiresAt });
+  }
+
+  // Deduct AZN
+  await db.update(creditsTable).set({
+    aznBalance: creditRow.aznBalance - aznCost,
+    updatedAt: new Date(),
+  }).where(eq(creditsTable.userId, authUser.id));
+
+  await db.insert(creditTransactionsTable).values({
+    userId: authUser.id,
+    type: "azn_subscription",
+    method: "system",
+    credits: 0,
+    aznAmount: -aznCost,
+    status: "approved",
+    notes: `Purchased ${plan} subscription for ${aznCost} AZN`,
+    approvedAt: new Date(),
+  });
+
+  broadcastEvent("subscription_updated", { userId: authUser.id, plan });
+  res.json({ success: true, plan, expiresAt, aznSpent: aznCost, newAznBalance: creditRow.aznBalance - aznCost });
+});
+
+// ─── ADMIN: GET /api/admin/credits — pending purchases ────────────────────────
+router.get("/admin/credits", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser || authUser.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const pending = await db.select().from(creditTransactionsTable)
+    .where(eq(creditTransactionsTable.status, "pending"))
+    .orderBy(desc(creditTransactionsTable.createdAt));
+  res.json(pending);
+});
+
+// ─── ADMIN: POST /api/admin/credits/:id/approve ────────────────────────────────
+router.post("/admin/credits/:id/approve", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser || authUser.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const [tx] = await db.select().from(creditTransactionsTable).where(eq(creditTransactionsTable.id, id));
+  if (!tx) { res.status(404).json({ error: "Transaction not found" }); return; }
+  if (tx.status !== "pending") { res.status(400).json({ error: "Transaction already processed" }); return; }
+
+  await db.update(creditTransactionsTable).set({ status: "approved", approvedAt: new Date(), adminNote: req.body.note ?? null, updatedAt: new Date() }).where(eq(creditTransactionsTable.id, id));
+
+  const creditRow = await getOrCreateCredits(tx.userId);
+  await db.update(creditsTable).set({
+    balance: creditRow.balance + (tx.credits ?? 0),
+    totalPurchased: creditRow.totalPurchased + (tx.credits ?? 0),
+    updatedAt: new Date(),
+  }).where(eq(creditsTable.userId, tx.userId));
+
+  broadcastEvent("credits_updated", { userId: tx.userId, credits: tx.credits });
+  res.json({ success: true });
+});
+
+// ─── ADMIN: POST /api/admin/credits/:id/reject ─────────────────────────────────
+router.post("/admin/credits/:id/reject", async (req, res): Promise<void> => {
+  const authUser = getAuthUser(req);
+  if (!authUser || authUser.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
+
+  const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  await db.update(creditTransactionsTable).set({ status: "rejected", adminNote: req.body.note ?? "Rejected by admin", updatedAt: new Date() }).where(eq(creditTransactionsTable.id, id));
+  res.json({ success: true });
+});
+
+export default router;
