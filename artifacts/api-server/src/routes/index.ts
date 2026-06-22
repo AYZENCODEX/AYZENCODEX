@@ -27,6 +27,8 @@ import paymentsRouter from "./payments";
 import creditsRouter from "./credits";
 import telemetryStreamRouter from "./telemetry-stream";
 import localAccountsRouter from "./local-accounts";
+import messagesRouter from "./messages";
+import aiActionsRouter from "./ai-actions";
 
 const router: IRouter = Router();
 
@@ -58,5 +60,7 @@ router.use(paymentsRouter);
 router.use(creditsRouter);
 router.use(telemetryStreamRouter);
 router.use(localAccountsRouter);
+router.use(messagesRouter);
+router.use(aiActionsRouter);
 
 export default router;

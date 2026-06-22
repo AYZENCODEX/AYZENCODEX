@@ -661,6 +661,7 @@ export default function AdminDeveloper() {
           <TabsTrigger value="ping" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <RefreshCw className="w-3 h-3 mr-1" /> Ping Test
           </TabsTrigger>
+          <TabsTrigger value="fn_telemetry" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Functions</TabsTrigger>
           <TabsTrigger value="errors" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Error Log</TabsTrigger>
         </TabsList>
 

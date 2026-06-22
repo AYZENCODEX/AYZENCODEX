@@ -19,11 +19,14 @@ function formatTask(t: any, projectName?: string | null, userStatus?: string | n
   return {
     ...t,
     createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : t.createdAt,
+    deadline: t.deadline instanceof Date ? t.deadline.toISOString() : (t.deadline ?? null),
     projectName: projectName ?? null,
     userStatus: userStatus ?? null,
     cost: t.cost ?? 0,
     profit: t.profit ?? 0,
     category: t.category ?? "Social",
+    taskCategory: t.taskCategory ?? t.task_category ?? t.category ?? "B1",
+    timeLimitMinutes: t.timeLimitMinutes ?? t.time_limit_minutes ?? null,
   };
 }
 
@@ -73,23 +76,26 @@ router.get("/tasks", async (req, res): Promise<void> => {
 });
 
 router.post("/tasks", async (req, res): Promise<void> => {
-  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category } = req.body;
+  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes } = req.body;
   if (!projectId || !name) { res.status(400).json({ error: "projectId and name are required" }); return; }
   try {
     const result = await db.execute(sql.raw(
-      `INSERT INTO tasks (project_id, name, description, reward_amount, verification_type, task_type, cost, profit, category)
+      `INSERT INTO tasks (project_id, name, description, reward_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes)
        VALUES (${Number(projectId)}, '${name.replace(/'/g, "''")}',
          ${description ? `'${description.replace(/'/g, "''")}'` : "NULL"},
          ${rewardAmount != null ? Number(rewardAmount) : "NULL"},
          '${(verificationType ?? "manual").replace(/'/g, "''")}',
          '${(taskType ?? "One-time").replace(/'/g, "''")}',
          ${Number(cost ?? 0)}, ${Number(profit ?? 0)},
-         '${(category ?? "Social").replace(/'/g, "''")}')
+         '${(category ?? "Social").replace(/'/g, "''")}',
+         '${(taskCategory ?? "B1").replace(/'/g, "''")}',
+         ${deadline ? `'${deadline}'` : "NULL"},
+         ${timeLimitMinutes ? Number(timeLimitMinutes) : "NULL"})
        RETURNING *`
     ));
     const task = result.rows[0] as any;
     broadcastEvent("tasks_updated", { action: "created", taskId: task.id });
-    res.status(201).json(formatTask({ ...task, projectId: task.project_id, completionCount: task.completion_count, rewardAmount: task.reward_amount, verificationType: task.verification_type, taskType: task.task_type, createdAt: task.created_at, category: task.category }));
+    res.status(201).json(formatTask({ ...task, projectId: task.project_id, completionCount: task.completion_count, rewardAmount: task.reward_amount, verificationType: task.verification_type, taskType: task.task_type, createdAt: task.created_at, category: task.category, taskCategory: task.task_category ?? task.category }));
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });
   }
@@ -105,14 +111,34 @@ router.get("/tasks/:id", async (req, res): Promise<void> => {
 
 router.patch("/tasks/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const allowedFields = ["name", "description", "rewardAmount", "verificationType", "taskType", "cost", "profit", "category"];
   const updates: Record<string, unknown> = {};
-  for (const f of ["name", "description", "rewardAmount", "verificationType", "taskType", "cost", "profit"]) {
+  for (const f of allowedFields) {
     if (req.body[f] !== undefined) updates[f] = req.body[f];
   }
-  const [task] = await db.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
-  if (!task) { res.status(404).json({ error: "Task not found" }); return; }
-  broadcastEvent("tasks_updated", { action: "updated", taskId: id });
-  res.json(formatTask(task));
+  // Handle extra fields via raw SQL for columns not in Drizzle schema yet
+  const rawSets: string[] = [];
+  if (req.body.taskCategory !== undefined) rawSets.push(`task_category = '${String(req.body.taskCategory).replace(/'/g, "''")}'`);
+  if (req.body.deadline !== undefined) rawSets.push(`deadline = ${req.body.deadline ? `'${req.body.deadline}'` : "NULL"}`);
+  if (req.body.timeLimitMinutes !== undefined) rawSets.push(`time_limit_minutes = ${req.body.timeLimitMinutes ? Number(req.body.timeLimitMinutes) : "NULL"}`);
+
+  try {
+    let task: any;
+    if (Object.keys(updates).length > 0) {
+      const [t] = await db.update(tasksTable).set(updates).where(eq(tasksTable.id, id)).returning();
+      task = t;
+    }
+    if (rawSets.length > 0) {
+      const result = await db.execute(sql.raw(`UPDATE tasks SET ${rawSets.join(", ")} WHERE id = ${id} RETURNING *`));
+      task = result.rows[0] ?? task;
+    }
+    if (!task) { res.status(404).json({ error: "Task not found" }); return; }
+    broadcastEvent("tasks_updated", { action: "updated", taskId: id });
+    const t = task as any;
+    res.json(formatTask({ ...t, projectId: t.project_id ?? t.projectId, completionCount: t.completion_count ?? t.completionCount, rewardAmount: t.reward_amount ?? t.rewardAmount, verificationType: t.verification_type ?? t.verificationType, taskType: t.task_type ?? t.taskType, createdAt: t.created_at ?? t.createdAt, category: t.category, taskCategory: t.task_category ?? t.taskCategory ?? t.category }));
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
 });
 
 router.delete("/tasks/:id", async (req, res): Promise<void> => {

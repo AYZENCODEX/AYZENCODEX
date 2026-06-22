@@ -1,11 +1,27 @@
-import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2, Bot, ChevronDown, Database, ChevronUp, Settings2 } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import {
+  MessageCircle, X, Send, Loader2, Bot, ChevronDown, Database, ChevronUp, Settings2,
+  Play, CheckCircle2, XCircle, Vault, ListTodo, DollarSign, KeyRound, FolderGit2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   model?: string;
+  action?: ParsedAction | null;
+  actionResult?: { success: boolean; message: string } | null;
+  executingAction?: boolean;
+}
+
+interface ParsedAction {
+  type: "create_vault" | "complete_task" | "get_password" | "add_roi" | "create_project";
+  params: Record<string, string>;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ className?: string }>;
+  endpoint: string;
+  method: "GET" | "POST";
 }
 
 const MODELS = [
@@ -20,9 +36,116 @@ const MODELS = [
 const QUICK_PROMPTS = [
   "Show my vault entities",
   "What projects am I in?",
-  "Best L2 airdrops right now?",
-  "How to avoid sybil detection?",
+  "Create a vault entry for Uniswap",
+  "What's my ROI?",
 ];
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+function parseActionBlock(content: string): ParsedAction | null {
+  const match = content.match(/ACTION:\s*(\w+)([\s\S]*?)(?:$)/m);
+  if (!match) return null;
+
+  const actionType = match[1].trim().toLowerCase() as ParsedAction["type"];
+  const lines = match[2].trim().split("\n");
+  const params: Record<string, string> = {};
+  for (const line of lines) {
+    const [key, ...rest] = line.split(":");
+    if (key && rest.length) params[key.trim().toLowerCase()] = rest.join(":").trim();
+  }
+
+  const actionConfigs: Record<string, Omit<ParsedAction, "type" | "params">> = {
+    create_vault: {
+      label: "Create Vault Entry",
+      description: `Create vault for "${params.project || params.projectname || "project"}"`,
+      icon: Vault,
+      endpoint: "/api/ai/actions/create-vault",
+      method: "POST",
+    },
+    complete_task: {
+      label: "Complete Task",
+      description: `Mark task #${params.task_id || params.taskid || "?"} as done`,
+      icon: ListTodo,
+      endpoint: "/api/ai/actions/complete-task",
+      method: "POST",
+    },
+    get_password: {
+      label: "Get Password",
+      description: `Retrieve ${params.field || "credentials"} for "${params.project || "project"}"`,
+      icon: KeyRound,
+      endpoint: "/api/ai/actions/get-password",
+      method: "GET",
+    },
+    add_roi: {
+      label: "Add ROI",
+      description: `Record $${params.amount || "?"} ROI`,
+      icon: DollarSign,
+      endpoint: "/api/ai/actions/add-roi",
+      method: "POST",
+    },
+    create_project: {
+      label: "Create Project",
+      description: `Create project "${params.name || "?"}"`,
+      icon: FolderGit2,
+      endpoint: "/api/ai/actions/create-project",
+      method: "POST",
+    },
+  };
+
+  const config = actionConfigs[actionType];
+  if (!config) return null;
+  return { type: actionType, params, ...config };
+}
+
+function buildActionBody(action: ParsedAction): Record<string, unknown> {
+  switch (action.type) {
+    case "create_vault":
+      return {
+        projectName: action.params.project ?? action.params.projectname,
+        category: action.params.category ?? "Wallet",
+        email: action.params.email !== "skip" ? action.params.email : undefined,
+        twitterUsername: action.params.twitter !== "skip" ? action.params.twitter : undefined,
+        discordUsername: action.params.discord !== "skip" ? action.params.discord : undefined,
+        telegramUsername: action.params.telegram !== "skip" ? action.params.telegram : undefined,
+      };
+    case "complete_task":
+      return {
+        taskId: action.params.task_id ?? action.params.taskid,
+        notes: action.params.notes,
+      };
+    case "get_password":
+      return {}; // GET with query params
+    case "add_roi":
+      return {
+        amount: action.params.amount,
+        projectId: action.params.project_id ?? action.params.projectid,
+        notes: action.params.notes,
+      };
+    case "create_project":
+      return {
+        name: action.params.name,
+        description: action.params.description,
+        tier: action.params.tier ?? "1",
+      };
+    default:
+      return {};
+  }
+}
+
+function buildActionUrl(action: ParsedAction): string {
+  if (action.type === "get_password") {
+    const p = new URLSearchParams();
+    if (action.params.project) p.set("projectName", action.params.project);
+    if (action.params.field) p.set("field", action.params.field);
+    return `${BASE}${action.endpoint}?${p.toString()}`;
+  }
+  return `${BASE}${action.endpoint}`;
+}
+
+// Strip the ACTION block from display text
+function stripActionBlock(content: string): string {
+  return content.replace(/ACTION:\s*\w+[\s\S]*$/m, "").trim();
+}
 
 export function AiChat() {
   const [open, setOpen] = useState(false);
@@ -37,6 +160,37 @@ export function AiChat() {
     if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
 
+  const executeAction = useCallback(async (msgIndex: number, action: ParsedAction) => {
+    const token = localStorage.getItem("ayzen_token") ?? "";
+    setMessages(prev => prev.map((m, i) => i === msgIndex ? { ...m, executingAction: true } : m));
+
+    try {
+      const url = buildActionUrl(action);
+      const body = buildActionBody(action);
+      const res = await fetch(url, {
+        method: action.method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        ...(action.method === "POST" ? { body: JSON.stringify(body) } : {}),
+      });
+      const data = await res.json();
+      const success = res.ok && (data.success !== false);
+      const message = data.message || (success ? "Action completed successfully!" : data.error || "Action failed.");
+
+      setMessages(prev => prev.map((m, i) => i === msgIndex
+        ? { ...m, executingAction: false, actionResult: { success, message } }
+        : m
+      ));
+    } catch (err: any) {
+      setMessages(prev => prev.map((m, i) => i === msgIndex
+        ? { ...m, executingAction: false, actionResult: { success: false, message: `Error: ${err.message}` } }
+        : m
+      ));
+    }
+  }, []);
+
   const sendMessage = async (text?: string) => {
     const content = (text ?? input).trim();
     if (!content || loading) return;
@@ -48,17 +202,19 @@ export function AiChat() {
 
     try {
       const token = localStorage.getItem("ayzen_token") ?? "";
-      const res = await fetch("/api/ai/chat", {
+      const res = await fetch(`${BASE}/api/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ messages: newMsgs, model: selectedModel }),
+        body: JSON.stringify({ messages: newMsgs.map(m => ({ role: m.role, content: m.content })), model: selectedModel }),
       });
       const data = await res.json();
-      const reply: string = data.choices?.[0]?.message?.content ?? "Sorry, I couldn't get a response. Try again.";
+      const reply: string = data.choices?.[0]?.message?.content ?? data.error ?? "No response from AI.";
       const model: string = data._model ?? selectedModel;
-      setMessages((m) => [...m, { role: "assistant", content: reply, model }]);
+      const action = parseActionBlock(reply);
+
+      setMessages(m => [...m, { role: "assistant", content: reply, model, action }]);
     } catch {
-      setMessages((m) => [...m, { role: "assistant", content: "Connection error. Please try again." }]);
+      setMessages(m => [...m, { role: "assistant", content: "Connection error. Please try again." }]);
     }
     setLoading(false);
   };
@@ -70,7 +226,7 @@ export function AiChat() {
       {open && (
         <div
           className="bg-card border border-card-border rounded-xl shadow-2xl w-80 md:w-96 flex flex-col animate-scale-in overflow-hidden"
-          style={{ height: "520px" }}
+          style={{ height: "540px" }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-card-border shrink-0 bg-card">
@@ -85,7 +241,7 @@ export function AiChat() {
                 <span className="font-mono text-sm font-bold text-primary tracking-wider">AYZEN AI</span>
                 <div className="flex items-center gap-1">
                   <Database className="w-2.5 h-2.5 text-muted-foreground/40" />
-                  <span className="text-[9px] font-mono text-muted-foreground/50">DB-CONNECTED</span>
+                  <span className="text-[9px] font-mono text-muted-foreground/50">DB-CONNECTED · CAN ACT</span>
                 </div>
               </div>
             </div>
@@ -151,7 +307,7 @@ export function AiChat() {
                   </div>
                 </div>
                 <div className="text-xs font-mono text-muted-foreground text-center leading-relaxed">
-                  Ask me about your vault, projects,<br />or anything crypto airdrop related.
+                  Ask me anything — I can also<br /><span className="text-primary">create vault entries, complete tasks,</span><br />and get your passwords.
                 </div>
                 <div className="flex flex-col gap-1.5 w-full">
                   {QUICK_PROMPTS.map((q) => (
@@ -170,17 +326,55 @@ export function AiChat() {
                     <Bot className="w-3 h-3 text-primary" />
                   </div>
                 )}
-                <div className="max-w-[85%] flex flex-col gap-0.5">
+                <div className="max-w-[85%] flex flex-col gap-1">
                   <div className={cn(
                     "text-xs font-mono p-2.5 rounded-xl leading-relaxed whitespace-pre-wrap",
                     m.role === "user"
                       ? "bg-primary/15 text-foreground border border-primary/20 rounded-tr-sm"
                       : "bg-muted/60 text-foreground border border-border rounded-tl-sm"
                   )}>
-                    {m.content}
+                    {m.role === "assistant" && m.action ? stripActionBlock(m.content) : m.content}
                   </div>
                   {m.role === "assistant" && m.model && (
                     <span className="text-[9px] font-mono text-muted-foreground/30 ml-1">{m.model.split("/").pop()}</span>
+                  )}
+
+                  {/* Action Card */}
+                  {m.role === "assistant" && m.action && !m.actionResult && (
+                    <div className="border border-primary/30 bg-primary/5 rounded-lg p-2.5 space-y-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <m.action.icon className="w-3 h-3 text-primary" />
+                        <span className="font-mono text-[10px] font-bold text-primary uppercase">{m.action.label}</span>
+                      </div>
+                      <p className="font-mono text-[9px] text-muted-foreground">{m.action.description}</p>
+                      <button
+                        onClick={() => executeAction(i, m.action!)}
+                        disabled={m.executingAction}
+                        className="w-full flex items-center justify-center gap-1.5 px-2 py-1.5 bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary rounded text-[10px] font-mono uppercase transition-colors disabled:opacity-50"
+                      >
+                        {m.executingAction ? (
+                          <><Loader2 className="w-2.5 h-2.5 animate-spin" /> Executing...</>
+                        ) : (
+                          <><Play className="w-2.5 h-2.5" /> Execute Action</>
+                        )}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Action Result */}
+                  {m.role === "assistant" && m.actionResult && (
+                    <div className={cn(
+                      "flex items-start gap-1.5 p-2 rounded-lg border text-[10px] font-mono",
+                      m.actionResult.success
+                        ? "border-emerald-400/30 bg-emerald-400/5 text-emerald-400"
+                        : "border-red-400/30 bg-red-400/5 text-red-400"
+                    )}>
+                      {m.actionResult.success
+                        ? <CheckCircle2 className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                        : <XCircle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                      }
+                      <span className="leading-relaxed">{m.actionResult.message}</span>
+                    </div>
                   )}
                 </div>
               </div>
@@ -205,7 +399,7 @@ export function AiChat() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-              placeholder="Ask AYZEN AI…"
+              placeholder="Ask AYZEN AI… or request an action"
               className="flex-1 bg-input border border-border rounded-lg px-3 py-2 text-xs font-mono focus:outline-none focus:border-primary/60 transition-colors placeholder:text-muted-foreground"
               disabled={loading}
             />

@@ -7,7 +7,7 @@ import {
   Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
-  Bot, Send, Loader2, X, ChevronUp, Star, Coins,
+  Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -85,7 +85,7 @@ const USER_NAV: NavGroup[] = [
     label: "Social", icon: Trophy,
     items: [
       { href: "/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
-      { href: "/inbox", label: "Inbox", icon: Inbox },
+      { href: "/inbox", label: "Messages", icon: MessageCircle },
       { href: "/profile", label: "My Profile", icon: UserCircle },
       { href: "/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
       { href: "/support", label: "Support", icon: HelpCircle, pluginSlug: "support" },

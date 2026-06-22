@@ -54,6 +54,28 @@ const MIGRATIONS = [
   "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS payment_method TEXT",
   "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS sender_number TEXT",
   "ALTER TABLE subscriptions ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+  // Timer columns for projects
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS deadline TIMESTAMP",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS started_at TIMESTAMP",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'",
+  // Timer columns for tasks
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS deadline TIMESTAMP",
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER",
+  // User-to-user messages
+  `CREATE TABLE IF NOT EXISTS messages (
+    id SERIAL PRIMARY KEY,
+    from_user_id INTEGER NOT NULL,
+    to_user_id INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // ROI tracking on submissions
+  "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS roi REAL DEFAULT 0",
+  // Task category using A/B1/B2/C system
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_category TEXT DEFAULT 'B1'",
+  // User total ROI field
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS total_roi REAL DEFAULT 0",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

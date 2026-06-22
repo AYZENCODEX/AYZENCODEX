@@ -80,10 +80,40 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
   const updates: Record<string, unknown> = {};
   const fields = ["name", "description", "xpName", "twitterHandle", "discordUrl", "websiteUrl", "tutorialLink", "experienceLevel", "tier", "fundingAmount", "rewardEstimate", "thumbnailUrl"];
   for (const f of fields) if (req.body[f] !== undefined) updates[f] = req.body[f];
-  const [project] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, id)).returning();
-  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-  broadcastEvent("projects_updated", { action: "updated", projectId: id });
-  res.json(formatProject(project));
+
+  // Extra raw-SQL fields not in Drizzle schema yet
+  const rawSets: string[] = [];
+  if (req.body.deadline !== undefined) rawSets.push(`deadline = ${req.body.deadline ? `'${req.body.deadline}'` : "NULL"}`);
+  if (req.body.startedAt !== undefined) rawSets.push(`started_at = ${req.body.startedAt ? `'${req.body.startedAt}'` : "NULL"}`);
+  if (req.body.status !== undefined) rawSets.push(`status = '${String(req.body.status).replace(/'/g, "''")}'`);
+
+  try {
+    let project: any;
+    if (Object.keys(updates).length > 0) {
+      const [p] = await db.update(projectsTable).set(updates).where(eq(projectsTable.id, id)).returning();
+      project = p;
+    }
+    if (rawSets.length > 0) {
+      const result = await db.execute(sql.raw(`UPDATE projects SET ${rawSets.join(", ")} WHERE id = ${id} RETURNING *`));
+      project = result.rows[0] ?? project;
+    }
+    if (!project) {
+      const [p] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
+      project = p;
+    }
+    if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+    broadcastEvent("projects_updated", { action: "updated", projectId: id });
+    const p = project as any;
+    res.json({
+      ...p,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+      deadline: p.deadline instanceof Date ? p.deadline.toISOString() : (p.deadline ?? null),
+      startedAt: p.started_at instanceof Date ? p.started_at.toISOString() : (p.started_at ?? null),
+      status: p.status ?? "active",
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
 });
 
 router.delete("/projects/:id", async (req, res): Promise<void> => {
@@ -150,6 +180,38 @@ router.delete("/projects/:id/enrollments/:enrollmentId", async (req, res): Promi
   await db.delete(projectEnrollmentsTable)
     .where(and(eq(projectEnrollmentsTable.id, enrollmentId), eq(projectEnrollmentsTable.userId, userId)));
   res.json({ message: "Enrollment removed" });
+});
+
+// GET /projects/:id/members — list all users who joined this project (admin view)
+router.get("/projects/:id/members", async (req, res): Promise<void> => {
+  const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  try {
+    const rows = await db.execute(sql.raw(
+      `SELECT up.user_id, up.joined_at, u.username, u.email,
+              (SELECT COUNT(*) FROM task_submissions ts
+               JOIN tasks t ON t.id = ts.task_id
+               WHERE ts.user_id = up.user_id AND t.project_id = ${projectId}
+               AND ts.status IN ('approved','completed'))::int as tasks_completed,
+              (SELECT COUNT(*) FROM tasks WHERE project_id = ${projectId})::int as total_tasks
+       FROM user_projects up
+       JOIN users u ON u.id = up.user_id
+       WHERE up.project_id = ${projectId}
+       ORDER BY up.joined_at DESC`
+    ));
+    res.json(rows.rows.map((r: any) => ({
+      userId: r.user_id,
+      username: r.username,
+      email: r.email,
+      joinedAt: r.joined_at,
+      tasksCompleted: Number(r.tasks_completed ?? 0),
+      totalTasks: Number(r.total_tasks ?? 0),
+      progress: Number(r.total_tasks ?? 0) > 0
+        ? Math.round((Number(r.tasks_completed ?? 0) / Number(r.total_tasks ?? 0)) * 100)
+        : 0,
+    })));
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
 });
 
 router.get("/projects/:id/stats", async (req, res): Promise<void> => {

@@ -19,6 +19,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
+import { TaskCategoryBadge } from "@/components/ui/task-category-badge";
+import { CountdownTimer } from "@/components/ui/countdown-timer";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -28,6 +30,8 @@ interface Task {
   rewardAmount?: number; verificationType: string; taskType: string;
   cost: number; profit: number; completionCount: number;
   userStatus?: string | null;
+  taskCategory?: string; category?: string;
+  deadline?: string | null; timeLimitMinutes?: number | null;
 }
 
 interface EntityTaskStatus {
@@ -130,13 +134,17 @@ function TaskSubmitDialog({
             {isDone ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
           </div>
           <div className="min-w-0">
-            <div className="font-mono text-sm font-medium truncate">{task.name}</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-sm font-medium truncate">{task.name}</span>
+              <TaskCategoryBadge category={task.taskCategory ?? task.category ?? "B1"} />
+            </div>
             <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="text-[9px] font-mono text-muted-foreground/50 uppercase">{task.taskType} · {task.verificationType}</span>
               {task.rewardAmount ? <span className="text-[9px] font-mono text-primary font-bold">${task.rewardAmount}</span> : null}
               {task.cost > 0 && <span className="text-[9px] font-mono text-red-400">Cost: ${task.cost}</span>}
               {task.profit > 0 && <span className="text-[9px] font-mono text-emerald-400">Profit: ${task.profit}</span>}
             </div>
+            {task.deadline && <CountdownTimer deadline={task.deadline} compact className="mt-1" />}
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
