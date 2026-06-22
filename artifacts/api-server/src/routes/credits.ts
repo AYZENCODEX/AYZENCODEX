@@ -27,6 +27,10 @@ const CREDITS_PER_AZN = 100;
 const AZN_FOR_PRO = 200;
 const AZN_FOR_ENTERPRISE = 1000;
 
+// AZN token market price
+const AZN_PRICE_USD = 0.01;
+const USD_TO_BDT = 130;
+
 // Admin payment config (editable via env)
 const BKASH_NUMBER   = process.env["BKASH_NUMBER"]   ?? "01XXXXXXXXX";
 const NAGAD_NUMBER   = process.env["NAGAD_NUMBER"]   ?? "01XXXXXXXXX";
@@ -50,7 +54,7 @@ router.get("/credits", async (req, res): Promise<void> => {
     .where(eq(creditTransactionsTable.userId, authUser.id))
     .orderBy(desc(creditTransactionsTable.createdAt))
     .limit(50);
-  res.json({ credits, transactions: txs, packages: CREDIT_PACKAGES, rates: { creditsPerAzn: CREDITS_PER_AZN, aznForPro: AZN_FOR_PRO, aznForEnterprise: AZN_FOR_ENTERPRISE }, paymentInfo: { bkash: BKASH_NUMBER, nagad: NAGAD_NUMBER, usdt: USDT_ADDRESS, usdtNetwork: USDT_NETWORK } });
+  res.json({ credits, transactions: txs, packages: CREDIT_PACKAGES, rates: { creditsPerAzn: CREDITS_PER_AZN, aznForPro: AZN_FOR_PRO, aznForEnterprise: AZN_FOR_ENTERPRISE, aznPriceUSD: AZN_PRICE_USD, usdToBDT: USD_TO_BDT, aznPriceBDT: +(AZN_PRICE_USD * USD_TO_BDT).toFixed(4) }, paymentInfo: { bkash: BKASH_NUMBER, nagad: NAGAD_NUMBER, usdt: USDT_ADDRESS, usdtNetwork: USDT_NETWORK } });
 });
 
 // ─── POST /api/credits/purchase — submit payment proof ────────────────────────
