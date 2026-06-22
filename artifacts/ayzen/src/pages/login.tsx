@@ -5,7 +5,7 @@ import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, hasF
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff, Sparkles, Check } from "lucide-react";
+import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff, Sparkles, Check, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -64,6 +64,17 @@ async function backendRegister(username: string, email: string, password: string
   }
 }
 
+function makeCaptcha() {
+  const a = Math.floor(Math.random() * 9) + 1;
+  const b = Math.floor(Math.random() * 9) + 1;
+  const ops = [
+    { q: `${a} + ${b}`, ans: a + b },
+    { q: `${a + b} − ${b}`, ans: a },
+    { q: `${a} × ${b > 5 ? 2 : b}`, ans: a * (b > 5 ? 2 : b) },
+  ];
+  return ops[Math.floor(Math.random() * ops.length)];
+}
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const { login: setAuthContext } = useAuth();
@@ -78,6 +89,10 @@ export default function Login() {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [magicSent, setMagicSent] = useState(false);
   const [magicLoading, setMagicLoading] = useState(false);
+
+  const [captcha, setCaptcha] = useState(makeCaptcha);
+  const [captchaInput, setCaptchaInput] = useState("");
+  const [captchaError, setCaptchaError] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -138,6 +153,14 @@ export default function Login() {
       toast({ variant: "destructive", title: "Password too short", description: "Minimum 6 characters required." });
       return;
     }
+    if (parseInt(captchaInput) !== captcha.ans) {
+      setCaptchaError(true);
+      setCaptcha(makeCaptcha());
+      setCaptchaInput("");
+      toast({ variant: "destructive", title: "Captcha failed", description: "Solve the security question correctly." });
+      return;
+    }
+    setCaptchaError(false);
     setLoading(true);
     try {
       const data = await backendRegister(username, email, password);
@@ -359,6 +382,36 @@ export default function Login() {
                 </button>
               </div>
             </div>
+
+            {tab === "signup" && (
+              <div className="space-y-2">
+                <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  Security Check <span className="text-red-400">*</span>
+                </Label>
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 bg-primary/5 border border-primary/20 rounded px-4 py-2 font-mono text-sm font-bold text-primary tracking-widest select-none">
+                    {captcha.q} = ?
+                  </div>
+                  <Input
+                    type="number"
+                    value={captchaInput}
+                    onChange={e => { setCaptchaInput(e.target.value); setCaptchaError(false); }}
+                    placeholder="Answer"
+                    className={`bg-input border-border font-mono h-11 focus-visible:ring-primary/50 focus-visible:border-primary ${captchaError ? "border-red-400/50" : ""}`}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => { setCaptcha(makeCaptcha()); setCaptchaInput(""); setCaptchaError(false); }}
+                    className="text-muted-foreground hover:text-primary transition-colors flex-shrink-0"
+                    title="New question"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
+                </div>
+                {captchaError && <p className="font-mono text-[10px] text-red-400">Wrong answer. Try the new question.</p>}
+              </div>
+            )}
 
             <Button
               type="submit"

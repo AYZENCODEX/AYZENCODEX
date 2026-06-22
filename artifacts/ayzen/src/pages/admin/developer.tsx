@@ -4,8 +4,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Terminal, Cpu, Zap, CheckCircle, Clock, Send, Bot, User, Radio, Trash2, PauseCircle, PlayCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Terminal, Cpu, Zap, CheckCircle, Clock, Send, Bot, User, Radio, Trash2,
+  PauseCircle, PlayCircle, Activity, Wifi, MemoryStick, RefreshCw,
+  Play, CheckCircle2, XCircle, Loader2, Server,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface GroqModel { id: string; name: string; context: number; free: boolean; tier: string; speed: string; }
@@ -302,6 +309,296 @@ function LiveConsoleTab({ token }: { token: string }) {
   );
 }
 
+// ─── Real-time Telemetry Tab ──────────────────────────────────────────────────
+interface TelemetrySnapshot {
+  ts: number; connections: number; requestsPerMin: number; totalRequests: number;
+  avgResponseMs: number; p95ResponseMs: number; memRss: number; memHeap: number;
+  memHeapTotal: number; uptimeSec: number; nodeVersion: string; platform: string;
+  projectPresence: Record<number, number>;
+}
+
+function TelemetryLiveTab({ token }: { token: string }) {
+  const [snap, setSnap] = useState<TelemetrySnapshot | null>(null);
+  const [history, setHistory] = useState<{ t: number; req: number; ms: number; mem: number }[]>([]);
+  const [connected, setConnected] = useState(false);
+
+  useEffect(() => {
+    const es = new EventSource(`${BASE}/api/admin/telemetry/stream`);
+    es.onopen = () => setConnected(true);
+    es.onerror = () => setConnected(false);
+    es.onmessage = (e) => {
+      try {
+        const d: TelemetrySnapshot = JSON.parse(e.data);
+        setSnap(d);
+        setHistory(h => [...h.slice(-60), { t: d.ts, req: d.requestsPerMin, ms: d.avgResponseMs, mem: d.memHeap }]);
+      } catch {}
+    };
+    return () => { es.close(); setConnected(false); };
+  }, [token]);
+
+  const fmt = (sec: number) => {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
+  const sparkline = (vals: number[], color: string) => {
+    if (vals.length < 2) return null;
+    const max = Math.max(...vals, 1);
+    const W = 120, H = 32;
+    const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * W},${H - (v / max) * H}`).join(" ");
+    return (
+      <svg width={W} height={H} className="opacity-70">
+        <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" />
+      </svg>
+    );
+  };
+
+  const cards = snap ? [
+    { label: "Active Connections", value: snap.connections, sub: "SSE clients", icon: Wifi, color: "text-emerald-400", spark: history.map(h => h.req) },
+    { label: "Req / Min", value: snap.requestsPerMin, sub: `avg ${snap.avgResponseMs}ms`, icon: Activity, color: "text-primary", spark: history.map(h => h.ms) },
+    { label: "Heap Used", value: `${snap.memHeap}MB`, sub: `of ${snap.memHeapTotal}MB`, icon: MemoryStick, color: "text-violet-400", spark: history.map(h => h.mem) },
+    { label: "Uptime", value: fmt(snap.uptimeSec), sub: snap.platform, icon: Server, color: "text-amber-400", spark: [] },
+  ] : [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <div className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-mono",
+          connected ? "bg-emerald-400/10 border-emerald-400/20 text-emerald-400" : "bg-red-400/10 border-red-400/20 text-red-400"
+        )}>
+          <Activity className={cn("w-3 h-3", connected && "animate-pulse")} />
+          {connected ? "STREAMING" : "DISCONNECTED"}
+        </div>
+        {snap && <span className="font-mono text-[10px] text-muted-foreground">Node {snap.nodeVersion} · Updated {new Date(snap.ts).toLocaleTimeString()}</span>}
+      </div>
+
+      {!snap ? (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[1,2,3,4].map(i => <div key={i} className="bg-card border border-card-border rounded-xl h-28 animate-pulse" />)}
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {cards.map(c => (
+              <div key={c.label} className="bg-card border border-card-border rounded-xl px-4 py-4 flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <c.icon className={cn("w-3.5 h-3.5", c.color)} />
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">{c.label}</span>
+                  </div>
+                  {c.spark.length > 1 && sparkline(c.spark, c.color.replace("text-", "#").replace("emerald-400","34d399").replace("primary","00ffff").replace("violet-400","a78bfa").replace("amber-400","fbbf24"))}
+                </div>
+                <div className={cn("font-mono text-2xl font-bold", c.color)}>{c.value}</div>
+                <div className="font-mono text-[10px] text-muted-foreground">{c.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-card border border-card-border rounded-xl px-4 py-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Response Time</div>
+              <div className="space-y-2">
+                {[
+                  { label: "Avg", value: snap.avgResponseMs, max: 500, color: snap.avgResponseMs < 100 ? "bg-emerald-400" : snap.avgResponseMs < 300 ? "bg-amber-400" : "bg-red-400" },
+                  { label: "P95", value: snap.p95ResponseMs, max: 500, color: snap.p95ResponseMs < 200 ? "bg-emerald-400" : snap.p95ResponseMs < 500 ? "bg-amber-400" : "bg-red-400" },
+                ].map(m => (
+                  <div key={m.label} className="space-y-1">
+                    <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
+                      <span>{m.label}</span><span>{m.value}ms</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className={cn("h-full rounded-full transition-all", m.color)} style={{ width: `${Math.min((m.value / m.max) * 100, 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-card border border-card-border rounded-xl px-4 py-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Memory</div>
+              <div className="space-y-2">
+                {[
+                  { label: "Heap", value: snap.memHeap, total: snap.memHeapTotal },
+                  { label: "RSS", value: snap.memRss, total: 512 },
+                ].map(m => (
+                  <div key={m.label} className="space-y-1">
+                    <div className="flex justify-between font-mono text-[10px] text-muted-foreground">
+                      <span>{m.label}</span><span>{m.value}MB / {m.total}MB</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-violet-400 rounded-full transition-all" style={{ width: `${Math.min((m.value / m.total) * 100, 100)}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {Object.keys(snap.projectPresence).length > 0 && (
+            <div className="bg-card border border-card-border rounded-xl px-4 py-4">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-3">Project Presence</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(snap.projectPresence).map(([pid, count]) => (
+                  <div key={pid} className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-400/10 border border-emerald-400/20 rounded text-[10px] font-mono text-emerald-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Project #{pid} · {count} online
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Ping Test Tab ────────────────────────────────────────────────────────────
+const PING_ENDPOINTS = [
+  { label: "Health", method: "GET", path: "/api/health" },
+  { label: "Auth Status", method: "GET", path: "/api/auth/me" },
+  { label: "Projects List", method: "GET", path: "/api/projects?limit=1" },
+  { label: "Tasks List", method: "GET", path: "/api/tasks?limit=1" },
+  { label: "Users List", method: "GET", path: "/api/users?limit=1" },
+  { label: "Vault List", method: "GET", path: "/api/vault?limit=1" },
+  { label: "Wallets List", method: "GET", path: "/api/wallets" },
+  { label: "Broadcasts", method: "GET", path: "/api/broadcast" },
+  { label: "Leaderboard", method: "GET", path: "/api/leaderboard" },
+  { label: "AI Models", method: "GET", path: "/api/ai/models" },
+  { label: "Credits Balance", method: "GET", path: "/api/credits/balance" },
+  { label: "Subscriptions", method: "GET", path: "/api/subscriptions/current" },
+  { label: "SSE Events", method: "GET", path: "/api/events" },
+  { label: "Telemetry Stream", method: "GET", path: "/api/admin/telemetry/stream" },
+  { label: "Plugins", method: "GET", path: "/api/plugins" },
+  { label: "Referrals", method: "GET", path: "/api/referrals" },
+];
+
+type PingStatus = "idle" | "running" | "ok" | "warn" | "error";
+interface PingResult { ms: number; status: number; statusText: string; state: PingStatus; }
+
+function PingTab({ token }: { token: string }) {
+  const [results, setResults] = useState<Record<string, PingResult>>({});
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  const pingOne = useCallback(async (ep: typeof PING_ENDPOINTS[0]): Promise<PingResult> => {
+    const t0 = performance.now();
+    try {
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 5000);
+      const res = await fetch(`${BASE}${ep.path}`, {
+        method: ep.method,
+        headers: { Authorization: `Bearer ${token}` },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timeout);
+      const ms = Math.round(performance.now() - t0);
+      const state: PingStatus = ms < 200 ? "ok" : ms < 800 ? "warn" : "error";
+      return { ms, status: res.status, statusText: res.statusText, state: res.status >= 500 ? "error" : state };
+    } catch (e: any) {
+      const ms = Math.round(performance.now() - t0);
+      if (e?.name === "AbortError") return { ms: 5000, status: 0, statusText: "Timeout", state: "error" };
+      return { ms, status: 0, statusText: e?.message ?? "Failed", state: "error" };
+    }
+  }, [token]);
+
+  const runAll = useCallback(async () => {
+    setRunning(true);
+    setProgress(0);
+    setResults({});
+    for (let i = 0; i < PING_ENDPOINTS.length; i++) {
+      const ep = PING_ENDPOINTS[i];
+      setResults(r => ({ ...r, [ep.path]: { ms: 0, status: 0, statusText: "", state: "running" } }));
+      const result = await pingOne(ep);
+      setResults(r => ({ ...r, [ep.path]: result }));
+      setProgress(Math.round(((i + 1) / PING_ENDPOINTS.length) * 100));
+    }
+    setRunning(false);
+  }, [pingOne]);
+
+  const summary = Object.values(results);
+  const okCount = summary.filter(r => r.state === "ok").length;
+  const warnCount = summary.filter(r => r.state === "warn").length;
+  const errCount = summary.filter(r => r.state === "error").length;
+  const avgMs = summary.length > 0 ? Math.round(summary.filter(r => r.ms > 0).reduce((a, b) => a + b.ms, 0) / summary.filter(r => r.ms > 0).length) : 0;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          {summary.length > 0 && (
+            <>
+              <div className="flex items-center gap-1 font-mono text-[10px] text-emerald-400"><CheckCircle2 className="w-3 h-3" />{okCount} OK</div>
+              <div className="flex items-center gap-1 font-mono text-[10px] text-amber-400"><Activity className="w-3 h-3" />{warnCount} Slow</div>
+              <div className="flex items-center gap-1 font-mono text-[10px] text-red-400"><XCircle className="w-3 h-3" />{errCount} Error</div>
+              {avgMs > 0 && <div className="font-mono text-[10px] text-muted-foreground">avg {avgMs}ms</div>}
+            </>
+          )}
+        </div>
+        <Button onClick={runAll} disabled={running} size="sm" className="font-mono text-xs gap-2">
+          {running ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+          {running ? `Running… ${progress}%` : "Run All Pings"}
+        </Button>
+      </div>
+
+      {running && (
+        <div className="h-1 bg-muted rounded-full overflow-hidden">
+          <div className="h-full bg-primary transition-all rounded-full" style={{ width: `${progress}%` }} />
+        </div>
+      )}
+
+      <div className="border border-card-border rounded-xl bg-card overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-card-border hover:bg-transparent">
+              <TableHead className="font-mono uppercase text-[10px]">Endpoint</TableHead>
+              <TableHead className="font-mono uppercase text-[10px]">Path</TableHead>
+              <TableHead className="font-mono uppercase text-[10px] text-right">Status</TableHead>
+              <TableHead className="font-mono uppercase text-[10px] text-right">Latency</TableHead>
+              <TableHead className="font-mono uppercase text-[10px] text-right">Result</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {PING_ENDPOINTS.map(ep => {
+              const r = results[ep.path];
+              return (
+                <TableRow key={ep.path} className="border-card-border hover:bg-muted/30">
+                  <TableCell className="font-mono text-sm font-medium">{ep.label}</TableCell>
+                  <TableCell className="font-mono text-[10px] text-muted-foreground">{ep.method} {ep.path}</TableCell>
+                  <TableCell className="text-right">
+                    {r && r.state !== "running" && (
+                      <span className={cn("font-mono text-[11px]", r.status >= 200 && r.status < 400 ? "text-emerald-400" : r.status === 0 ? "text-red-400" : "text-amber-400")}>
+                        {r.status || r.statusText}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {r && (
+                      <span className={cn("font-mono text-[11px]",
+                        r.state === "running" ? "text-muted-foreground animate-pulse" :
+                        r.state === "ok" ? "text-emerald-400" : r.state === "warn" ? "text-amber-400" : "text-red-400"
+                      )}>
+                        {r.state === "running" ? "…" : `${r.ms}ms`}
+                      </span>
+                    )}
+                    {!r && <span className="font-mono text-[10px] text-muted-foreground/30">—</span>}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {!r && <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/20 inline-block" />}
+                    {r?.state === "running" && <Loader2 className="w-3 h-3 text-primary animate-spin ml-auto" />}
+                    {r?.state === "ok" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 ml-auto" />}
+                    {r?.state === "warn" && <Activity className="w-3.5 h-3.5 text-amber-400 ml-auto" />}
+                    {r?.state === "error" && <XCircle className="w-3.5 h-3.5 text-red-400 ml-auto" />}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function AdminDeveloper() {
   const { data: functions, isLoading: fnLoading } = useGetTelemetryFunctions();
@@ -351,7 +648,12 @@ export default function AdminDeveloper() {
           <TabsTrigger value="models" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <Cpu className="w-3 h-3 mr-1" /> AI Models
           </TabsTrigger>
-          <TabsTrigger value="telemetry" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Telemetry</TabsTrigger>
+          <TabsTrigger value="telemetry" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+            <Activity className="w-3 h-3 mr-1" /> Telemetry
+          </TabsTrigger>
+          <TabsTrigger value="ping" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+            <RefreshCw className="w-3 h-3 mr-1" /> Ping Test
+          </TabsTrigger>
           <TabsTrigger value="errors" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Error Log</TabsTrigger>
         </TabsList>
 
@@ -455,8 +757,18 @@ export default function AdminDeveloper() {
           </div>
         </TabsContent>
 
-        {/* ── Telemetry ─────────────────────────────────────────────────────── */}
+        {/* ── Live Telemetry ────────────────────────────────────────────────── */}
         <TabsContent value="telemetry" className="mt-4">
+          <TelemetryLiveTab token={token} />
+        </TabsContent>
+
+        {/* ── Ping Test ─────────────────────────────────────────────────────── */}
+        <TabsContent value="ping" className="mt-4">
+          <PingTab token={token} />
+        </TabsContent>
+
+        {/* ── Function Telemetry ────────────────────────────────────────────── */}
+        <TabsContent value="fn_telemetry" className="mt-4">
           <div className="border border-card-border rounded-md bg-card">
             <Table>
               <TableHeader>

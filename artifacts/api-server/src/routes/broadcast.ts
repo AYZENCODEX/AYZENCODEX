@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, broadcastsTable, usersTable } from "@workspace/db";
 import { count } from "drizzle-orm";
 import { broadcastToAll } from "../lib/telegram";
+import { broadcastEvent } from "./events";
 
 const router = Router();
 
@@ -29,6 +30,10 @@ router.post("/broadcast", async (req, res): Promise<void> => {
   if (channel === "telegram" || channel === "all") {
     const tgText = `📣 *${title}*\n\n${message}`;
     broadcastToAll(tgText).catch(() => {});
+  }
+  // Push in-app SSE notification to all connected clients
+  if (channel === "inapp" || channel === "all") {
+    broadcastEvent("broadcast", { title, message, channel });
   }
 
   res.status(201).json(formatBroadcast(broadcast));

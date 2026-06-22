@@ -25,6 +25,7 @@ import pluginsRouter from "./plugins";
 import subscriptionsRouter from "./subscriptions";
 import paymentsRouter from "./payments";
 import creditsRouter from "./credits";
+import telemetryStreamRouter from "./telemetry-stream";
 
 const router: IRouter = Router();
 
@@ -54,5 +55,6 @@ router.use(referralsRouter);
 router.use(subscriptionsRouter);
 router.use(paymentsRouter);
 router.use(creditsRouter);
+router.use(telemetryStreamRouter);
 
 export default router;
