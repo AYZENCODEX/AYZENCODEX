@@ -58,7 +58,7 @@ export default function CreditsPage() {
   const { toast } = useToast();
   const [data, setData] = useState<CreditsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"buy" | "swap" | "sell" | "history">("buy");
+  const [activeTab, setActiveTab] = useState<"buy" | "swap" | "sell" | "transfer" | "history">("buy");
 
   const [selectedPkg, setSelectedPkg] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<string>("bkash");
@@ -75,8 +75,34 @@ export default function CreditsPage() {
   const [sellAccount, setSellAccount] = useState("");
   const [selling, setSelling] = useState(false);
 
+  const [transferTo, setTransferTo] = useState("");
+  const [transferAmt, setTransferAmt] = useState("");
+  const [transferring, setTransferring] = useState(false);
+
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+
+  const handleTransfer = async () => {
+    const amount = parseFloat(transferAmt);
+    if (!transferTo.trim()) { toast({ variant: "destructive", title: "Enter a username" }); return; }
+    if (!amount || amount < 0.01) { toast({ variant: "destructive", title: "Minimum transfer is 0.01 AZN" }); return; }
+    setTransferring(true);
+    try {
+      const r = await fetch(`${BASE}/api/credits/transfer`, {
+        method: "POST", headers,
+        body: JSON.stringify({ toUsername: transferTo.trim(), amount }),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast({ title: `💸 Sent ${amount} AZN to @${transferTo}`, description: d.message });
+        setTransferTo(""); setTransferAmt("");
+        await fetchData();
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Transfer failed" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setTransferring(false);
+  };
 
   const handleSellAzn = async () => {
     const amount = parseFloat(sellAmount);
@@ -197,7 +223,7 @@ export default function CreditsPage() {
 
       {/* Tabs */}
       <div className="flex border border-border rounded-lg overflow-hidden bg-card">
-        {(["buy", "swap", "sell", "history"] as const).map(t => (
+        {(["buy", "swap", "sell", "transfer", "history"] as const).map(t => (
           <button
             key={t}
             onClick={() => setActiveTab(t)}
@@ -206,7 +232,7 @@ export default function CreditsPage() {
               activeTab === t ? "bg-primary/15 text-primary border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {t === "buy" ? "💳 Buy" : t === "swap" ? "⚡ Swap" : t === "sell" ? "💰 Sell AZN" : "📋 History"}
+            {t === "buy" ? "💳 Buy" : t === "swap" ? "⚡ Swap" : t === "sell" ? "💰 Sell" : t === "transfer" ? "💸 Send" : "📋 History"}
           </button>
         ))}
       </div>
@@ -582,6 +608,83 @@ export default function CreditsPage() {
           <div className="flex items-start gap-2 text-[10px] font-mono text-muted-foreground/50">
             <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span>All sell requests are reviewed by admin. On-chain redemption will be available after KYC launch.</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── TRANSFER TAB ─────────────────────────────────────────────────────── */}
+      {activeTab === "transfer" && (
+        <div className="space-y-5">
+          <div className="bg-card border border-primary/20 rounded-xl overflow-hidden">
+            <div className="bg-primary/5 border-b border-primary/15 px-5 py-4">
+              <div className="font-mono font-bold text-sm text-primary flex items-center gap-2">
+                💸 Send AZN to Operator
+              </div>
+              <div className="font-mono text-[10px] text-muted-foreground mt-1">
+                Transfer AZN tokens directly to any AYZEN operator by username. Instant settlement.
+              </div>
+            </div>
+            <div className="px-5 py-5 space-y-4">
+              {/* Balance display */}
+              <div className="bg-background border border-card-border rounded-md px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground mb-1">Your AZN Balance</div>
+                  <div className="font-mono font-bold text-2xl text-amber-400">{(data?.credits.aznBalance ?? 0).toFixed(4)}<span className="text-sm ml-1.5 text-muted-foreground">AZN</span></div>
+                </div>
+                <Coins className="w-8 h-8 text-amber-400/20" />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Recipient Username</label>
+                <Input
+                  value={transferTo}
+                  onChange={e => setTransferTo(e.target.value)}
+                  placeholder="e.g. operator123"
+                  className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Amount (AZN)</label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={transferAmt}
+                    onChange={e => setTransferAmt(e.target.value)}
+                    placeholder="Min 0.01"
+                    min={0.01}
+                    step={0.01}
+                    className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                  />
+                  <div className="flex gap-1">
+                    {[1, 5, 10, 50].map(amt => (
+                      <button key={amt} onClick={() => setTransferAmt(String(amt))}
+                        className="px-2 h-10 rounded-md border border-border text-[9px] font-mono text-muted-foreground hover:border-primary/30 hover:text-primary transition-all">
+                        {amt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-background border border-card-border rounded-md px-4 py-3 font-mono text-[10px] text-muted-foreground">
+                <span className="text-primary font-bold">ℹ Note:</span> Transfers are instant and irreversible. Make sure the username is correct before confirming.
+              </div>
+
+              <Button
+                onClick={handleTransfer}
+                disabled={transferring || !transferTo.trim() || !transferAmt || parseFloat(transferAmt) < 0.01}
+                className="w-full font-mono text-xs gap-2 h-11"
+              >
+                {transferring ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>💸</span>}
+                {transferring ? "Sending..." : `Send ${transferAmt || "0"} AZN to @${transferTo || "..."}`}
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2 text-[10px] font-mono text-muted-foreground/50">
+            <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+            <span>AZN transfers are logged on both sides. The recipient is notified instantly.</span>
           </div>
         </div>
       )}

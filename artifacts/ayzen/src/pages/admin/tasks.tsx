@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useListTasks } from "@workspace/api-client-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -9,23 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckSquare, ClipboardList, Check, X, ExternalLink, RefreshCw } from "lucide-react";
+import { Plus, CheckSquare, ClipboardList, Check, X, ExternalLink, RefreshCw, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
+interface Project { id: number; name: string; xpName?: string | null; xpPrice?: number; }
 interface Submission {
-  id: number;
-  taskId: number;
-  taskName: string | null;
-  userId: number;
-  username: string | null;
-  status: string;
-  proofUrl: string | null;
-  notes: string | null;
-  submittedAt: string;
-  reviewedAt: string | null;
+  id: number; taskId: number; taskName: string | null; userId: number;
+  username: string | null; status: string; proofUrl: string | null;
+  notes: string | null; submittedAt: string; reviewedAt: string | null;
 }
 
 type Tab = "tasks" | "submissions";
@@ -38,12 +32,12 @@ export default function AdminTasks() {
   const [tab, setTab] = useState<Tab>("tasks");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState({
     name: "", description: "", projectId: "",
-    rewardAmount: "", taskType: "One-time", verificationType: "manual",
+    rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual",
   });
 
-  // Submissions state
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [subsLoading, setSubsLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("pending");
@@ -51,7 +45,16 @@ export default function AdminTasks() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDialog, setRejectDialog] = useState<Submission | null>(null);
 
-  const resetForm = () => setForm({ name: "", description: "", projectId: "", rewardAmount: "", taskType: "One-time", verificationType: "manual" });
+  const resetForm = () => setForm({ name: "", description: "", projectId: "", rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual" });
+
+  // Load projects for dropdown
+  useEffect(() => {
+    const token = localStorage.getItem("ayzen_token") ?? "";
+    fetch(`${BASE}/api/projects`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.projects) setProjects(d.projects); })
+      .catch(() => {});
+  }, []);
 
   const loadSubmissions = async (status = statusFilter) => {
     setSubsLoading(true);
@@ -60,25 +63,13 @@ export default function AdminTasks() {
       const res = await fetch(`${BASE}/api/tasks/submissions?status=${status}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSubmissions(data);
-      }
-    } catch {
-      toast({ variant: "destructive", title: "Failed to load submissions" });
-    }
+      if (res.ok) setSubmissions(await res.json());
+    } catch { toast({ variant: "destructive", title: "Failed to load submissions" }); }
     setSubsLoading(false);
   };
 
-  const handleTabChange = (t: Tab) => {
-    setTab(t);
-    if (t === "submissions") loadSubmissions();
-  };
-
-  const handleFilterChange = (status: string) => {
-    setStatusFilter(status);
-    loadSubmissions(status);
-  };
+  const handleTabChange = (t: Tab) => { setTab(t); if (t === "submissions") loadSubmissions(); };
+  const handleFilterChange = (status: string) => { setStatusFilter(status); loadSubmissions(status); };
 
   const handleApprove = async (sub: Submission) => {
     setVerifying(sub.id);
@@ -91,15 +82,12 @@ export default function AdminTasks() {
       });
       if (res.ok) {
         toast({ title: "Approved ✓", description: `Task "${sub.taskName}" approved for ${sub.username ?? `User #${sub.userId}`}` });
-        loadSubmissions();
-        queryClient.invalidateQueries();
+        loadSubmissions(); queryClient.invalidateQueries();
       } else {
         const d = await res.json();
         toast({ variant: "destructive", title: "Failed", description: d.error });
       }
-    } catch {
-      toast({ variant: "destructive", title: "Connection error" });
-    }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
     setVerifying(null);
   };
 
@@ -115,52 +103,43 @@ export default function AdminTasks() {
       });
       if (res.ok) {
         toast({ title: "Rejected", description: `Submission rejected for ${rejectDialog.username ?? `User #${rejectDialog.userId}`}` });
-        setRejectDialog(null);
-        setRejectReason("");
-        loadSubmissions();
+        setRejectDialog(null); setRejectReason(""); loadSubmissions();
       } else {
-        const d = await res.json();
-        toast({ variant: "destructive", title: "Failed", description: d.error });
+        const d = await res.json(); toast({ variant: "destructive", title: "Failed", description: d.error });
       }
-    } catch {
-      toast({ variant: "destructive", title: "Connection error" });
-    }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
     setVerifying(null);
   };
 
+  const selectedProject = projects.find(p => String(p.id) === form.projectId);
+
   const handleCreate = async () => {
-    if (!form.name || !form.projectId) {
-      toast({ variant: "destructive", title: "Task name and Project ID are required." });
-      return;
-    }
+    if (!form.name) { toast({ variant: "destructive", title: "Task name is required." }); return; }
     setSaving(true);
     try {
       const token = localStorage.getItem("ayzen_token") ?? "";
+      const body: Record<string, unknown> = {
+        name: form.name,
+        description: form.description || undefined,
+        taskType: form.taskType,
+        verificationType: form.verificationType,
+        xpAmount: form.xpAmount ? parseFloat(form.xpAmount) : 0,
+      };
+      if (form.projectId) body.projectId = parseInt(form.projectId, 10);
+      if (form.rewardAmount) body.rewardAmount = parseFloat(form.rewardAmount);
+
       const res = await fetch(`${BASE}/api/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          name: form.name,
-          description: form.description || undefined,
-          projectId: parseInt(form.projectId, 10),
-          rewardAmount: form.rewardAmount ? parseFloat(form.rewardAmount) : undefined,
-          taskType: form.taskType,
-          verificationType: form.verificationType,
-        }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         toast({ title: "Task created", description: `"${form.name}" added to the protocol.` });
-        queryClient.invalidateQueries();
-        refetch();
-        setOpen(false);
-        resetForm();
+        queryClient.invalidateQueries(); refetch(); setOpen(false); resetForm();
       } else {
-        const d = await res.json();
-        toast({ variant: "destructive", title: "Failed", description: d.error });
+        const d = await res.json(); toast({ variant: "destructive", title: "Failed", description: d.error });
       }
-    } catch {
-      toast({ variant: "destructive", title: "Connection error" });
-    }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
     setSaving(false);
   };
 
@@ -194,13 +173,12 @@ export default function AdminTasks() {
       {/* Tabs */}
       <div className="flex gap-1 bg-card border border-card-border rounded-lg p-1 w-fit">
         {(["tasks", "submissions"] as Tab[]).map(t => (
-          <button
-            key={t}
-            onClick={() => handleTabChange(t)}
+          <button key={t} onClick={() => handleTabChange(t)}
             className={`px-4 py-2 rounded-md font-mono text-xs uppercase tracking-wider transition-colors ${tab === t ? "bg-primary text-black font-bold" : "text-muted-foreground hover:text-foreground"}`}
           >
-            {t === "tasks" ? <span className="flex items-center gap-1.5"><CheckSquare className="w-3.5 h-3.5" /> Tasks</span>
-              : <span className="flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5" /> Submissions {t === "submissions" && submissions.filter(s => s.status === "pending").length > 0 ? <span className="bg-yellow-400 text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{submissions.filter(s => s.status === "pending").length}</span> : null}</span>}
+            {t === "tasks"
+              ? <span className="flex items-center gap-1.5"><CheckSquare className="w-3.5 h-3.5" /> Tasks</span>
+              : <span className="flex items-center gap-1.5"><ClipboardList className="w-3.5 h-3.5" /> Submissions {submissions.filter(s => s.status === "pending").length > 0 ? <span className="bg-yellow-400 text-black rounded-full w-4 h-4 flex items-center justify-center text-[9px] font-bold">{submissions.filter(s => s.status === "pending").length}</span> : null}</span>}
           </button>
         ))}
       </div>
@@ -211,25 +189,26 @@ export default function AdminTasks() {
           <Table>
             <TableHeader>
               <TableRow className="border-card-border hover:bg-transparent">
+                <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground">ID</TableHead>
                 <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground">Task Name</TableHead>
                 <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground">Protocol</TableHead>
                 <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground">Type</TableHead>
                 <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground">Verification</TableHead>
-                <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground text-right">Reward</TableHead>
+                <TableHead className="font-mono uppercase text-[10px] tracking-widest text-muted-foreground text-right">XP / Reward</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i} className="border-card-border">
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : !data || data.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-14 font-mono text-muted-foreground/50">
+                  <TableCell colSpan={6} className="text-center py-14 font-mono text-muted-foreground/50">
                     <div className="flex flex-col items-center gap-3">
                       <CheckSquare className="w-8 h-8 opacity-20" />
                       <span className="text-sm">No tasks yet — click New Task to create one</span>
@@ -237,10 +216,15 @@ export default function AdminTasks() {
                   </TableCell>
                 </TableRow>
               ) : (
-                data.map((task) => (
+                data.map((task: any) => (
                   <TableRow key={task.id} className="border-card-border hover:bg-primary/3 transition-colors">
+                    <TableCell className="font-mono text-[10px] text-muted-foreground/60 w-20">
+                      {task.taskId ?? `#TSK-${String(task.id).padStart(4, "0")}`}
+                    </TableCell>
                     <TableCell className="font-mono font-medium text-sm">{task.name}</TableCell>
-                    <TableCell className="font-mono text-muted-foreground text-xs">{task.projectName || `#${task.projectId}`}</TableCell>
+                    <TableCell className="font-mono text-muted-foreground text-xs">
+                      {task.projectName ?? (task.projectId ? `#${task.projectId}` : <span className="text-muted-foreground/40">Individual</span>)}
+                    </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="font-mono text-[10px] uppercase rounded-sm border-primary/20 text-primary/70">
                         {task.taskType}
@@ -251,8 +235,17 @@ export default function AdminTasks() {
                         {task.verificationType}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right font-mono font-bold text-primary">
-                      {task.rewardAmount ? `$${task.rewardAmount}` : "—"}
+                    <TableCell className="text-right font-mono text-xs">
+                      <div className="flex items-center justify-end gap-2">
+                        {task.xpAmount > 0 && (
+                          <span className="text-violet-400 flex items-center gap-0.5">
+                            <Zap className="w-3 h-3" />{task.xpAmount} XP
+                          </span>
+                        )}
+                        {task.rewardAmount ? (
+                          <span className="font-bold text-primary">${task.rewardAmount}</span>
+                        ) : !task.xpAmount ? "—" : null}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -265,16 +258,11 @@ export default function AdminTasks() {
       {/* Submissions Tab */}
       {tab === "submissions" && (
         <div className="space-y-4">
-          {/* Filter */}
           <div className="flex gap-2 flex-wrap">
             {["pending", "approved", "rejected"].map(s => (
-              <button
-                key={s}
-                onClick={() => handleFilterChange(s)}
+              <button key={s} onClick={() => handleFilterChange(s)}
                 className={`px-3 py-1.5 rounded-md font-mono text-[10px] uppercase tracking-widest border transition-colors ${statusFilter === s ? statusColor[s] : "border-border text-muted-foreground hover:border-primary/30"}`}
-              >
-                {s}
-              </button>
+              >{s}</button>
             ))}
           </div>
 
@@ -296,9 +284,7 @@ export default function AdminTasks() {
                 {subsLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i} className="border-card-border">
-                      {Array.from({ length: 5 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
-                      ))}
+                      {Array.from({ length: 5 }).map((_, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}
                     </TableRow>
                   ))
                 ) : submissions.length === 0 ? (
@@ -317,10 +303,8 @@ export default function AdminTasks() {
                       <TableCell className="font-mono text-xs text-muted-foreground">{sub.taskName ?? `Task #${sub.taskId}`}</TableCell>
                       <TableCell className="max-w-[200px]">
                         {sub.proofUrl ? (
-                          <a href={sub.proofUrl} target="_blank" rel="noreferrer"
-                            className="font-mono text-xs text-primary flex items-center gap-1 hover:underline truncate">
-                            <ExternalLink className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{sub.proofUrl}</span>
+                          <a href={sub.proofUrl} target="_blank" rel="noreferrer" className="font-mono text-xs text-primary flex items-center gap-1 hover:underline truncate">
+                            <ExternalLink className="w-3 h-3 flex-shrink-0" /><span className="truncate">{sub.proofUrl}</span>
                           </a>
                         ) : sub.notes ? (
                           <span className="font-mono text-xs text-muted-foreground truncate">{sub.notes}</span>
@@ -339,16 +323,10 @@ export default function AdminTasks() {
                       {statusFilter === "pending" && (
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button size="sm" variant="ghost"
-                              className="h-7 px-2.5 font-mono text-[10px] text-green-400 hover:text-green-300 hover:bg-green-400/10 gap-1"
-                              disabled={verifying === sub.id}
-                              onClick={() => handleApprove(sub)}>
+                            <Button size="sm" variant="ghost" className="h-7 px-2.5 font-mono text-[10px] text-green-400 hover:text-green-300 hover:bg-green-400/10 gap-1" disabled={verifying === sub.id} onClick={() => handleApprove(sub)}>
                               <Check className="w-3 h-3" /> Approve
                             </Button>
-                            <Button size="sm" variant="ghost"
-                              className="h-7 px-2.5 font-mono text-[10px] text-red-400 hover:text-red-300 hover:bg-red-400/10 gap-1"
-                              disabled={verifying === sub.id}
-                              onClick={() => { setRejectDialog(sub); setRejectReason(""); }}>
+                            <Button size="sm" variant="ghost" className="h-7 px-2.5 font-mono text-[10px] text-red-400 hover:text-red-300 hover:bg-red-400/10 gap-1" disabled={verifying === sub.id} onClick={() => { setRejectDialog(sub); setRejectReason(""); }}>
                               <X className="w-3 h-3" /> Reject
                             </Button>
                           </div>
@@ -370,7 +348,7 @@ export default function AdminTasks() {
             <DialogTitle className="font-mono uppercase tracking-wider text-primary flex items-center gap-2">
               <Plus className="w-4 h-4" /> New Task
             </DialogTitle>
-            <p className="text-xs font-mono text-muted-foreground">Assign a task to a project. Operators will see and submit it.</p>
+            <p className="text-xs font-mono text-muted-foreground">Tasks can be linked to a project or standalone individual tasks.</p>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -378,14 +356,30 @@ export default function AdminTasks() {
               <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Task Name *</Label>
               <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} className="font-mono text-xs h-9 bg-input" placeholder="e.g. Daily Check-in" />
             </div>
+
             <div className="space-y-1.5">
-              <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Project ID *</Label>
-              <Input value={form.projectId} onChange={e => setForm(f => ({ ...f, projectId: e.target.value.replace(/\D/g, "") }))} className="font-mono text-xs h-9 bg-input" placeholder="Project ID number" type="number" />
+              <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Project (optional)</Label>
+              <Select value={form.projectId || "none"} onValueChange={v => setForm(f => ({ ...f, projectId: v === "none" ? "" : v }))}>
+                <SelectTrigger className="font-mono text-xs h-9 border-border bg-input"><SelectValue placeholder="— Individual task (no project) —" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none" className="font-mono text-xs text-muted-foreground">— Individual task —</SelectItem>
+                  {projects.map(p => (
+                    <SelectItem key={p.id} value={String(p.id)} className="font-mono text-xs">
+                      {p.name} {p.xpName ? `(${p.xpName})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {selectedProject?.xpName && (
+                <p className="font-mono text-[10px] text-violet-400/80">XP unit: {selectedProject.xpName} · 1 {selectedProject.xpName} = {selectedProject.xpPrice ?? 0.01} AZN</p>
+              )}
             </div>
+
             <div className="space-y-1.5">
               <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Description</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="font-mono text-xs bg-input min-h-[60px] resize-none" placeholder="What operators need to do..." />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Type</Label>
@@ -406,10 +400,24 @@ export default function AdminTasks() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Reward Amount (USD)</Label>
-              <Input value={form.rewardAmount} onChange={e => setForm(f => ({ ...f, rewardAmount: e.target.value }))} className="font-mono text-xs h-9 bg-input" placeholder="e.g. 5.00" type="number" step="0.01" />
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                  <Zap className="w-3 h-3 text-violet-400" /> XP Amount
+                </Label>
+                <Input value={form.xpAmount} onChange={e => setForm(f => ({ ...f, xpAmount: e.target.value }))} className="font-mono text-xs h-9 bg-input" placeholder="e.g. 50" type="number" step="1" min="0" />
+              </div>
+              <div className="space-y-1.5">
+                <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Reward (USD)</Label>
+                <Input value={form.rewardAmount} onChange={e => setForm(f => ({ ...f, rewardAmount: e.target.value }))} className="font-mono text-xs h-9 bg-input" placeholder="e.g. 5.00" type="number" step="0.01" />
+              </div>
             </div>
+            {form.xpAmount && form.projectId && selectedProject?.xpPrice ? (
+              <p className="font-mono text-[10px] text-violet-400/80 bg-violet-500/5 border border-violet-500/20 rounded px-3 py-1.5">
+                ≈ {(parseFloat(form.xpAmount) * selectedProject.xpPrice).toFixed(4)} AZN will be auto-awarded on approval
+              </p>
+            ) : null}
           </div>
 
           <DialogFooter className="gap-2">

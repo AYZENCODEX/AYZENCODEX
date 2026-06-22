@@ -5,3 +5,5 @@
 - [AYZEN Password Hash](ayzen-auth.md) — Hash uses "ayzen_salt" constant (not env var). change-password endpoint verified working after server restart.
 - [AYZEN DB Pool Config](ayzen-db-pool.md) — Supabase transaction pooler (port 6543) breaks Drizzle prepared statements; buildPoolConfig in lib/db/src/index.ts auto-switches to session pooler (5432) + ssl rejectUnauthorized:false.
 - [AYZEN DB Schema Migration](ayzen-db-schema.md) — When DATABASE_URL points to a different Supabase project, tables may have UUID ids or wrong columns; must drop+recreate projects/tasks/users/user_projects with integer serial ids.
+- [AYZEN Startup Migrations](ayzen-startup-migrations.md) — Runtime ALTER TABLE migrations run 2s after server start via waitForDbThenMigrate in api-server/src/index.ts; logBus output goes to SSE stream NOT stdout, so they won't appear in workflow log files. Verify by calling API endpoints, not by reading logs.
+- [AYZEN XP+AZN System](ayzen-xp-azn.md) — tasks.xpAmount × projects.xpPrice = AZN awarded on task approval; awardXpAsAzn helper in tasks.ts route auto-triggers on status→approved.

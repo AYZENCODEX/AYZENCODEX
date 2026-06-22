@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListProjects, useCreateProject } from "@workspace/api-client-react";
+import { useListProjects } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ interface CreateForm {
   name: string;
   description: string;
   xpName: string;
+  xpPrice: string;
   tier: string;
   fundingAmount: string;
   rewardEstimate: string;
@@ -27,7 +28,7 @@ interface CreateForm {
 }
 
 const EMPTY_FORM: CreateForm = {
-  name: "", description: "", xpName: "", tier: "1", fundingAmount: "", rewardEstimate: "",
+  name: "", description: "", xpName: "", xpPrice: "0.01", tier: "1", fundingAmount: "", rewardEstimate: "",
   twitterHandle: "", discordUrl: "", websiteUrl: "", experienceLevel: "Beginner", tutorialLink: "",
 };
 
@@ -36,44 +37,41 @@ export default function AdminProjects() {
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState<CreateForm>(EMPTY_FORM);
   const { data, isLoading, refetch } = useListProjects({ search, page: 1, limit: 50 });
-  const createProject = useCreateProject();
   const { toast } = useToast();
 
   const setField = (key: keyof CreateForm) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
 
-  const handleCreate = () => {
-    if (!form.name.trim()) {
-      toast({ variant: "destructive", title: "Name required" }); return;
-    }
-    createProject.mutate(
-      {
-        data: {
-          name: form.name.trim(),
-          description: form.description.trim() || undefined,
-          xpName: form.xpName.trim() || undefined,
-          tier: form.tier as any,
-          fundingAmount: form.fundingAmount ? Number(form.fundingAmount) : 0,
-          rewardEstimate: form.rewardEstimate ? Number(form.rewardEstimate) : 0,
-          twitterHandle: form.twitterHandle || undefined,
-          discordUrl: form.discordUrl || undefined,
-          websiteUrl: form.websiteUrl || undefined,
-          experienceLevel: form.experienceLevel as any,
-          tutorialLink: form.tutorialLink || undefined,
-        } as any,
-      },
-      {
-        onSuccess: () => {
-          toast({ title: "Project created", description: `${form.name} added to the database.` });
-          setForm(EMPTY_FORM);
-          setShowCreate(false);
-          refetch();
-        },
-        onError: (err: any) => {
-          toast({ variant: "destructive", title: "Failed", description: err?.message ?? "Could not create project" });
-        },
+  const handleCreateWithXpPrice = () => {
+    if (!form.name.trim()) { toast({ variant: "destructive", title: "Name required" }); return; }
+    const token = localStorage.getItem("ayzen_token") ?? "";
+    const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+    fetch(`${BASE}/api/projects`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        name: form.name.trim(),
+        description: form.description.trim() || undefined,
+        xpName: form.xpName.trim() || undefined,
+        xpPrice: form.xpPrice ? Number(form.xpPrice) : 0.01,
+        tier: form.tier,
+        fundingAmount: form.fundingAmount ? Number(form.fundingAmount) : 0,
+        rewardEstimate: form.rewardEstimate ? Number(form.rewardEstimate) : 0,
+        twitterHandle: form.twitterHandle || undefined,
+        discordUrl: form.discordUrl || undefined,
+        websiteUrl: form.websiteUrl || undefined,
+        experienceLevel: form.experienceLevel,
+        tutorialLink: form.tutorialLink || undefined,
+      }),
+    }).then(async r => {
+      if (r.ok) {
+        toast({ title: "Project created", description: `${form.name} initialized.` });
+        setForm(EMPTY_FORM); setShowCreate(false); refetch();
+      } else {
+        const d = await r.json();
+        toast({ variant: "destructive", title: "Failed", description: d.error });
       }
-    );
+    }).catch(() => toast({ variant: "destructive", title: "Connection error" }));
   };
 
   return (
@@ -109,19 +107,23 @@ export default function AdminProjects() {
                 <Textarea value={form.description} onChange={setField("description")} placeholder="Describe the protocol and airdrop opportunity..." className="bg-input border-border font-mono resize-none" rows={3} />
               </div>
 
-              {/* XP Token Name */}
-              <div className="space-y-2 p-3 rounded-lg border border-primary/20 bg-primary/3">
-                <div className="flex items-center gap-1.5 mb-1">
+              {/* XP System */}
+              <div className="space-y-3 p-3 rounded-lg border border-primary/20 bg-primary/3">
+                <div className="flex items-center gap-1.5">
                   <Zap className="w-3 h-3 text-primary" />
-                  <Label className="font-mono text-[10px] uppercase tracking-widest text-primary font-bold">XP Token Name</Label>
+                  <Label className="font-mono text-[10px] uppercase tracking-widest text-primary font-bold">XP System</Label>
                 </div>
-                <Input
-                  value={form.xpName}
-                  onChange={setField("xpName")}
-                  placeholder="e.g. TXP, ZXP, LZXP"
-                  className="bg-input border-border font-mono"
-                />
-                <p className="text-[10px] font-mono text-muted-foreground/60">Custom XP label for this project's experience points</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">XP Token Name</Label>
+                    <Input value={form.xpName} onChange={setField("xpName")} placeholder="e.g. TXP, ZXP" className="bg-input border-border font-mono" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest">1 XP = ? AZN</Label>
+                    <Input type="number" step="0.001" min="0" value={form.xpPrice} onChange={setField("xpPrice")} placeholder="0.01" className="bg-input border-border font-mono" />
+                  </div>
+                </div>
+                <p className="text-[10px] font-mono text-muted-foreground/60">XP earned from tasks × price = AZN auto-awarded on approval</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -198,8 +200,8 @@ export default function AdminProjects() {
                 <Button variant="outline" className="flex-1 font-mono uppercase text-xs" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); }}>
                   Cancel
                 </Button>
-                <Button className="flex-1 font-mono uppercase text-xs" onClick={handleCreate} disabled={createProject.isPending}>
-                  {createProject.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Initialize Protocol"}
+                <Button className="flex-1 font-mono uppercase text-xs" onClick={handleCreateWithXpPrice}>
+                  Initialize Protocol
                 </Button>
               </div>
             </div>

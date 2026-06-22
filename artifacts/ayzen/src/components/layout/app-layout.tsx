@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { NotificationBell } from "@/components/notification-bell";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -37,7 +38,14 @@ export function AppLayout({ children }: AppLayoutProps) {
             <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)} className="text-primary hover:bg-primary/10">
               <Menu className="w-5 h-5" />
             </Button>
-            <span className="font-mono font-bold tracking-tighter text-primary text-lg">AYZEN</span>
+            <span className="font-mono font-bold tracking-tighter text-primary text-lg flex-1">AYZEN</span>
+            <NotificationBell />
+          </div>
+        )}
+
+        {!isMobile && (
+          <div className="relative z-10 flex items-center justify-end px-6 py-2 border-b border-border/40 bg-background/40 backdrop-blur-sm sticky top-0">
+            <NotificationBell />
           </div>
         )}
 

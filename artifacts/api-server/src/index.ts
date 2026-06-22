@@ -76,6 +76,23 @@ const MIGRATIONS = [
   "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_category TEXT DEFAULT 'B1'",
   // User total ROI field
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS total_roi REAL DEFAULT 0",
+  // XP on tasks + project XP price
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS xp_amount REAL DEFAULT 0",
+  "ALTER TABLE tasks ALTER COLUMN project_id DROP NOT NULL",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS xp_price REAL DEFAULT 0.01",
+  // Notifications table
+  `CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'system',
+    title TEXT NOT NULL,
+    message TEXT,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    data TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // Rejection reason on task_submissions
+  "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

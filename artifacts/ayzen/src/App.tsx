@@ -1,3 +1,4 @@
+import { lazy, Suspense, useEffect } from "react";
 import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,61 +8,74 @@ import { PluginsProvider } from "@/hooks/use-plugins";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AiChat } from "@/components/ai-chat";
 import { useRealtime } from "@/hooks/use-realtime";
+
+// Always eager-load auth pages (users hit these first)
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import ForgotPassword from "@/pages/forgot-password";
-import AdminDashboard from "@/pages/admin/dashboard";
-import AdminUsers from "@/pages/admin/users";
-import AdminProjects from "@/pages/admin/projects";
-import AdminProjectDetail from "@/pages/admin/project-detail";
-import AdminTasks from "@/pages/admin/tasks";
-import AdminGas from "@/pages/admin/tools/gas";
-import AdminWallet from "@/pages/admin/tools/wallet";
-import AdminStreak from "@/pages/admin/tools/streak";
-import AdminBroadcast from "@/pages/admin/broadcast";
-import AdminLeaderboard from "@/pages/admin/leaderboard";
-import AdminSettings from "@/pages/admin/settings";
-import AdminDeveloper from "@/pages/admin/developer";
-import AdminVault from "@/pages/admin/vault";
-import AdminPlugins from "@/pages/admin/plugins";
-import UserDashboard from "@/pages/user/dashboard";
-import UserProjects from "@/pages/user/projects";
-import UserProjectDetail from "@/pages/user/project-detail";
-import UserTasks from "@/pages/user/tasks";
-import UserVault from "@/pages/user/vault";
-import UserLeaderboard from "@/pages/user/leaderboard";
-import UserInbox from "@/pages/user/inbox";
-import Authenticator from "@/pages/user/authenticator";
-import AyzenEmail from "@/pages/user/ayzen-email";
-import UserProfile from "@/pages/user/profile";
-import EmailAccounts from "@/pages/user/email-accounts";
-import UserSupport from "@/pages/user/support";
-import AdminSupport from "@/pages/admin/support";
-import UserReferrals from "@/pages/user/referrals";
-import AdminReferrals from "@/pages/admin/referrals";
-import UserSettings from "@/pages/user/settings";
-import UserWallets from "@/pages/user/wallets";
-import SubscriptionPage from "@/pages/user/subscription";
-import CreditsPage from "@/pages/user/credits";
-import AdminCreditsPage from "@/pages/admin/credits";
-import AdminSubscriptions from "@/pages/admin/subscriptions";
-
 import Landing from "@/pages/landing";
 import NotFound from "@/pages/not-found";
-import { useEffect } from "react";
+
+// Lazy-load all authenticated pages for code splitting
+const AdminDashboard    = lazy(() => import("@/pages/admin/dashboard"));
+const AdminUsers        = lazy(() => import("@/pages/admin/users"));
+const AdminProjects     = lazy(() => import("@/pages/admin/projects"));
+const AdminProjectDetail = lazy(() => import("@/pages/admin/project-detail"));
+const AdminTasks        = lazy(() => import("@/pages/admin/tasks"));
+const AdminGas          = lazy(() => import("@/pages/admin/tools/gas"));
+const AdminWallet       = lazy(() => import("@/pages/admin/tools/wallet"));
+const AdminStreak       = lazy(() => import("@/pages/admin/tools/streak"));
+const AdminBroadcast    = lazy(() => import("@/pages/admin/broadcast"));
+const AdminLeaderboard  = lazy(() => import("@/pages/admin/leaderboard"));
+const AdminSettings     = lazy(() => import("@/pages/admin/settings"));
+const AdminDeveloper    = lazy(() => import("@/pages/admin/developer"));
+const AdminVault        = lazy(() => import("@/pages/admin/vault"));
+const AdminPlugins      = lazy(() => import("@/pages/admin/plugins"));
+const AdminSupport      = lazy(() => import("@/pages/admin/support"));
+const AdminReferrals    = lazy(() => import("@/pages/admin/referrals"));
+const AdminCreditsPage  = lazy(() => import("@/pages/admin/credits"));
+const AdminSubscriptions = lazy(() => import("@/pages/admin/subscriptions"));
+
+const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
+const UserProjects      = lazy(() => import("@/pages/user/projects"));
+const UserProjectDetail = lazy(() => import("@/pages/user/project-detail"));
+const UserTasks         = lazy(() => import("@/pages/user/tasks"));
+const UserVault         = lazy(() => import("@/pages/user/vault"));
+const UserLeaderboard   = lazy(() => import("@/pages/user/leaderboard"));
+const UserInbox         = lazy(() => import("@/pages/user/inbox"));
+const Authenticator     = lazy(() => import("@/pages/user/authenticator"));
+const AyzenEmail        = lazy(() => import("@/pages/user/ayzen-email"));
+const UserProfile       = lazy(() => import("@/pages/user/profile"));
+const EmailAccounts     = lazy(() => import("@/pages/user/email-accounts"));
+const UserSupport       = lazy(() => import("@/pages/user/support"));
+const UserReferrals     = lazy(() => import("@/pages/user/referrals"));
+const UserSettings      = lazy(() => import("@/pages/user/settings"));
+const UserWallets       = lazy(() => import("@/pages/user/wallets"));
+const SubscriptionPage  = lazy(() => import("@/pages/user/subscription"));
+const CreditsPage       = lazy(() => import("@/pages/user/credits"));
+
+function PageLoader() {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <div className="font-mono text-xs text-muted-foreground/50 animate-pulse tracking-widest uppercase">
+        Loading...
+      </div>
+    </div>
+  );
+}
 
 function ProtectedRoute({ component: Component, adminOnly = false, ...rest }: any) {
   const { user, isAdmin, isLoading } = useAuth();
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono">INITIALIZING...</div>;
-
   if (!user) return <Redirect to="/login" />;
-
   if (adminOnly && !isAdmin) return <Redirect to="/dashboard" />;
 
   return (
     <AppLayout>
-      <Component {...rest} />
+      <Suspense fallback={<PageLoader />}>
+        <Component {...rest} />
+      </Suspense>
     </AppLayout>
   );
 }
@@ -94,6 +108,10 @@ function Router() {
       <Route path="/admin/plugins">{() => <ProtectedRoute component={AdminPlugins} adminOnly />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={AdminSettings} adminOnly />}</Route>
       <Route path="/admin/developer">{() => <ProtectedRoute component={AdminDeveloper} adminOnly />}</Route>
+      <Route path="/admin/support">{() => <ProtectedRoute component={AdminSupport} adminOnly />}</Route>
+      <Route path="/admin/referrals">{() => <ProtectedRoute component={AdminReferrals} adminOnly />}</Route>
+      <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
+      <Route path="/admin/subscriptions">{() => <ProtectedRoute component={AdminSubscriptions} adminOnly />}</Route>
 
       {/* User Routes */}
       <Route path="/dashboard">{() => <ProtectedRoute component={UserDashboard} />}</Route>
@@ -109,14 +127,10 @@ function Router() {
       <Route path="/email-accounts">{() => <ProtectedRoute component={EmailAccounts} />}</Route>
       <Route path="/support">{() => <ProtectedRoute component={UserSupport} />}</Route>
       <Route path="/referrals">{() => <ProtectedRoute component={UserReferrals} />}</Route>
-      <Route path="/admin/support">{() => <ProtectedRoute component={AdminSupport} adminOnly />}</Route>
-      <Route path="/admin/referrals">{() => <ProtectedRoute component={AdminReferrals} adminOnly />}</Route>
       <Route path="/settings">{() => <ProtectedRoute component={UserSettings} />}</Route>
       <Route path="/wallets">{() => <ProtectedRoute component={UserWallets} />}</Route>
       <Route path="/subscription">{() => <ProtectedRoute component={SubscriptionPage} />}</Route>
       <Route path="/credits">{() => <ProtectedRoute component={CreditsPage} />}</Route>
-      <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
-      <Route path="/admin/subscriptions">{() => <ProtectedRoute component={AdminSubscriptions} adminOnly />}</Route>
 
       <Route component={NotFound} />
     </Switch>
