@@ -1,4 +1,4 @@
-modules = ["nodejs-24", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 
 [deployment]
 router = "application"
@@ -40,13 +40,13 @@ outputType = "webview"
 name = "API Server"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "PORT=8081 pnpm --filter @workspace/api-server run dev"
-waitForPort = 8081
-
 [workflows.workflow.metadata]
 outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=8000 DATABASE_URL=postgresql://postgres:password@helium:5432/heliumdb pnpm --filter @workspace/api-server run dev"
+waitForPort = 8000
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
@@ -62,6 +62,10 @@ channel = "stable-25_05"
 [[ports]]
 localPort = 5173
 externalPort = 5173
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
 
 [[ports]]
 localPort = 8080
@@ -87,5 +91,5 @@ externalPort = 3000
 
 [userenv.shared]
 FIREBASE_PROJECT_ID = "ayzenworkspacex01"
-AYZEN_API_PORT = "8081"
+AYZEN_API_PORT = "8000"
 AYZEN_FRONTEND_PORT = "8080"

@@ -6,6 +6,7 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const port = Number(process.env.PORT ?? 5173);
 const basePath = process.env.BASE_PATH ?? "/";
+const apiPort = Number(process.env.AYZEN_API_PORT ?? 8000);
 
 export default defineConfig({
   base: basePath,
@@ -54,6 +55,12 @@ export default defineConfig({
     host: "0.0.0.0",
     allowedHosts: true,
     fs: { strict: true },
+    proxy: {
+      "/api": {
+        target: `http://localhost:${apiPort}`,
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     port,
