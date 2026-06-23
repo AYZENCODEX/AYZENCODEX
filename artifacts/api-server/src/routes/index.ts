@@ -30,6 +30,7 @@ import localAccountsRouter from "./local-accounts";
 import messagesRouter from "./messages";
 import aiActionsRouter from "./ai-actions";
 import notificationsRouter from "./notifications";
+import functionsRouter from "./functions";
 
 const router: IRouter = Router();
 
@@ -64,5 +65,6 @@ router.use(localAccountsRouter);
 router.use(messagesRouter);
 router.use(aiActionsRouter);
 router.use(notificationsRouter);
+router.use(functionsRouter);
 
 export default router;

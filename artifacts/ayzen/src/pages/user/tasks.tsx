@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Play, CheckCircle2, Clock, XCircle, Loader2,
-  ExternalLink, Filter, Search, Zap, Trophy, Send,
+  Filter, Search, Zap, Trophy, Send, DollarSign,
+  Star, Settings2, Info, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -37,19 +38,40 @@ interface Task {
   verificationType: string;
   projectName?: string | null;
   userStatus?: string | null;
+  xpAmount?: number | null;
+  cost?: number | null;
+  profit?: number | null;
+  taskCategory?: string | null;
+  category?: string | null;
+  deadline?: string | null;
+  timeLimitMinutes?: number | null;
 }
+
+type SubmitTab = "details" | "cost-roi" | "points" | "settings";
 
 function SubmitModal({ task, onClose, onDone }: {
   task: Task;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const [tab, setTab] = useState<SubmitTab>("details");
   const [proofUrl, setProofUrl] = useState("");
   const [notes, setNotes] = useState("");
+  const [cost, setCost] = useState("");
+  const [profit, setProfit] = useState("");
+  const [entities, setEntities] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   const token = localStorage.getItem("ayzen_token") ?? "";
+
+  const roi = profit && cost
+    ? (((Number(profit) - Number(cost)) / Number(cost)) * 100).toFixed(1)
+    : null;
+
+  const addEntity = () => setEntities(e => [...e, ""]);
+  const updateEntity = (i: number, v: string) => setEntities(e => e.map((x, j) => j === i ? v : x));
+  const removeEntity = (i: number) => setEntities(e => e.filter((_, j) => j !== i));
 
   const submit = async () => {
     setLoading(true);
@@ -57,106 +79,332 @@ function SubmitModal({ task, onClose, onDone }: {
       const res = await fetch(`${BASE}/api/tasks/${task.id}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ proofUrl: proofUrl.trim() || undefined, notes: notes.trim() || undefined }),
+        body: JSON.stringify({
+          proofUrl: proofUrl.trim() || undefined,
+          notes: notes.trim() || undefined,
+          cost: cost ? Number(cost) : undefined,
+          profit: profit ? Number(profit) : undefined,
+          roi: roi ? Number(roi) : undefined,
+          entities: entities.filter(Boolean).length ? entities.filter(Boolean) : undefined,
+        }),
       });
       const data = await res.json();
       if (res.ok) {
         if (data.status === "approved") {
-          toast({ title: "✅ Task auto-verified!", description: `Reward credited for "${task.name}"` });
+          toast({ title: "✅ Auto-verified!", description: `Reward credited for "${task.name}"` });
         } else {
-          toast({ title: "📨 Submitted for review", description: "Admin will verify your submission shortly." });
+          toast({ title: "📨 Submitted for review", description: "Admin will verify shortly." });
         }
         onDone();
       } else {
         toast({ variant: "destructive", title: "Submit failed", description: data.error ?? "Try again." });
       }
     } catch {
-      toast({ variant: "destructive", title: "Connection error", description: "Could not reach server." });
+      toast({ variant: "destructive", title: "Connection error" });
     }
     setLoading(false);
   };
 
+  const TABS: { id: SubmitTab; label: string; icon: React.ElementType }[] = [
+    { id: "details",  label: "Details",   icon: Info },
+    { id: "cost-roi", label: "Cost / ROI",icon: DollarSign },
+    { id: "points",   label: "Points",    icon: Star },
+    { id: "settings", label: "Settings",  icon: Settings2 },
+  ];
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-      <div className="bg-card border border-card-border rounded-xl w-full max-w-md shadow-2xl relative">
-        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent opacity-60" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+      <div className="bg-card border border-card-border rounded-xl w-full max-w-lg shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent" />
 
-        <div className="p-6 space-y-5">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-0">
+          <div className="flex items-start justify-between mb-1">
+            <div className="flex items-center gap-2">
               <Send className="w-4 h-4 text-primary" />
-              <h2 className="font-mono font-bold text-sm uppercase tracking-wider text-primary">Execute Task</h2>
+              <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">Execute Task</span>
             </div>
-            <p className="font-mono font-semibold text-foreground mt-2">{task.name}</p>
-            {task.description && (
-              <p className="text-xs font-mono text-muted-foreground mt-1 leading-relaxed">{task.description}</p>
-            )}
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              <X className="w-4 h-4" />
+            </button>
           </div>
-
-          <div className="flex gap-3">
+          <p className="font-mono font-semibold text-foreground text-sm mt-1.5">{task.name}</p>
+          <div className="flex flex-wrap gap-1.5 mt-2">
             <Badge variant="outline" className={cn("font-mono text-[10px] uppercase", TYPE_COLOR[task.taskType] ?? "border-muted-foreground/30 text-muted-foreground")}>
               {task.taskType}
             </Badge>
-            <Badge variant="outline" className="font-mono text-[10px] uppercase border-muted-foreground/30 text-muted-foreground">
-              {task.verificationType === "auto" ? "⚡ Auto-verify" : "👤 Manual review"}
-            </Badge>
-            {task.rewardAmount && (
-              <Badge className="font-mono text-[10px] bg-primary/10 text-primary border-primary/20 uppercase">
-                ${task.rewardAmount} reward
+            {task.taskCategory && (
+              <Badge variant="outline" className="font-mono text-[10px] uppercase border-violet-400/30 text-violet-400">
+                {task.taskCategory}
               </Badge>
             )}
+            <Badge variant="outline" className="font-mono text-[10px] border-muted-foreground/30 text-muted-foreground">
+              {task.verificationType === "auto" ? "⚡ Auto" : "👤 Manual"}
+            </Badge>
           </div>
+        </div>
 
-          <div className="space-y-3">
-            <div>
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
-                Proof URL (screenshot / tx hash) — optional
-              </label>
-              <Input
-                placeholder="https://... or 0x..."
-                value={proofUrl}
-                onChange={e => setProofUrl(e.target.value)}
-                className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
-              />
-            </div>
-            <div>
-              <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
-                Notes — optional
-              </label>
-              <Textarea
-                placeholder="Any notes for the reviewer..."
-                value={notes}
-                onChange={e => setNotes(e.target.value)}
-                rows={2}
-                className="font-mono text-xs bg-input border-border focus-visible:ring-primary/50 resize-none"
-              />
-            </div>
-          </div>
+        {/* Tabs */}
+        <div className="flex border-b border-border mt-4 px-5">
+          {TABS.map(t => {
+            const Icon = t.icon;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider border-b-2 transition-all -mb-px",
+                  tab === t.id
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="w-3 h-3" />
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
 
-          {task.verificationType !== "auto" && (
-            <p className="text-[10px] font-mono text-muted-foreground/60 bg-muted/30 rounded px-3 py-2">
-              ℹ️ This task requires admin review. You'll be notified on Telegram when approved.
-            </p>
+        {/* Tab content */}
+        <div className="p-5 space-y-4 min-h-[200px]">
+
+          {/* ── Details ─────────────────────────────────────────── */}
+          {tab === "details" && (
+            <>
+              {task.description && (
+                <p className="text-[11px] font-mono text-muted-foreground bg-muted/20 rounded px-3 py-2 leading-relaxed">
+                  {task.description}
+                </p>
+              )}
+              <div>
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                  Proof URL / TX Hash — optional
+                </label>
+                <Input
+                  placeholder="https://... or 0x..."
+                  value={proofUrl}
+                  onChange={e => setProofUrl(e.target.value)}
+                  className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50"
+                />
+              </div>
+              <div>
+                <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                  Notes — optional
+                </label>
+                <Textarea
+                  placeholder="Notes for the reviewer..."
+                  value={notes}
+                  onChange={e => setNotes(e.target.value)}
+                  rows={3}
+                  className="font-mono text-xs bg-input border-border focus-visible:ring-primary/50 resize-none"
+                />
+              </div>
+
+              {/* Multiple entity submissions */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Entities / Accounts — optional
+                  </label>
+                  <button onClick={addEntity} className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors">
+                    + Add entity
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {entities.map((e, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Input
+                        placeholder={`Entity ${i + 1} (wallet, username, email…)`}
+                        value={e}
+                        onChange={ev => updateEntity(i, ev.target.value)}
+                        className="font-mono text-xs h-9 bg-input border-border focus-visible:ring-primary/50"
+                      />
+                      {entities.length > 1 && (
+                        <button onClick={() => removeEntity(i)} className="text-muted-foreground hover:text-red-400 transition-colors shrink-0">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {entities.filter(Boolean).length > 1 && (
+                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">
+                    {entities.filter(Boolean).length} entities will be submitted
+                  </p>
+                )}
+              </div>
+            </>
           )}
 
-          <div className="flex gap-3 pt-1">
-            <Button
-              variant="outline"
-              className="flex-1 font-mono text-xs h-10 border-border"
-              onClick={onClose}
-              disabled={loading}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="flex-1 font-mono text-xs h-10 gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={submit}
-              disabled={loading}
-            >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              {loading ? "Submitting..." : "Submit"}
-            </Button>
-          </div>
+          {/* ── Cost / ROI ──────────────────────────────────────── */}
+          {tab === "cost-roi" && (
+            <>
+              <p className="text-[11px] font-mono text-muted-foreground">
+                Track your spending and earnings for this task. Used in your ROI dashboard.
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                    Cost ($)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={cost}
+                      onChange={e => setCost(e.target.value)}
+                      className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50 pl-6"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
+                    Profit / Return ($)
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={profit}
+                      onChange={e => setProfit(e.target.value)}
+                      className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50 pl-6"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* ROI auto-calc */}
+              <div className={cn(
+                "rounded-lg border p-4 text-center transition-all",
+                roi
+                  ? Number(roi) >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"
+                  : "border-border bg-muted/20"
+              )}>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
+                  Calculated ROI
+                </div>
+                <div className={cn(
+                  "font-mono text-3xl font-bold",
+                  roi
+                    ? Number(roi) >= 0 ? "text-emerald-400" : "text-red-400"
+                    : "text-muted-foreground/40"
+                )}>
+                  {roi ? `${Number(roi) >= 0 ? "+" : ""}${roi}%` : "—"}
+                </div>
+                {cost && profit && (
+                  <div className="font-mono text-[10px] text-muted-foreground mt-1">
+                    Net: ${(Number(profit) - Number(cost)).toFixed(2)}
+                  </div>
+                )}
+              </div>
+              <p className="text-[10px] font-mono text-muted-foreground/50">
+                These figures are stored privately and used to calculate your total platform ROI.
+              </p>
+            </>
+          )}
+
+          {/* ── Points ──────────────────────────────────────────── */}
+          {tab === "points" && (
+            <>
+              <p className="text-[11px] font-mono text-muted-foreground">
+                Rewards you'll earn upon successful verification of this task.
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">XP Points</div>
+                  <div className="font-mono text-2xl font-bold text-primary">
+                    {task.xpAmount ? `+${task.xpAmount}` : "—"}
+                  </div>
+                  <div className="font-mono text-[10px] text-muted-foreground/60 mt-1">XP</div>
+                </div>
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 text-center">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Reward</div>
+                  <div className="font-mono text-2xl font-bold text-amber-400">
+                    {task.rewardAmount ? `$${task.rewardAmount}` : "—"}
+                  </div>
+                  <div className="font-mono text-[10px] text-muted-foreground/60 mt-1">USD</div>
+                </div>
+              </div>
+
+              <div className="bg-muted/20 border border-border rounded-lg p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">Task Category</span>
+                  <Badge variant="outline" className="font-mono text-[10px] border-violet-400/30 text-violet-400">
+                    {task.taskCategory ?? task.category ?? "General"}
+                  </Badge>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">Type</span>
+                  <span className="font-mono text-[10px] text-foreground">{task.taskType}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">Verification</span>
+                  <span className="font-mono text-[10px] text-foreground">
+                    {task.verificationType === "auto" ? "⚡ Automatic" : "👤 Manual review"}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ── Settings ────────────────────────────────────────── */}
+          {tab === "settings" && (
+            <>
+              <p className="text-[11px] font-mono text-muted-foreground">
+                Task configuration and constraints set by the admin.
+              </p>
+              <div className="bg-muted/20 border border-border rounded-lg divide-y divide-border">
+                {[
+                  { label: "Task ID", value: `#${task.id}` },
+                  { label: "Project", value: task.projectName ?? "General" },
+                  { label: "Task Category", value: task.taskCategory ?? task.category ?? "—" },
+                  { label: "Task Type", value: task.taskType },
+                  { label: "Verification", value: task.verificationType === "auto" ? "Automatic" : "Manual review" },
+                  { label: "Time Limit", value: task.timeLimitMinutes ? `${task.timeLimitMinutes} min` : "No limit" },
+                  { label: "Deadline", value: task.deadline ? new Date(task.deadline).toLocaleDateString() : "None" },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center px-4 py-2.5">
+                    <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">{row.label}</span>
+                    <span className="font-mono text-[10px] text-foreground">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+              {task.verificationType !== "auto" && (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-3">
+                  <p className="font-mono text-[10px] text-amber-400">
+                    ℹ️ Manual review required. You'll receive a notification when the admin approves your submission.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border px-5 py-4 flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 font-mono text-xs h-10 border-border"
+            onClick={onClose}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            className="flex-1 font-mono text-xs h-10 gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={submit}
+            disabled={loading}
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {loading ? "Submitting…" : "Submit Task"}
+          </Button>
         </div>
       </div>
     </div>
@@ -173,8 +421,6 @@ export default function UserTasks() {
   const [filter, setFilter] = useState<"all" | "pending" | "completed" | "available">("all");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const { toast } = useToast();
-
-  const userId = me?.id;
 
   const tasks: Task[] = (Array.isArray(data) ? data : []) as Task[];
 
@@ -228,7 +474,6 @@ export default function UserTasks() {
         </div>
       </div>
 
-      {/* Filter tabs */}
       <div className="flex items-center gap-2 flex-wrap">
         {(["all", "available", "pending", "completed"] as const).map(f => (
           <button
@@ -255,7 +500,6 @@ export default function UserTasks() {
         </div>
       </div>
 
-      {/* Task list */}
       <div className="grid gap-3">
         {isLoading ? (
           Array.from({ length: 4 }).map((_, i) => (
@@ -292,6 +536,11 @@ export default function UserTasks() {
                       <Badge variant="outline" className={cn("font-mono text-[10px] uppercase rounded-sm shrink-0", TYPE_COLOR[task.taskType] ?? "border-muted-foreground/30 text-muted-foreground")}>
                         {task.taskType}
                       </Badge>
+                      {task.taskCategory && (
+                        <Badge variant="outline" className="font-mono text-[10px] uppercase rounded-sm shrink-0 border-violet-400/30 text-violet-400">
+                          {task.taskCategory}
+                        </Badge>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       <p className="text-xs font-mono text-muted-foreground/70">{task.projectName ?? "General"}</p>
@@ -307,10 +556,17 @@ export default function UserTasks() {
                   </div>
 
                   <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
-                    {task.rewardAmount && (
+                    {(task.rewardAmount || task.xpAmount) && (
                       <div className="text-right flex-1 sm:flex-none">
-                        <div className="text-[9px] uppercase font-mono text-muted-foreground mb-0.5">Reward</div>
-                        <div className="font-bold font-mono text-base text-primary">${task.rewardAmount}</div>
+                        {task.rewardAmount && (
+                          <>
+                            <div className="text-[9px] uppercase font-mono text-muted-foreground mb-0.5">Reward</div>
+                            <div className="font-bold font-mono text-base text-primary">${task.rewardAmount}</div>
+                          </>
+                        )}
+                        {task.xpAmount && (
+                          <div className="font-mono text-[10px] text-muted-foreground/60">+{task.xpAmount} XP</div>
+                        )}
                       </div>
                     )}
 
@@ -346,7 +602,6 @@ export default function UserTasks() {
         )}
       </div>
 
-      {/* Submit modal */}
       {activeTask && (
         <SubmitModal
           task={activeTask}

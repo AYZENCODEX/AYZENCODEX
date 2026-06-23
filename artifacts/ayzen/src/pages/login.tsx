@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword, hasFirebase } from "@/lib/firebase";
@@ -50,12 +50,12 @@ async function backendLogin(email: string, password: string): Promise<{ token: s
   }
 }
 
-async function backendRegister(username: string, email: string, password: string, refCode?: string): Promise<{ token: string; user: any; error?: string } | null> {
+async function backendRegister(username: string, email: string, password: string, emailOtp: string, refCode?: string): Promise<{ token: string; user: any; error?: string } | null> {
   try {
     const res = await fetch(`${BASE}/api/auth/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, email, password, ...(refCode ? { refCode } : {}) }),
+      body: JSON.stringify({ username, email, password, emailOtp, ...(refCode ? { refCode } : {}) }),
     });
     const data = await res.json();
     if (!res.ok) return { token: "", user: null, error: data.error ?? "Registration failed" };
@@ -98,6 +98,74 @@ export default function Login() {
   const [captcha, setCaptcha] = useState(makeCaptcha);
   const [captchaInput, setCaptchaInput] = useState("");
   const [captchaError, setCaptchaError] = useState(false);
+
+  // signup OTP flow
+  const [signupStep, setSignupStep] = useState<"form" | "otp">("form");
+  const [signupOtp, setSignupOtp] = useState("");
+  const [signupSendingOtp, setSignupSendingOtp] = useState(false);
+  const [signupCountdown, setSignupCountdown] = useState(0);
+
+  useEffect(() => {
+    if (signupCountdown <= 0) return;
+    const t = setTimeout(() => setSignupCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [signupCountdown]);
+
+  const handleSendSignupOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!username || !email || !password) {
+      toast({ variant: "destructive", title: "Fill all fields", description: "Username, email and password are required." });
+      return;
+    }
+    if (password.length < 6) {
+      toast({ variant: "destructive", title: "Password too short", description: "Minimum 6 characters." });
+      return;
+    }
+    if (parseInt(captchaInput) !== captcha.ans) {
+      setCaptchaError(true);
+      setCaptcha(makeCaptcha());
+      setCaptchaInput("");
+      toast({ variant: "destructive", title: "Captcha failed" });
+      return;
+    }
+    setCaptchaError(false);
+    setSignupSendingOtp(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast({ title: "Code sent!", description: `6-digit code sent to ${email}` });
+        setSignupStep("otp");
+        setSignupCountdown(60);
+      } else {
+        toast({ variant: "destructive", title: "Failed to send code", description: data.error ?? "Try again." });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Connection error" });
+    }
+    setSignupSendingOtp(false);
+  };
+
+  const handleResendSignupOtp = async () => {
+    if (signupCountdown > 0) return;
+    setSignupSendingOtp(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) {
+        toast({ title: "Code resent!" });
+        setSignupCountdown(60);
+      }
+    } catch {}
+    setSignupSendingOtp(false);
+  };
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -184,25 +252,13 @@ export default function Login() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username || !email || !password) {
-      toast({ variant: "destructive", title: "Fill all fields", description: "Username, email and password are required." });
+    if (!signupOtp.trim() || signupOtp.length !== 6) {
+      toast({ variant: "destructive", title: "Enter the 6-digit code" });
       return;
     }
-    if (password.length < 6) {
-      toast({ variant: "destructive", title: "Password too short", description: "Minimum 6 characters required." });
-      return;
-    }
-    if (parseInt(captchaInput) !== captcha.ans) {
-      setCaptchaError(true);
-      setCaptcha(makeCaptcha());
-      setCaptchaInput("");
-      toast({ variant: "destructive", title: "Captcha failed", description: "Solve the security question correctly." });
-      return;
-    }
-    setCaptchaError(false);
     setLoading(true);
     try {
-      const data = await backendRegister(username, email, password);
+      const data = await backendRegister(username, email, password, signupOtp.trim());
       if (!data) {
         toast({ variant: "destructive", title: "Registration failed", description: "Server error. Try again." });
         setLoading(false);
@@ -210,6 +266,7 @@ export default function Login() {
       }
       if (data.error) {
         toast({ variant: "destructive", title: "Registration failed", description: data.error });
+        if (data.error.toLowerCase().includes("code")) setSignupOtp("");
         setLoading(false);
         return;
       }
@@ -383,8 +440,43 @@ export default function Login() {
                 </form>
               )}
             </div>
+          ) : tab === "signup" && signupStep === "otp" ? (
+            <form onSubmit={handleSignUp} className="space-y-4">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">
+                <Check className="w-7 h-7 text-primary mx-auto mb-2" />
+                <p className="font-mono text-xs text-muted-foreground">Verification code sent to</p>
+                <p className="font-mono text-sm text-foreground font-bold">{email}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">6-Digit Code</Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={signupOtp}
+                  onChange={e => setSignupOtp(e.target.value.replace(/\D/g, ""))}
+                  className="bg-input border-border font-mono h-14 text-center text-2xl tracking-[0.5em] focus-visible:ring-primary/50 focus-visible:border-primary"
+                  autoFocus required
+                />
+              </div>
+              <Button type="submit" disabled={loading || signupOtp.length !== 6}
+                className="w-full h-11 font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="flex items-center gap-2">Create Account <ArrowRight className="w-4 h-4" /></span>}
+              </Button>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => { setSignupStep("form"); setSignupOtp(""); }}
+                  className="font-mono text-xs text-muted-foreground hover:text-foreground underline">
+                  ← Change details
+                </button>
+                <button type="button" onClick={handleResendSignupOtp} disabled={signupCountdown > 0 || signupSendingOtp}
+                  className="font-mono text-xs text-primary disabled:opacity-40">
+                  {signupSendingOtp ? "Sending…" : signupCountdown > 0 ? `Resend in ${signupCountdown}s` : "Resend Code"}
+                </button>
+              </div>
+            </form>
           ) : (
-          <form onSubmit={tab === "signin" ? handleSignIn : handleSignUp} className="space-y-4">
+          <form onSubmit={tab === "signin" ? handleSignIn : handleSendSignupOtp} className="space-y-4">
             {tab === "signup" && (
               <div className="space-y-2">
                 <Label htmlFor="username" className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Username</Label>
@@ -474,13 +566,14 @@ export default function Login() {
             <Button
               type="submit"
               className="w-full h-11 font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90"
-              disabled={isLoading}
+              disabled={isLoading || signupSendingOtp}
             >
-              {loading ? (
+              {loading || signupSendingOtp ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <span className="flex items-center gap-2">
-                  {tab === "signin" ? "Initialize" : "Create Account"} <ArrowRight className="w-4 h-4" />
+                  {tab === "signin" ? "Initialize" : <><Mail className="w-4 h-4" /> Send Code</>}
+                  <ArrowRight className="w-4 h-4" />
                 </span>
               )}
             </Button>
