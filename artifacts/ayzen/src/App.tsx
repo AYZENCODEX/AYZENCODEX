@@ -8,6 +8,9 @@ import { PluginsProvider } from "@/hooks/use-plugins";
 import { AppLayout } from "@/components/layout/app-layout";
 import { AiChat } from "@/components/ai-chat";
 import { useRealtime } from "@/hooks/use-realtime";
+import { CommandSearch } from "@/components/command-search";
+import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
+import { ScrollToTop } from "@/components/scroll-to-top";
 
 // Always eager-load auth pages (users hit these first)
 import Login from "@/pages/login";
@@ -56,6 +59,7 @@ const SubscriptionPage  = lazy(() => import("@/pages/user/subscription"));
 const CreditsPage       = lazy(() => import("@/pages/user/credits"));
 const UserHistory       = lazy(() => import("@/pages/user/history"));
 const EarnPage          = lazy(() => import("@/pages/user/earn"));
+const CalculatorPage    = lazy(() => import("@/pages/user/calculator"));
 
 function PageLoader() {
   return (
@@ -137,6 +141,7 @@ function Router() {
       <Route path="/credits">{() => <ProtectedRoute component={CreditsPage} />}</Route>
       <Route path="/history">{() => <ProtectedRoute component={UserHistory} />}</Route>
       <Route path="/earn">{() => <ProtectedRoute component={EarnPage} />}</Route>
+      <Route path="/calculator">{() => <ProtectedRoute component={CalculatorPage} />}</Route>
 
       <Route component={NotFound} />
     </Switch>
@@ -160,7 +165,12 @@ function RealtimeProvider({ children }: { children: React.ReactNode }) {
 
 function App() {
   useEffect(() => {
-    document.documentElement.classList.add("dark");
+    const saved = localStorage.getItem("ayzen_theme");
+    if (saved === "light") {
+      document.documentElement.classList.remove("dark");
+    } else {
+      document.documentElement.classList.add("dark");
+    }
   }, []);
 
   return (
@@ -172,6 +182,9 @@ function App() {
               <RealtimeProvider>
                 <Router />
                 <AiChat />
+                <CommandSearch />
+                <KeyboardShortcuts />
+                <ScrollToTop />
               </RealtimeProvider>
             </PluginsProvider>
           </WouterRouter>

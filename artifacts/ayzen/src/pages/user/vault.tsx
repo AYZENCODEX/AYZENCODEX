@@ -20,6 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import LocalAccounts from "@/components/local-accounts";
+import { QRCodeSVG } from "qrcode.react";
 
 const CATEGORIES = ["DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Social", "Other"];
 
@@ -33,6 +34,25 @@ const CATEGORY_COLORS: Record<string, string> = {
   Social: "text-pink-400 border-pink-400/20 bg-pink-400/5",
   Other: "text-muted-foreground border-border bg-muted/20",
 };
+
+function WalletQRModal({ address, onClose }: { address: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-card border border-card-border rounded-xl p-5 flex flex-col items-center gap-4 w-[280px] shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between w-full">
+          <span className="font-mono text-xs uppercase tracking-widest text-primary">Wallet QR</span>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="bg-white p-3 rounded-lg">
+          <QRCodeSVG value={address} size={180} bgColor="#ffffff" fgColor="#0a0a0a" />
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground/70 text-center break-all px-1">{address}</p>
+      </div>
+    </div>
+  );
+}
 
 function CredField({ label, value, color = "text-muted-foreground" }: {
   label: string; value: string | null | undefined; color?: string;
@@ -199,6 +219,7 @@ export default function UserVault() {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [qrAddress, setQrAddress] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [otherAccounts, setOtherAccounts] = useState<OtherAccount[]>([]);
   const [formTab, setFormTab] = useState("main");
@@ -485,6 +506,31 @@ export default function UserVault() {
                     )}
                   </div>
 
+                  {/* Wallet addresses with QR code */}
+                  {Array.isArray((entry as any).walletAddresses) && (entry as any).walletAddresses.length > 0 && (
+                    <div className="space-y-1 py-2 border-t border-border/30">
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <QrCode className="w-3 h-3 text-primary/60" />
+                        <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-primary/70">Wallets</span>
+                        <Badge variant="outline" className="text-[8px] font-mono ml-1 border-primary/20 text-primary/50 px-1 py-0">
+                          {(entry as any).walletAddresses.length}
+                        </Badge>
+                      </div>
+                      {((entry as any).walletAddresses as string[]).map((addr, i) => (
+                        <div key={i} className="flex items-center gap-2 group/wallet">
+                          <span className="font-mono text-[10px] text-foreground/70 flex-1 truncate">{addr}</span>
+                          <button
+                            onClick={() => setQrAddress(addr)}
+                            className="opacity-0 group-hover/wallet:opacity-100 text-muted-foreground/40 hover:text-primary transition-all"
+                            title="Show QR code"
+                          >
+                            <QrCode className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {entry.notes && (
                     <div className="border-t border-border/30 pt-2 mt-2 pb-1">
                       <p className="text-[10px] font-mono text-muted-foreground/50 truncate">{entry.notes}</p>
@@ -502,6 +548,9 @@ export default function UserVault() {
           })
         )}
       </div>}
+
+      {/* QR Code Modal */}
+      {qrAddress && <WalletQRModal address={qrAddress} onClose={() => setQrAddress(null)} />}
 
       {/* ── Create Dialog ── */}
       <Dialog open={open} onOpenChange={o => { setOpen(o); if (!o) resetForm(); }}>

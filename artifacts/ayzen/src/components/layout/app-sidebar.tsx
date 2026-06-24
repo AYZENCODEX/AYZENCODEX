@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { usePlugins } from "@/hooks/use-plugins";
@@ -8,7 +8,7 @@ import {
   Vault, ShieldCheck, ChevronDown, ChevronRight,
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
-  DollarSign, Link2,
+  DollarSign, Link2, Sun, Moon, Search, Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -125,6 +125,12 @@ const USER_NAV: NavGroup[] = [
       { href: "/inbox",   label: "Messages",   icon: MessageCircle },
       { href: "/profile", label: "My Profile", icon: UserCircle },
       { href: "/support", label: "Support",    icon: HelpCircle, pluginSlug: "support" },
+    ],
+  },
+  {
+    label: "Tools", icon: DollarSign,
+    items: [
+      { href: "/calculator", label: "ROI Calculator", icon: DollarSign },
     ],
   },
   {
@@ -321,17 +327,51 @@ function NavGroupComp({ group, location, isEnabled, onNavigate }: {
   );
 }
 
+function useThemeToggle() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document === "undefined") return true;
+    return document.documentElement.classList.contains("dark");
+  });
+  const toggle = useCallback(() => {
+    const next = !isDark;
+    if (next) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("ayzen_theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("ayzen_theme", "light");
+    }
+    setIsDark(next);
+  }, [isDark]);
+  return { isDark, toggle };
+}
+
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
   const [location] = useLocation();
   const { isAdmin, logout, user } = useAuth();
   const { isEnabled } = usePlugins();
+  const { isDark, toggle: toggleTheme } = useThemeToggle();
   const groups = isAdmin ? ADMIN_NAV : USER_NAV;
+
+  const openSearch = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
+  const openShortcuts = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));
 
   return (
     <div className="flex h-full w-64 flex-col bg-sidebar border-r border-sidebar-border text-sidebar-foreground">
       <div className="p-4 flex items-center gap-2 font-mono text-xl font-bold tracking-tighter text-primary border-b border-sidebar-border">
         <Terminal className="w-5 h-5" />
-        AYZEN
+        <span className="flex-1">AYZEN</span>
+        <div className="flex items-center gap-1">
+          <button onClick={openSearch} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="Search (⌘K)">
+            <Search className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={openShortcuts} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="Keyboard shortcuts (?)">
+            <Keyboard className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={toggleTheme} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="Toggle theme">
+            {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
       <div className="flex-1 overflow-y-auto py-2 space-y-1">
         {groups.map(group => (

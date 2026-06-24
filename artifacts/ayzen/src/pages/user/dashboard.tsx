@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useGetMe, useGetUserStats, useListProjects, useListTasks } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -12,6 +12,8 @@ import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer,
 } from "recharts";
+import { ActivityHeatmap } from "@/components/activity-heatmap";
+import { useCountUp } from "@/hooks/use-count-up";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -27,12 +29,25 @@ function LiveDot() {
   );
 }
 
-function StatCard({ label, value, icon: Icon, color = "text-primary", sub, loading }: {
-  label: string; value: string | number; icon: React.ElementType;
+function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; prefix?: string; suffix?: string }) {
+  const animated = useCountUp(value, 1400);
+  return <>{prefix}{animated.toLocaleString()}{suffix}</>;
+}
+
+function StatCard({ label, value, numericValue, icon: Icon, color = "text-primary", sub, loading }: {
+  label: string; value: string | number; numericValue?: number; icon: React.ElementType;
   color?: string; sub?: string; loading?: boolean;
 }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold: 0.3 });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+
   return (
-    <div className="bg-card border border-card-border hover:border-primary/40 transition-all duration-300 rounded-xl p-5 relative overflow-hidden group card-lift">
+    <div ref={ref} className="bg-card border border-card-border hover:border-primary/40 transition-all duration-300 rounded-xl p-5 relative overflow-hidden group card-lift">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="flex items-start justify-between mb-3">
         <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">{label}</span>
@@ -41,7 +56,11 @@ function StatCard({ label, value, icon: Icon, color = "text-primary", sub, loadi
         </div>
       </div>
       {loading ? <Skeleton className="h-8 w-24" /> : (
-        <div className={cn("text-2xl font-bold font-mono tracking-tighter animate-count-up", color)}>{value}</div>
+        <div className={cn("text-2xl font-bold font-mono tracking-tighter", color)}>
+          {numericValue !== undefined && visible
+            ? <AnimatedNumber value={numericValue} />
+            : value}
+        </div>
       )}
       {sub && !loading && (
         <div className="text-[10px] font-mono text-muted-foreground/50 mt-1">{sub}</div>
@@ -140,14 +159,17 @@ export default function UserDashboard() {
       {/* Primary stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
         <StatCard label="Total ROI" value={`$${(stats?.totalRoi ?? 0).toLocaleString()}`}
+          numericValue={stats?.totalRoi ?? 0}
           icon={Zap} color="text-primary" sub="Cumulative earnings" loading={statsLoading} />
         <StatCard label="Tasks Completed" value={(stats?.tasksCompleted ?? 0).toLocaleString()}
+          numericValue={stats?.tasksCompleted ?? 0}
           icon={CheckSquare} color="text-emerald-400"
           sub={pendingTasks > 0 ? `${pendingTasks} pending` : "All caught up"} loading={statsLoading} />
         <StatCard label="Current Rank" value={stats?.rank ? `#${stats.rank.toLocaleString()}` : "—"}
           icon={Trophy} color="text-amber-400"
           sub={`of ${stats?.totalUsers ?? "?"} operators`} loading={statsLoading} />
         <StatCard label="Streak" value={`${stats?.streak ?? 0}d`}
+          numericValue={stats?.streak ?? 0}
           icon={Activity} color="text-violet-400"
           sub="Consecutive days active" loading={statsLoading} />
       </div>
@@ -234,6 +256,9 @@ export default function UserDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Activity Heatmap */}
+      <ActivityHeatmap />
 
       {/* Wallet quick panel */}
       {walletCount > 0 && (

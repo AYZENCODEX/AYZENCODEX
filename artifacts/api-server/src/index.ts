@@ -125,6 +125,16 @@ const MIGRATIONS = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_earn_links_user_id ON earn_links(user_id)",
   "CREATE INDEX IF NOT EXISTS idx_earn_links_code ON earn_links(code)",
+  // Task priority field
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal'",
+  // Task submission: cost_category and profit_category
+  "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS cost_category TEXT",
+  "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS profit_category TEXT",
+  // Project completion percentage (cached)
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS completion_pct REAL DEFAULT 0",
+  // Bookmark (user-local, stored in localStorage on frontend)
+  // User display color tag
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS color_tag TEXT DEFAULT '#22d3ee'",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

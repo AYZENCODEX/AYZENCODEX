@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useListTasks, useGetMe, useListVaultEntries } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,10 +10,79 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Play, CheckCircle2, Clock, XCircle, Loader2,
   Filter, Search, Zap, Trophy, Send, DollarSign,
-  Star, Settings2, Info, X,
+  Star, Settings2, Info, X, Download, AlertTriangle, ArrowUp, TimerIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import confetti from "canvas-confetti";
+
+const PRIORITY_CONFIG = {
+  urgent: { label: "URGENT", color: "text-red-400 border-red-400/30 bg-red-400/5" },
+  high:   { label: "HIGH",   color: "text-orange-400 border-orange-400/30 bg-orange-400/5" },
+  normal: { label: "NORMAL", color: "text-muted-foreground border-border/40" },
+  low:    { label: "LOW",    color: "text-muted-foreground/50 border-border/20" },
+} as const;
+
+function exportTasksCSV(tasks: Task[]) {
+  const headers = ["ID","Name","Project","Type","Status","XP","Reward","Cost","Profit","ROI%"];
+  const rows = tasks.map(t => [
+    t.id,
+    `"${(t.name ?? "").replace(/"/g, '""')}"`,
+    `"${(t.projectName ?? "General").replace(/"/g, '""')}"`,
+    t.taskType,
+    t.userStatus ?? "available",
+    t.xpAmount ?? 0,
+    t.rewardAmount ?? 0,
+    t.cost ?? 0,
+    t.profit ?? 0,
+    t.cost && t.profit ? (((t.profit - t.cost) / t.cost) * 100).toFixed(1) : 0,
+  ]);
+  const csv = [headers, ...rows].map(r => r.join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = `ayzen-tasks-${new Date().toISOString().split("T")[0]}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function TaskTimer() {
+  const [running, setRunning] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
+  const startRef = useRef<number>(0);
+  const rafRef = useRef<number>();
+
+  useEffect(() => {
+    if (running) {
+      startRef.current = Date.now() - elapsed * 1000;
+      const tick = () => {
+        setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [running]);
+
+  const fmt = (s: number) => `${String(Math.floor(s / 3600)).padStart(2,"0")}:${String(Math.floor((s % 3600) / 60)).padStart(2,"0")}:${String(s % 60).padStart(2,"0")}`;
+
+  return (
+    <div className="flex items-center gap-2 bg-card border border-card-border rounded-xl px-3 py-2">
+      <TimerIcon className={cn("w-3.5 h-3.5 flex-shrink-0", running ? "text-primary animate-pulse" : "text-muted-foreground/50")} />
+      <span className="font-mono text-sm tabular-nums text-foreground">{fmt(elapsed)}</span>
+      <button
+        onClick={() => setRunning(v => !v)}
+        className={cn("font-mono text-[10px] uppercase tracking-wider px-2 py-1 rounded transition-all border", running ? "text-red-400 border-red-400/30 hover:bg-red-400/10" : "text-primary border-primary/30 hover:bg-primary/10")}
+      >
+        {running ? "Stop" : "Start"}
+      </button>
+      {!running && elapsed > 0 && (
+        <button onClick={() => setElapsed(0)} className="font-mono text-[9px] text-muted-foreground/40 hover:text-muted-foreground">Reset</button>
+      )}
+    </div>
+  );
+}
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -106,8 +175,10 @@ function SubmitModal({ task, onClose, onDone }: {
       if (res.ok) {
         if (data.status === "approved") {
           toast({ title: "✅ Auto-verified!", description: `Reward credited for "${task.name}"` });
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24"] });
         } else {
           toast({ title: "📨 Submitted for review", description: "Admin will verify shortly." });
+          confetti({ particleCount: 60, spread: 50, origin: { y: 0.6 }, colors: ["#22d3ee", "#a78bfa"] });
         }
         onDone();
       } else {
@@ -519,6 +590,19 @@ export default function UserTasks() {
     queryClient.invalidateQueries({ queryKey: ["user-stats"] });
   }, [refetch, queryClient]);
 
+  // Cmd+E shortcut to export CSV
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "e") {
+        e.preventDefault();
+        exportTasksCSV(tasks);
+        toast({ title: "📊 Exported", description: `${tasks.length} tasks exported to CSV` });
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [tasks]);
+
   const handleExecute = (task: Task) => {
     if (task.userStatus === "approved") {
       toast({ title: "Already completed", description: "You already earned rewards for this task." });
@@ -538,11 +622,21 @@ export default function UserTasks() {
           <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase">Task Center</h1>
           <p className="text-muted-foreground font-mono text-sm">Pending executions and active operations</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Trophy className="w-4 h-4 text-amber-400" />
-          <span className="font-mono text-xs text-muted-foreground">
-            <span className="text-emerald-400 font-bold">{counts.completed}</span> / {counts.all} completed
-          </span>
+        <div className="flex items-center gap-3">
+          <TaskTimer />
+          <button
+            onClick={() => exportTasksCSV(filtered)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border/40 text-muted-foreground hover:text-primary hover:border-primary/30 transition-all font-mono text-[10px] uppercase tracking-wider"
+            title="Export to CSV (⌘E)"
+          >
+            <Download className="w-3.5 h-3.5" /> Export CSV
+          </button>
+          <div className="flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-400" />
+            <span className="font-mono text-xs text-muted-foreground">
+              <span className="text-emerald-400 font-bold">{counts.completed}</span> / {counts.all} completed
+            </span>
+          </div>
         </div>
       </div>
 
@@ -611,6 +705,11 @@ export default function UserTasks() {
                       {task.taskCategory && (
                         <Badge variant="outline" className="font-mono text-[10px] uppercase rounded-sm shrink-0 border-violet-400/30 text-violet-400">
                           {task.taskCategory}
+                        </Badge>
+                      )}
+                      {(task as any).priority && (task as any).priority !== "normal" && (
+                        <Badge variant="outline" className={cn("font-mono text-[9px] uppercase rounded-sm shrink-0", PRIORITY_CONFIG[(task as any).priority as keyof typeof PRIORITY_CONFIG]?.color)}>
+                          {PRIORITY_CONFIG[(task as any).priority as keyof typeof PRIORITY_CONFIG]?.label ?? (task as any).priority}
                         </Badge>
                       )}
                     </div>
