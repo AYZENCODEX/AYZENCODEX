@@ -73,6 +73,25 @@ router.get("/history", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/history/chart", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  if (!userId) { res.status(401).json({ error: "Unauthorized" }); return; }
+  try {
+    const r = await db.execute(sql.raw(
+      `SELECT
+         TO_CHAR(DATE_TRUNC('week', created_at), 'Mon DD') as week,
+         COUNT(*) FILTER (WHERE action IN ('task_approved','task_auto_approved')) as approved,
+         COUNT(*) FILTER (WHERE action = 'task_submitted') as submitted,
+         COUNT(*) as total
+       FROM user_activity
+       WHERE user_id = ${userId} AND created_at >= NOW() - INTERVAL '10 weeks'
+       GROUP BY DATE_TRUNC('week', created_at)
+       ORDER BY DATE_TRUNC('week', created_at) ASC`
+    ));
+    res.json(r.rows);
+  } catch { res.json([]); }
+});
+
 router.get("/admin/history", async (req, res): Promise<void> => {
   if (!isAdmin(req)) { res.status(403).json({ error: "Admin only" }); return; }
   const { limit = "100", userId } = req.query as Record<string, string>;

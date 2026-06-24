@@ -32,6 +32,7 @@ import aiActionsRouter from "./ai-actions";
 import notificationsRouter from "./notifications";
 import functionsRouter from "./functions";
 import historyRouter from "./history";
+import earnLinksRouter from "./earn-links";
 
 const router: IRouter = Router();
 
@@ -68,5 +69,6 @@ router.use(aiActionsRouter);
 router.use(notificationsRouter);
 router.use(functionsRouter);
 router.use(historyRouter);
+router.use(earnLinksRouter);
 
 export default router;

@@ -5,9 +5,10 @@ import { usePlugins } from "@/hooks/use-plugins";
 import {
   LayoutDashboard, Users, FolderGit2, CheckSquare, Fuel, Wallet,
   Trophy, Settings, Terminal, LogOut,
-  Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
+  Vault, ShieldCheck, ChevronDown, ChevronRight,
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
+  DollarSign, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -63,48 +64,59 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Command", icon: LayoutDashboard,
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/dashboard", label: "Dashboard",    icon: LayoutDashboard },
       { href: "/history",   label: "Activity Log", icon: History },
     ],
   },
   {
     label: "Protocols", icon: FolderGit2,
     items: [
-      { href: "/projects", label: "Projects", icon: FolderGit2, pluginSlug: "projects" },
-      { href: "/tasks", label: "Tasks", icon: CheckSquare, pluginSlug: "tasks" },
+      { href: "/projects", label: "Projects", icon: FolderGit2,  pluginSlug: "projects" },
+      { href: "/tasks",    label: "Tasks",    icon: CheckSquare, pluginSlug: "tasks" },
     ],
   },
   {
-    label: "Assets", icon: KeyRound,
+    label: "DAO Vault", icon: Database,
+    items: [
+      { href: "/vault",          label: "Entity Vault", icon: Vault,       pluginSlug: "vault" },
+      { href: "/authenticator",  label: "2FA Codes",    icon: ShieldCheck, pluginSlug: "authenticator" },
+    ],
+  },
+  {
+    label: "Assets", icon: Wallet,
     items: [
       { href: "/wallets", label: "My Wallets", icon: Wallet, pluginSlug: "wallets" },
-      { href: "/vault", label: "Vault", icon: Vault, pluginSlug: "vault" },
-      { href: "/authenticator", label: "2FA Codes", icon: ShieldCheck, pluginSlug: "authenticator" },
     ],
   },
   {
     label: "Mail", icon: Mail,
     items: [
-      { href: "/ayzen-email", label: "AYZEN", icon: AtSign, pluginSlug: "ayzen-email" },
-      { href: "/email-accounts", label: "LOCAL", icon: Mail, pluginSlug: "email-manager" },
+      { href: "/ayzen-email",    label: "AYZEN Mail", icon: AtSign, pluginSlug: "ayzen-email" },
+      { href: "/email-accounts", label: "LOCAL Mail", icon: Mail,   pluginSlug: "email-manager" },
     ],
   },
   {
-    label: "Social", icon: Trophy,
+    label: "Earn", icon: DollarSign,
     items: [
-      { href: "/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
-      { href: "/inbox", label: "Messages", icon: MessageCircle },
+      { href: "/earn",        label: "Earn Center",  icon: DollarSign,    },
+      { href: "/leaderboard", label: "Leaderboard",  icon: Trophy,   pluginSlug: "leaderboard" },
+      { href: "/referrals",   label: "Referrals",    icon: Share2,   pluginSlug: "referrals" },
+    ],
+  },
+  {
+    label: "Social", icon: MessageCircle,
+    items: [
+      { href: "/inbox",   label: "Messages",   icon: MessageCircle },
       { href: "/profile", label: "My Profile", icon: UserCircle },
-      { href: "/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
-      { href: "/support", label: "Support", icon: HelpCircle, pluginSlug: "support" },
+      { href: "/support", label: "Support",    icon: HelpCircle, pluginSlug: "support" },
     ],
   },
   {
     label: "System", icon: Settings,
     items: [
-      { href: "/credits", label: "Credits & AZN", icon: Coins },
-      { href: "/subscription", label: "Subscription", icon: Star },
-      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/credits",       label: "Credits & AZN", icon: Coins },
+      { href: "/subscription",  label: "Subscription",  icon: Star },
+      { href: "/settings",      label: "Settings",      icon: Settings },
     ],
   },
 ];

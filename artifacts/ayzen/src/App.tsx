@@ -54,6 +54,7 @@ const UserWallets       = lazy(() => import("@/pages/user/wallets"));
 const SubscriptionPage  = lazy(() => import("@/pages/user/subscription"));
 const CreditsPage       = lazy(() => import("@/pages/user/credits"));
 const UserHistory       = lazy(() => import("@/pages/user/history"));
+const EarnPage          = lazy(() => import("@/pages/user/earn"));
 
 function PageLoader() {
   return (
@@ -133,6 +134,7 @@ function Router() {
       <Route path="/subscription">{() => <ProtectedRoute component={SubscriptionPage} />}</Route>
       <Route path="/credits">{() => <ProtectedRoute component={CreditsPage} />}</Route>
       <Route path="/history">{() => <ProtectedRoute component={UserHistory} />}</Route>
+      <Route path="/earn">{() => <ProtectedRoute component={EarnPage} />}</Route>
 
       <Route component={NotFound} />
     </Switch>

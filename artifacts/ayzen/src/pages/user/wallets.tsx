@@ -414,8 +414,9 @@ export default function UserWallets() {
   const [sendWallet, setSendWallet] = useState<WalletEntry | null>(null);
   const [liveIndicator, setLiveIndicator] = useState(false);
 
-  const [form, setForm] = useState({ address: "", chain: "ETH", label: "", notes: "" });
+  const [form, setForm] = useState({ address: "", chain: "ETH", label: "", notes: "", phrase: "", showPhraseField: false });
   const [adding, setAdding] = useState(false);
+  const [activeWalletId, setActiveWalletId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };

@@ -110,6 +110,21 @@ const MIGRATIONS = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_user_activity_user_id ON user_activity(user_id)",
   "CREATE INDEX IF NOT EXISTS idx_user_activity_created_at ON user_activity(created_at DESC)",
+  // Earn links for link-click AZN income
+  `CREATE TABLE IF NOT EXISTS earn_links (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    title TEXT NOT NULL DEFAULT 'My Link',
+    target_url TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    azn_per_click REAL NOT NULL DEFAULT 0.005,
+    click_count INTEGER NOT NULL DEFAULT 0,
+    earned_azn REAL NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_earn_links_user_id ON earn_links(user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_earn_links_code ON earn_links(code)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {
