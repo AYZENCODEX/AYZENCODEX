@@ -14,6 +14,7 @@ import {
   Plus, KeyRound, Trash2, Eye, EyeOff,
   Copy, Check, Mail, Hash, Lock, Shield,
   ChevronDown, Users, Phone, AtSign, UserPlus, X, Smartphone,
+  QrCode, BarChart2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,6 +58,39 @@ function CredField({ label, value, color = "text-muted-foreground" }: {
         <button onClick={copy} className={cn("transition-colors", copied ? "text-emerald-400" : "text-muted-foreground/40 hover:text-primary")}>
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </button>
+      </div>
+    </div>
+  );
+}
+
+function TwoFaCard({ entity, label, value }: { entity: string; label: string; value: string }) {
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="bg-card border border-card-border rounded-xl p-4 hover:border-primary/30 transition-all group">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">{entity}</div>
+          <div className="font-mono text-xs font-bold text-primary mt-0.5 flex items-center gap-1.5">
+            <QrCode className="w-3 h-3" /> {label}
+          </div>
+        </div>
+        <div className="flex gap-1.5">
+          <button onClick={() => setShown(s => !s)} className="text-muted-foreground/40 hover:text-primary transition-colors p-1.5 rounded-md hover:bg-primary/10">
+            {shown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+          </button>
+          <button onClick={copy} className={cn("p-1.5 rounded-md transition-all", copied ? "text-emerald-400 bg-emerald-400/10" : "text-muted-foreground/40 hover:text-primary hover:bg-primary/10")}>
+            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+        </div>
+      </div>
+      <div className="font-mono text-sm bg-muted/20 rounded-lg px-3 py-2 border border-border/30 text-center tracking-widest">
+        {shown ? value : "•".repeat(Math.min(value.length, 16))}
       </div>
     </div>
   );
@@ -168,7 +202,7 @@ export default function UserVault() {
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [otherAccounts, setOtherAccounts] = useState<OtherAccount[]>([]);
   const [formTab, setFormTab] = useState("main");
-  const [activeTab, setActiveTab] = useState<"entities" | "local">("entities");
+  const [activeTab, setActiveTab] = useState<"entities" | "2fa" | "local">("entities");
 
   const f = (key: keyof typeof EMPTY_FORM) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [key]: e.target.value }));
@@ -252,33 +286,66 @@ export default function UserVault() {
       </div>
 
       {/* ── Section tabs ── */}
-      <div className="flex gap-1 p-1 bg-muted/20 rounded-xl border border-border/30 w-fit">
-        <button
-          onClick={() => setActiveTab("entities")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all",
-            activeTab === "entities"
-              ? "bg-card text-primary font-bold shadow-sm border border-border/40"
-              : "text-muted-foreground/50 hover:text-muted-foreground"
-          )}
-        >
-          <Hash className="w-3.5 h-3.5" /> Entities
-        </button>
-        <button
-          onClick={() => setActiveTab("local")}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all",
-            activeTab === "local"
-              ? "bg-card text-primary font-bold shadow-sm border border-border/40"
-              : "text-muted-foreground/50 hover:text-muted-foreground"
-          )}
-        >
-          <Smartphone className="w-3.5 h-3.5" /> Local Accounts
-        </button>
+      <div className="flex gap-1 p-1 bg-muted/20 rounded-xl border border-border/30 w-fit flex-wrap">
+        {([
+          { id: "entities", label: "Entities", icon: Hash },
+          { id: "2fa", label: "2FA Codes", icon: QrCode },
+          { id: "local", label: "Local Accounts", icon: Smartphone },
+        ] as const).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs uppercase tracking-wider transition-all",
+              activeTab === id
+                ? "bg-card text-primary font-bold shadow-sm border border-border/40"
+                : "text-muted-foreground/50 hover:text-muted-foreground"
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
       </div>
 
       {/* ── Local Accounts section ── */}
       {activeTab === "local" && <LocalAccounts />}
+
+      {/* ── 2FA section ── */}
+      {activeTab === "2fa" && (() => {
+        const allEntries = (data as EntryAny[] | undefined) ?? [];
+        const twoFaEntries = allEntries.flatMap(entry => {
+          const codes: { entity: string; label: string; value: string }[] = [];
+          if (entry.twitter2fa) codes.push({ entity: entry.entityName, label: "Twitter 2FA", value: entry.twitter2fa });
+          if (entry.discord2fa) codes.push({ entity: entry.entityName, label: "Discord 2FA", value: entry.discord2fa });
+          if (entry.telegram2fa) codes.push({ entity: entry.entityName, label: "Telegram 2FA", value: entry.telegram2fa });
+          try {
+            const other = entry.otherAccounts ? JSON.parse(entry.otherAccounts) : [];
+            for (const o of other) {
+              if (o.twofa) codes.push({ entity: entry.entityName, label: `${o.platform} 2FA`, value: o.twofa });
+            }
+          } catch {}
+          return codes;
+        });
+        return (
+          <div className="space-y-3">
+            {twoFaEntries.length === 0 ? (
+              <div className="py-20 flex flex-col items-center gap-4 border border-dashed border-primary/20 rounded-xl bg-primary/2">
+                <QrCode className="w-10 h-10 text-primary/20" />
+                <div className="text-center">
+                  <div className="font-mono font-bold text-foreground/50 text-sm">No 2FA codes stored</div>
+                  <div className="text-[10px] font-mono text-muted-foreground/40 mt-1">Add 2FA secrets in your vault entities</div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {twoFaEntries.map((item, i) => (
+                  <TwoFaCard key={i} entity={item.entity} label={item.label} value={item.value} />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Entities section ── */}
       {activeTab === "entities" && <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

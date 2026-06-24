@@ -17,6 +17,9 @@ import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
+const COST_CATEGORIES = ["Gas Fee", "Account Create Fee", "Swap Fee", "Bridge Fee", "Net Fee", "Manual"] as const;
+const PROFIT_CATEGORIES = ["Refer", "Trade Volume", "Mystery Box", "FCFS", "Random", "TGE", "Manual"] as const;
+
 const STATUS_CONFIG = {
   approved:  { label: "Completed", icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
   pending:   { label: "Pending",   icon: Clock,        color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20" },
@@ -58,7 +61,9 @@ function SubmitModal({ task, onClose, onDone }: {
   const [proofUrl, setProofUrl] = useState("");
   const [notes, setNotes] = useState("");
   const [cost, setCost] = useState("");
+  const [costCategory, setCostCategory] = useState("");
   const [profit, setProfit] = useState("");
+  const [profitCategory, setProfitCategory] = useState("");
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -90,7 +95,9 @@ function SubmitModal({ task, onClose, onDone }: {
           proofUrl: proofUrl.trim() || undefined,
           notes: notes.trim() || undefined,
           cost: cost ? Number(cost) : undefined,
+          costCategory: costCategory || undefined,
           profit: profit ? Number(profit) : undefined,
+          profitCategory: profitCategory || undefined,
           roi: roi ? Number(roi) : undefined,
           entityIds: selectedEntityIds.size > 0 ? [...selectedEntityIds] : undefined,
         }),
@@ -276,38 +283,70 @@ function SubmitModal({ task, onClose, onDone }: {
               <p className="text-[11px] font-mono text-muted-foreground">
                 Track your spending and earnings for this task. Used in your ROI dashboard.
               </p>
-              <div className="grid grid-cols-2 gap-4">
+
+              {/* Cost section */}
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2.5">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-red-400 font-bold">Cost</div>
                 <div>
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
-                    Cost ($)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
-                    <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={cost}
-                      onChange={e => setCost(e.target.value)}
-                      className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50 pl-6"
-                    />
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Category</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {COST_CATEGORIES.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setCostCategory(c => c === cat ? "" : cat)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full font-mono text-[10px] border transition-all",
+                          costCategory === cat
+                            ? "bg-red-500/20 border-red-500/50 text-red-400 font-bold"
+                            : "border-border/40 text-muted-foreground/60 hover:border-red-500/30 hover:text-red-400/70"
+                        )}
+                      >{cat}</button>
+                    ))}
                   </div>
                 </div>
                 <div>
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">
-                    Profit / Return ($)
-                  </label>
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Amount ($)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
                     <Input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0.00"
-                      value={profit}
+                      type="number" min="0" step="0.01" placeholder="0.00" value={cost}
+                      onChange={e => setCost(e.target.value)}
+                      className="font-mono text-xs h-9 bg-input border-border focus-visible:ring-red-500/40 pl-6"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Profit section */}
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2.5">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400 font-bold">Profit / Return</div>
+                <div>
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Category</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {PROFIT_CATEGORIES.map(cat => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setProfitCategory(c => c === cat ? "" : cat)}
+                        className={cn(
+                          "px-2.5 py-1 rounded-full font-mono text-[10px] border transition-all",
+                          profitCategory === cat
+                            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 font-bold"
+                            : "border-border/40 text-muted-foreground/60 hover:border-emerald-500/30 hover:text-emerald-400/70"
+                        )}
+                      >{cat}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Amount ($)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
+                    <Input
+                      type="number" min="0" step="0.01" placeholder="0.00" value={profit}
                       onChange={e => setProfit(e.target.value)}
-                      className="font-mono text-xs h-10 bg-input border-border focus-visible:ring-primary/50 pl-6"
+                      className="font-mono text-xs h-9 bg-input border-border focus-visible:ring-emerald-500/40 pl-6"
                     />
                   </div>
                 </div>

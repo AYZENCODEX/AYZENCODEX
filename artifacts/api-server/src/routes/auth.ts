@@ -205,6 +205,15 @@ router.post("/auth/login", async (req, res): Promise<void> => {
   res.json({ token, refreshToken: token, user: { ...sanitizeUser(user), streak: newStreak, longestStreak: newLongest } });
 });
 
+// ─── POST /auth/verify-otp — validate OTP without creating session ────────────
+router.post("/auth/verify-otp", async (req, res): Promise<void> => {
+  const { email, code } = req.body;
+  if (!email || !code) { res.status(400).json({ error: "email and code are required" }); return; }
+  const valid = verifyOtp(email, code);
+  if (!valid) { res.status(400).json({ error: "Invalid or expired code. Please request a new one." }); return; }
+  res.json({ valid: true });
+});
+
 // ─── POST /auth/magic-link — send OTP via Resend (replaces Supabase) ─────────
 router.post("/auth/magic-link", async (req, res): Promise<void> => {
   const { email } = req.body;

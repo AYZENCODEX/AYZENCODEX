@@ -35,6 +35,7 @@ const AdminSupport      = lazy(() => import("@/pages/admin/support"));
 const AdminReferrals    = lazy(() => import("@/pages/admin/referrals"));
 const AdminCreditsPage  = lazy(() => import("@/pages/admin/credits"));
 const AdminSubscriptions = lazy(() => import("@/pages/admin/subscriptions"));
+const AdminActivity      = lazy(() => import("@/pages/admin/activity"));
 
 const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
 const UserProjects      = lazy(() => import("@/pages/user/projects"));
@@ -114,6 +115,7 @@ function Router() {
       <Route path="/admin/referrals">{() => <ProtectedRoute component={AdminReferrals} adminOnly />}</Route>
       <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
       <Route path="/admin/subscriptions">{() => <ProtectedRoute component={AdminSubscriptions} adminOnly />}</Route>
+      <Route path="/admin/activity">{() => <ProtectedRoute component={AdminActivity} adminOnly />}</Route>
 
       {/* User Routes */}
       <Route path="/dashboard">{() => <ProtectedRoute component={UserDashboard} />}</Route>

@@ -45,14 +45,30 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    label: "System", icon: Settings,
+    label: "Community", icon: Radio,
     items: [
       { href: "/admin/broadcast", label: "Broadcast", icon: Radio, pluginSlug: "broadcast" },
       { href: "/admin/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
       { href: "/admin/support", label: "Support", icon: HelpCircle, pluginSlug: "support" },
+    ],
+  },
+  {
+    label: "Finance", icon: Coins,
+    items: [
       { href: "/admin/credits", label: "Credit Approvals", icon: Coins },
       { href: "/admin/subscriptions", label: "Subscriptions", icon: Star },
+    ],
+  },
+  {
+    label: "Monitoring", icon: History,
+    items: [
+      { href: "/admin/activity", label: "Activity Log", icon: History },
+    ],
+  },
+  {
+    label: "Config", icon: Settings,
+    items: [
       { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
       { href: "/admin/developer", label: "Developer", icon: Code2 },

@@ -105,11 +105,25 @@ export default function Login() {
   const [signupSendingOtp, setSignupSendingOtp] = useState(false);
   const [signupCountdown, setSignupCountdown] = useState(0);
 
+  // signin OTP flow (2-step: credentials → email OTP)
+  const [signinStep, setSigninStep] = useState<"form" | "otp">("form");
+  const [signinOtp, setSigninOtp] = useState("");
+  const [signinCountdown, setSigninCountdown] = useState(0);
+  const [tempSigninData, setTempSigninData] = useState<{ token: string; user: any } | null>(null);
+  const [signinOtpSending, setSigninOtpSending] = useState(false);
+  const [signinOtpLoading, setSigninOtpLoading] = useState(false);
+
   useEffect(() => {
     if (signupCountdown <= 0) return;
     const t = setTimeout(() => setSignupCountdown(c => c - 1), 1000);
     return () => clearTimeout(t);
   }, [signupCountdown]);
+
+  useEffect(() => {
+    if (signinCountdown <= 0) return;
+    const t = setTimeout(() => setSigninCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [signinCountdown]);
 
   const handleSendSignupOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -227,20 +241,27 @@ export default function Login() {
     try {
       const data = await backendLogin(email, password);
       if (data) {
-        setAuthContext(data.user, data.token);
-        setSuccessMsg(`Welcome back, ${data.user.username}!`);
-        setShowSuccess(true);
-        setTimeout(() => {
-          if (data.user.role === "admin") setLocation("/admin/dashboard");
-          else setLocation("/dashboard");
-        }, 1600);
+        // Step 1: credentials valid — send OTP
+        setTempSigninData(data);
+        setSigninOtpSending(true);
         try {
-          const cred = await signInWithEmailAndPassword(auth, email, password);
-          if (cred.user) {
-            const idToken = await cred.user.getIdToken();
-            await firebaseSyncToBackend(idToken);
+          const otpRes = await fetch(`${BASE}/api/auth/send-otp`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          const otpData = await otpRes.json();
+          if (otpRes.ok) {
+            toast({ title: "Code sent!", description: `Verification code sent to ${email}` });
+            setSigninStep("otp");
+            setSigninCountdown(60);
+          } else {
+            toast({ variant: "destructive", title: "Failed to send code", description: otpData.error ?? "Try again." });
           }
-        } catch { }
+        } catch {
+          toast({ variant: "destructive", title: "Connection error sending OTP" });
+        }
+        setSigninOtpSending(false);
       } else {
         toast({ variant: "destructive", title: "Access denied", description: "Invalid credentials. Check email and password." });
       }
@@ -248,6 +269,54 @@ export default function Login() {
       toast({ variant: "destructive", title: "Connection error", description: "Could not reach server. Try again." });
     }
     setLoading(false);
+  };
+
+  const handleSigninOtpVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!signinOtp.trim() || signinOtp.length !== 6 || !tempSigninData) return;
+    setSigninOtpLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/verify-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: signinOtp.trim() }),
+      });
+      const result = await res.json();
+      if (res.ok && result.valid) {
+        // Firebase optional sync
+        try {
+          const cred = await signInWithEmailAndPassword(auth, email, password);
+          if (cred.user) { const idToken = await cred.user.getIdToken(); await firebaseSyncToBackend(idToken); }
+        } catch { }
+        setAuthContext(tempSigninData.user, tempSigninData.token);
+        setSuccessMsg(`Welcome back, ${tempSigninData.user.username}!`);
+        setShowSuccess(true);
+        setTimeout(() => {
+          if (tempSigninData.user.role === "admin") setLocation("/admin/dashboard");
+          else setLocation("/dashboard");
+        }, 1600);
+      } else {
+        toast({ variant: "destructive", title: result.error ?? "Invalid code" });
+        setSigninOtp("");
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Connection error" });
+    }
+    setSigninOtpLoading(false);
+  };
+
+  const handleResendSigninOtp = async () => {
+    if (signinCountdown > 0) return;
+    setSigninOtpSending(true);
+    try {
+      const res = await fetch(`${BASE}/api/auth/send-otp`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.ok) { toast({ title: "Code resent!" }); setSigninCountdown(60); }
+    } catch {}
+    setSigninOtpSending(false);
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -440,6 +509,42 @@ export default function Login() {
                 </form>
               )}
             </div>
+          ) : tab === "signin" && signinStep === "otp" ? (
+            <form onSubmit={handleSigninOtpVerify} className="space-y-4">
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">
+                <Mail className="w-7 h-7 text-primary mx-auto mb-2" />
+                <p className="font-mono text-xs text-muted-foreground">Verification code sent to</p>
+                <p className="font-mono text-sm text-foreground font-bold">{email}</p>
+                <p className="font-mono text-[10px] text-muted-foreground/60 mt-1">Check your inbox — code expires in 10 minutes</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">6-Digit Code</Label>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="000000"
+                  maxLength={6}
+                  value={signinOtp}
+                  onChange={e => setSigninOtp(e.target.value.replace(/\D/g, ""))}
+                  className="bg-input border-border font-mono h-14 text-center text-2xl tracking-[0.5em] focus-visible:ring-primary/50 focus-visible:border-primary"
+                  autoFocus required
+                />
+              </div>
+              <Button type="submit" disabled={signinOtpLoading || signinOtp.length !== 6}
+                className="w-full h-11 font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90">
+                {signinOtpLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <span className="flex items-center gap-2">Verify & Enter <ArrowRight className="w-4 h-4" /></span>}
+              </Button>
+              <div className="flex items-center justify-between">
+                <button type="button" onClick={() => { setSigninStep("form"); setSigninOtp(""); setTempSigninData(null); }}
+                  className="font-mono text-xs text-muted-foreground hover:text-foreground underline">
+                  ← Back to login
+                </button>
+                <button type="button" onClick={handleResendSigninOtp} disabled={signinCountdown > 0 || signinOtpSending}
+                  className="font-mono text-xs text-primary disabled:opacity-40">
+                  {signinOtpSending ? "Sending…" : signinCountdown > 0 ? `Resend in ${signinCountdown}s` : "Resend Code"}
+                </button>
+              </div>
+            </form>
           ) : tab === "signup" && signupStep === "otp" ? (
             <form onSubmit={handleSignUp} className="space-y-4">
               <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">

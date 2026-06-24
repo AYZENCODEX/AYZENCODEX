@@ -94,23 +94,35 @@ router.get("/history/chart", async (req, res): Promise<void> => {
 
 router.get("/admin/history", async (req, res): Promise<void> => {
   if (!isAdmin(req)) { res.status(403).json({ error: "Admin only" }); return; }
-  const { limit = "100", userId } = req.query as Record<string, string>;
-  const whereUser = userId ? `WHERE ua.user_id = ${Number(userId)}` : "";
+  const { limit = "30", page = "1", userId, action: filterAction } = req.query as Record<string, string>;
+  const lim = Math.min(Number(limit), 200);
+  const offset = (Math.max(Number(page), 1) - 1) * lim;
+  const conditions: string[] = [];
+  if (userId) conditions.push(`ua.user_id = ${Number(userId)}`);
+  if (filterAction) conditions.push(`ua.action ILIKE '%${filterAction.replace(/'/g, "''")}%'`);
+  const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
   try {
     const result = await db.execute(sql.raw(
       `SELECT ua.*, u.username, u.email FROM user_activity ua
        LEFT JOIN users u ON u.id = ua.user_id
-       ${whereUser}
+       ${whereClause}
        ORDER BY ua.created_at DESC
-       LIMIT ${Math.min(Number(limit), 500)}`
+       LIMIT ${lim} OFFSET ${offset}`
     ));
-    res.json((result.rows as any[]).map(r => ({
-      id: r.id, userId: r.user_id, username: r.username, email: r.email,
-      action: r.action, label: ACTION_LABELS[r.action] ?? r.action,
-      entityType: r.entity_type, entityId: r.entity_id, entityName: r.entity_name,
-      meta: r.meta ? (() => { try { return JSON.parse(r.meta); } catch { return {}; } })() : {},
-      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
-    })));
+    const countResult = await db.execute(sql.raw(
+      `SELECT COUNT(*) as total FROM user_activity ua ${whereClause}`
+    ));
+    const total = Number((countResult.rows[0] as any)?.total ?? 0);
+    res.json({
+      entries: (result.rows as any[]).map(r => ({
+        id: r.id, user_id: r.user_id, username: r.username, email: r.email,
+        action: r.action, label: ACTION_LABELS[r.action] ?? r.action,
+        entity_type: r.entity_type, entity_id: r.entity_id, entity_name: r.entity_name,
+        meta: r.meta ? (() => { try { return JSON.parse(r.meta); } catch { return r.meta; } })() : null,
+        created_at: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+      })),
+      total, page: Number(page), limit: lim,
+    });
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });
   }

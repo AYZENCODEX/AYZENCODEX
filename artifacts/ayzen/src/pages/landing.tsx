@@ -3,6 +3,49 @@ import { useEffect, useRef, useState } from "react";
 import { Terminal, Zap, ShieldCheck, Wallet, BarChart3, Mail, Bot, ArrowRight, ChevronRight, Globe, Lock, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const CHAIN_TICKER = ["ETH", "ARB", "OP", "BASE", "zkSync", "Linea", "Scroll", "Blast", "Polygon", "BNB", "Avax", "Celo", "Mode", "Manta", "zkEVM", "Taiko", "Starknet", "Sui", "SOL", "TON"];
+
+function ChainTicker() {
+  const items = [...CHAIN_TICKER, ...CHAIN_TICKER];
+  return (
+    <div className="relative overflow-hidden border-y border-primary/10 bg-background/50 py-2" style={{ maskImage: "linear-gradient(to right, transparent, black 10%, black 90%, transparent)" }}>
+      <div className="flex gap-6 animate-ticker whitespace-nowrap" style={{ animation: "ticker 22s linear infinite" }}>
+        {items.map((chain, i) => (
+          <span key={i} className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary/40 flex items-center gap-2">
+            <span className="w-1 h-1 rounded-full bg-primary/30 inline-block" />
+            {chain}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GlitchText({ text }: { text: string }) {
+  const [glitch, setGlitch] = useState(false);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setGlitch(true);
+      setTimeout(() => setGlitch(false), 140);
+    }, 4500);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <span className={`relative inline-block transition-all${glitch ? " glitch-active" : ""}`} data-text={text}>
+      {text}
+    </span>
+  );
+}
+
+function ScanLine() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none z-[1]">
+      <div className="w-full h-px bg-gradient-to-r from-transparent via-primary/30 to-transparent"
+        style={{ animation: "scanLine 6s ease-in-out infinite", top: 0, position: "absolute" }} />
+    </div>
+  );
+}
+
 const features = [
   {
     icon: BarChart3,
@@ -245,7 +288,7 @@ export default function Landing() {
             className="text-5xl sm:text-6xl md:text-7xl font-mono font-bold tracking-tighter text-foreground mb-6 leading-[1.05]"
             style={{ animation: "fadeUp 0.65s ease 0.2s both" }}
           >
-            Dominate Every{" "}
+            <GlitchText text="Dominate" /> Every{" "}
             <Typewriter texts={["Airdrop", "Protocol", "Campaign", "Airdrop"]} />
           </h1>
 
@@ -285,10 +328,19 @@ export default function Landing() {
           </div>
         </div>
 
+        {/* Scan line */}
+        <ScanLine />
+
         {/* Glow orbs */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-cyan-500/5 rounded-full blur-3xl pointer-events-none animate-pulse" />
-        <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] bg-violet-500/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[500px] bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" style={{ animation: "heroGlow 5s ease-in-out infinite" }} />
+        <div className="absolute top-1/3 right-1/4 w-[350px] h-[350px] bg-violet-500/6 rounded-full blur-3xl pointer-events-none" style={{ animation: "heroGlow 7s ease-in-out infinite 2s" }} />
+        <div className="absolute bottom-0 left-1/3 w-[250px] h-[250px] bg-cyan-400/4 rounded-full blur-2xl pointer-events-none" style={{ animation: "heroGlow 9s ease-in-out infinite 1s" }} />
       </section>
+
+      {/* Chain ticker */}
+      <div className="relative z-10">
+        <ChainTicker />
+      </div>
 
       {/* Stats bar */}
       <section ref={statsRef} className="relative z-10 border-y border-border/40 bg-card/30">
@@ -423,6 +475,42 @@ export default function Landing() {
         @keyframes floatRight {
           0%, 100% { transform: translateX(0) translateY(0); }
           50%       { transform: translateX(-6px) translateY(-6px); }
+        }
+        @keyframes ticker {
+          from { transform: translateX(0); }
+          to   { transform: translateX(-50%); }
+        }
+        @keyframes scanLine {
+          0%   { top: 0%; opacity: 0; }
+          5%   { opacity: 1; }
+          95%  { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        @keyframes glitchClip1 {
+          0%,100% { clip-path: inset(0 0 100% 0); }
+          10%     { clip-path: inset(20% 0 60% 0); transform: translateX(-4px); }
+          20%     { clip-path: inset(60% 0 20% 0); transform: translateX(4px); }
+          30%     { clip-path: inset(0 0 100% 0); }
+        }
+        .glitch-active::before, .glitch-active::after {
+          content: attr(data-text);
+          position: absolute;
+          inset: 0;
+          animation: glitchClip1 0.14s steps(1) both;
+        }
+        .glitch-active::before { color: #00ffff; left: -2px; }
+        .glitch-active::after  { color: #8b5cf6; left: 2px; }
+        @keyframes gradientShift {
+          0%, 100% { background-position: 0% 50%; }
+          50%       { background-position: 100% 50%; }
+        }
+        @keyframes borderFlow {
+          0%, 100% { opacity: 0.4; }
+          50%       { opacity: 1; }
+        }
+        @keyframes heroGlow {
+          0%, 100% { opacity: 0.03; transform: scale(1); }
+          50%       { opacity: 0.07; transform: scale(1.08); }
         }
       `}</style>
     </div>

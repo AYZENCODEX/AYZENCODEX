@@ -53,12 +53,14 @@ const DEFAULT_CATEGORIES: Category[] = [
   { id: "facebook", name: "Facebook", color: "#1877F2", icon: "F", isCustom: false },
   { id: "github",   name: "GitHub",   color: "#6e40c9", icon: "G", isCustom: false },
   { id: "google",   name: "Google",   color: "#EA4335", icon: "G", isCustom: false },
-  { id: "twitter",  name: "Twitter",  color: "#1DA1F2", icon: "X", isCustom: false },
-  { id: "discord",  name: "Discord",  color: "#5865F2", icon: "D", isCustom: false },
+  { id: "twitter",   name: "Twitter",   color: "#1DA1F2", icon: "X", isCustom: false },
+  { id: "discord",   name: "Discord",   color: "#5865F2", icon: "D", isCustom: false },
+  { id: "linkedin",  name: "LinkedIn",  color: "#0A66C2", icon: "in", isCustom: false },
 ];
 
 const PLATFORM_GRADIENTS: Record<string, string> = {
-  facebook: "from-blue-600/10 to-blue-400/5 border-blue-500/20",
+  facebook:  "from-blue-600/10 to-blue-400/5 border-blue-500/20",
+  linkedin:  "from-blue-700/10 to-blue-500/5 border-blue-600/20",
   github:   "from-purple-600/10 to-purple-400/5 border-purple-500/20",
   google:   "from-red-500/10 to-orange-400/5 border-red-400/20",
   twitter:  "from-sky-500/10 to-sky-400/5 border-sky-400/20",
@@ -616,100 +618,33 @@ export default function LocalAccounts() {
     return { count: items.length, totalWorth };
   };
 
+  const [view, setView] = useState<"accounts" | "dashboard">("accounts");
+  const totalWorth = allAccounts.reduce((s, a) => s + (a.account_worth || 0), 0);
+  const totalBuyPrice = allAccounts.reduce((s, a) => s + (a.buy_price || 0), 0);
+  const overallRoi = totalBuyPrice > 0 ? ((totalWorth - totalBuyPrice) / totalBuyPrice) * 100 : null;
+
   return (
-    <div className="flex gap-4 h-full min-h-0">
-      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-      <div className="w-48 flex-shrink-0 space-y-1">
-        <div className="flex items-center justify-between mb-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">Platforms</span>
-          <button
-            onClick={() => setCatDialogOpen(true)}
-            className="text-muted-foreground/40 hover:text-primary transition-colors"
-            title="Add category"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {categories.map(cat => {
-          const stats = catStats(cat.name);
-          const isActive = selectedCat === cat.name;
-          return (
-            <div key={cat.id} className="relative group/cat">
-              <button
-                onClick={() => setSelectedCat(cat.name)}
-                className={cn(
-                  "w-full flex items-center justify-between px-3 py-2 rounded-lg font-mono text-xs transition-all text-left",
-                  isActive
-                    ? "bg-primary/15 text-primary font-bold"
-                    : "text-muted-foreground/60 hover:bg-muted/30 hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <div
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: cat.color }}
-                  />
-                  <span className="truncate">{cat.name}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  {stats.count > 0 && (
-                    <span className={cn(
-                      "text-[9px] font-mono px-1.5 py-0.5 rounded-full",
-                      isActive ? "bg-primary/20 text-primary" : "bg-muted/50 text-muted-foreground/50"
-                    )}>
-                      {stats.count}
-                    </span>
-                  )}
-                  {isActive && <ChevronRight className="w-3 h-3 flex-shrink-0" />}
-                </div>
-              </button>
-              {cat.isCustom && (
-                <button
-                  onClick={() => handleDeleteCategory(cat)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/cat:opacity-100 text-muted-foreground/30 hover:text-red-400 transition-all p-1"
-                >
-                  <X className="w-2.5 h-2.5" />
-                </button>
+    <div className="space-y-4">
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex gap-1 p-1 bg-muted/20 rounded-lg border border-border/30">
+          {([
+            { id: "accounts", label: "Accounts" },
+            { id: "dashboard", label: "Dashboard" },
+          ] as const).map(({ id, label }) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              className={cn(
+                "px-3 py-1.5 rounded-md font-mono text-[10px] uppercase tracking-wider transition-all",
+                view === id
+                  ? "bg-card text-primary font-bold shadow-sm border border-border/40"
+                  : "text-muted-foreground/50 hover:text-muted-foreground"
               )}
-            </div>
-          );
-        })}
-
-        {/* Total worth summary */}
-        {allAccounts.length > 0 && (
-          <div className="mt-4 pt-3 border-t border-border/20 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/40">Total Portfolio</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <DollarSign className="w-3 h-3 text-emerald-400" />
-              <span className="font-mono text-sm font-bold text-emerald-400">
-                ${allAccounts.reduce((s, a) => s + (a.account_worth || 0), 0).toFixed(2)}
-              </span>
-            </div>
-            <div className="text-[9px] font-mono text-muted-foreground/40">{allAccounts.length} total accounts</div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Content ──────────────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 space-y-4">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-mono font-bold text-base uppercase tracking-wider text-foreground flex items-center gap-2">
-              <div
-                className="w-2.5 h-2.5 rounded-full"
-                style={{ backgroundColor: categories.find(c => c.name === selectedCat)?.color ?? "#8b5cf6" }}
-              />
-              {selectedCat}
-            </h2>
-            <p className="text-[10px] font-mono text-muted-foreground/40 mt-0.5">
-              {accounts.length} account{accounts.length !== 1 ? "s" : ""}
-              {accounts.length > 0 && ` · $${accounts.reduce((s, a) => s + (a.account_worth || 0), 0).toFixed(2)} total`}
-            </p>
-          </div>
+            >{label}</button>
+          ))}
+        </div>
+        {view === "accounts" && (
           <Button
             size="sm"
             className="font-mono text-[10px] uppercase tracking-wider gap-1.5 h-8"
@@ -717,45 +652,195 @@ export default function LocalAccounts() {
           >
             <Plus className="w-3.5 h-3.5" /> Add Account
           </Button>
-        </div>
-
-        {/* Accounts grid */}
-        {loadingAccts ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {[1, 2].map(i => (
-              <div key={i} className="h-44 bg-card border border-card-border rounded-xl animate-pulse" />
-            ))}
-          </div>
-        ) : accounts.length === 0 ? (
-          <div className="py-20 flex flex-col items-center gap-4 border border-dashed border-primary/15 rounded-xl bg-primary/2">
-            <div className="w-14 h-14 rounded-full border border-primary/20 flex items-center justify-center bg-primary/5">
-              <Smartphone className="w-6 h-6 text-primary/30" />
-            </div>
-            <div className="text-center">
-              <div className="font-mono font-bold text-foreground/60 text-sm mb-1">No {selectedCat} accounts</div>
-              <div className="text-[10px] font-mono text-muted-foreground/40">Add your first {selectedCat} account</div>
-            </div>
-            <Button
-              size="sm"
-              className="font-mono text-[10px] gap-1.5"
-              onClick={() => { setEditAccount(undefined); setFormOpen(true); }}
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Account
-            </Button>
-          </div>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {accounts.map(acc => (
-              <AccountCard
-                key={acc.id}
-                account={acc}
-                onEdit={a => { setEditAccount(a); setFormOpen(true); }}
-                onDelete={id => setDeleteId(id)}
-              />
-            ))}
-          </div>
         )}
       </div>
+
+      {/* ── Dashboard view ────────────────────────────────────────────────── */}
+      {view === "dashboard" && (
+        <div className="space-y-4">
+          {/* Summary stats */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {[
+              { label: "Total Accounts", value: allAccounts.length.toString(), sub: "across all platforms", color: "text-foreground" },
+              { label: "Portfolio Worth", value: `$${totalWorth.toFixed(2)}`, sub: "current total value", color: "text-emerald-400" },
+              { label: "Total Invested", value: `$${totalBuyPrice.toFixed(2)}`, sub: "buy price sum", color: "text-muted-foreground" },
+              { label: "Overall ROI", value: overallRoi !== null ? `${overallRoi >= 0 ? "+" : ""}${overallRoi.toFixed(1)}%` : "—", sub: "profit/loss", color: overallRoi !== null ? (overallRoi >= 0 ? "text-green-400" : "text-red-400") : "text-muted-foreground" },
+            ].map(stat => (
+              <div key={stat.label} className="bg-card border border-card-border rounded-xl p-4">
+                <div className={cn("font-mono font-bold text-xl", stat.color)}>{stat.value}</div>
+                <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60 mt-1">{stat.label}</div>
+                <div className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">{stat.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Per-platform breakdown */}
+          <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-border/40 font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">
+              Platform Breakdown
+            </div>
+            <div className="divide-y divide-border/30">
+              {categories
+                .map(cat => ({ cat, stats: catStats(cat.name) }))
+                .filter(({ stats }) => stats.count > 0)
+                .sort((a, b) => b.stats.totalWorth - a.stats.totalWorth)
+                .map(({ cat, stats }) => {
+                  const roi = totalBuyPrice > 0 ? ((stats.totalWorth - allAccounts.filter(a => a.category === cat.name).reduce((s, a) => s + (a.buy_price || 0), 0)) / allAccounts.filter(a => a.category === cat.name).reduce((s, a) => s + (a.buy_price || 0), 0)) * 100 : null;
+                  return (
+                    <div key={cat.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                        <div>
+                          <div className="font-mono text-xs font-bold text-foreground">{cat.name}</div>
+                          <div className="font-mono text-[9px] text-muted-foreground/50">{stats.count} account{stats.count !== 1 ? "s" : ""}</div>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-sm font-bold text-emerald-400">${stats.totalWorth.toFixed(2)}</div>
+                        {roi !== null && !isNaN(roi) && isFinite(roi) && (
+                          <div className={cn("font-mono text-[10px]", roi >= 0 ? "text-green-400" : "text-red-400")}>
+                            {roi >= 0 ? "+" : ""}{roi.toFixed(1)}% ROI
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              {allAccounts.length === 0 && (
+                <div className="px-4 py-8 text-center text-muted-foreground font-mono text-xs">No accounts yet.</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Accounts view ─────────────────────────────────────────────────── */}
+      {view === "accounts" && (
+        <div className="flex gap-4 h-full min-h-0">
+          {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+          <div className="w-44 flex-shrink-0 space-y-0.5">
+            <div className="flex items-center justify-between mb-3">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">Platforms</span>
+              <button
+                onClick={() => setCatDialogOpen(true)}
+                className="text-muted-foreground/40 hover:text-primary transition-colors"
+                title="Add category"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {categories.map(cat => {
+              const stats = catStats(cat.name);
+              const isActive = selectedCat === cat.name;
+              return (
+                <div key={cat.id} className="relative group/cat">
+                  <button
+                    onClick={() => setSelectedCat(cat.name)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2 rounded-lg font-mono text-xs transition-all text-left",
+                      isActive
+                        ? "bg-primary/15 text-primary font-bold border border-primary/20"
+                        : "text-muted-foreground/60 hover:bg-muted/30 hover:text-foreground"
+                    )}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-2 h-2 rounded-full flex-shrink-0 transition-all"
+                        style={{ backgroundColor: cat.color, boxShadow: isActive ? `0 0 6px ${cat.color}80` : "none" }}
+                      />
+                      <span className="truncate">{cat.name}</span>
+                    </div>
+                    {stats.count > 0 && (
+                      <span className={cn(
+                        "text-[9px] font-mono px-1.5 py-0.5 rounded-full flex-shrink-0",
+                        isActive ? "bg-primary/20 text-primary" : "bg-muted/50 text-muted-foreground/50"
+                      )}>
+                        {stats.count}
+                      </span>
+                    )}
+                  </button>
+                  {cat.isCustom && (
+                    <button
+                      onClick={() => handleDeleteCategory(cat)}
+                      className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/cat:opacity-100 text-muted-foreground/30 hover:text-red-400 transition-all p-1"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Portfolio summary */}
+            {allAccounts.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-border/20 space-y-1.5">
+                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/40">Portfolio</span>
+                <div className="flex items-center gap-1">
+                  <DollarSign className="w-3 h-3 text-emerald-400" />
+                  <span className="font-mono text-sm font-bold text-emerald-400">
+                    ${totalWorth.toFixed(2)}
+                  </span>
+                </div>
+                <div className="text-[9px] font-mono text-muted-foreground/40">{allAccounts.length} accounts total</div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Content ──────────────────────────────────────────────────────── */}
+          <div className="flex-1 min-w-0 space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="font-mono font-bold text-base uppercase tracking-wider text-foreground flex items-center gap-2">
+                  <div
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: categories.find(c => c.name === selectedCat)?.color ?? "#8b5cf6" }}
+                  />
+                  {selectedCat}
+                </h2>
+                <p className="text-[10px] font-mono text-muted-foreground/40 mt-0.5">
+                  {accounts.length} account{accounts.length !== 1 ? "s" : ""}
+                  {accounts.length > 0 && ` · $${accounts.reduce((s, a) => s + (a.account_worth || 0), 0).toFixed(2)} total`}
+                </p>
+              </div>
+            </div>
+
+            {/* Accounts grid */}
+            {loadingAccts ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[1, 2].map(i => (
+                  <div key={i} className="h-44 bg-card border border-card-border rounded-xl animate-pulse" />
+                ))}
+              </div>
+            ) : accounts.length === 0 ? (
+              <div className="py-16 flex flex-col items-center gap-4 border border-dashed border-primary/15 rounded-xl bg-primary/2">
+                <div className="w-12 h-12 rounded-full border border-primary/20 flex items-center justify-center bg-primary/5">
+                  <Smartphone className="w-5 h-5 text-primary/30" />
+                </div>
+                <div className="text-center">
+                  <div className="font-mono font-bold text-foreground/60 text-sm mb-1">No {selectedCat} accounts</div>
+                  <div className="text-[10px] font-mono text-muted-foreground/40">Add your first {selectedCat} account</div>
+                </div>
+                <Button size="sm" className="font-mono text-[10px] gap-1.5" onClick={() => { setEditAccount(undefined); setFormOpen(true); }}>
+                  <Plus className="w-3.5 h-3.5" /> Add Account
+                </Button>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {accounts.map(acc => (
+                  <AccountCard
+                    key={acc.id}
+                    account={acc}
+                    onEdit={a => { setEditAccount(a); setFormOpen(true); }}
+                    onDelete={id => setDeleteId(id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Dialogs ───────────────────────────────────────────────────────── */}
       <AccountFormDialog
