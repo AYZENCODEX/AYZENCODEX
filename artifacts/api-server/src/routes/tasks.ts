@@ -4,6 +4,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { broadcastEvent, broadcastToUser } from "./events";
 import { notifyTaskVerified } from "../lib/telegram";
 import { createNotification } from "./notifications";
+import { logActivity } from "../lib/activity";
 
 const router = Router();
 
@@ -173,7 +174,7 @@ router.delete("/tasks/:id", async (req, res): Promise<void> => {
 
 router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
   const taskId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const { proofUrl, notes, cost, profit } = req.body;
+  const { proofUrl, notes, cost, profit, entityIds } = req.body;
   const userId = getUserId(req);
 
   try {
@@ -183,26 +184,29 @@ router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
 
     const status = task.verification_type === "auto" ? "approved" : "pending";
 
+    const entityIdsJson = entityIds && Array.isArray(entityIds) && entityIds.length
+      ? `'${JSON.stringify(entityIds).replace(/'/g, "''")}'` : "NULL";
     const subResult = await db.execute(sql.raw(
-      `INSERT INTO task_submissions (task_id, user_id, status, proof_url, notes, cost, profit)
+      `INSERT INTO task_submissions (task_id, user_id, status, proof_url, notes, cost, profit, entity_ids)
        VALUES (${taskId}, ${userId}, '${status}',
          ${proofUrl ? `'${proofUrl.replace(/'/g, "''")}'` : "NULL"},
          ${notes ? `'${notes.replace(/'/g, "''")}'` : "NULL"},
-         ${Number(cost ?? 0)}, ${Number(profit ?? 0)})
+         ${Number(cost ?? 0)}, ${Number(profit ?? 0)}, ${entityIdsJson})
        RETURNING *`
     ));
     const sub = subResult.rows[0] as any;
 
     if (status === "approved") {
       await db.execute(sql.raw(`UPDATE tasks SET completion_count = completion_count + 1 WHERE id = ${taskId}`));
-      // Auto-award XP as AZN
       await awardXpAsAzn(userId, task);
       await createNotification(userId, "task_approved", "Task Auto-Approved ✓",
         `"${task.name}" was auto-verified. XP awarded to your balance.`,
         { taskId, xpAmount: task.xp_amount ?? 0 });
+      logActivity(userId, "task_auto_approved", "task", taskId, task.name, { xpAmount: task.xp_amount ?? 0 });
     } else {
       await createNotification(userId, "task_submitted", "Task Submitted",
         `"${task.name}" submitted for review. Pending admin verification.`, { taskId });
+      logActivity(userId, "task_submitted", "task", taskId, task.name, { entities: entityIds });
     }
 
     broadcastEvent("tasks_updated", { action: "submitted", taskId, userId, status });
@@ -273,10 +277,12 @@ router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
       await createNotification(sub.userId, "task_approved", "Task Approved ✓",
         taskName ? `"${taskName}" approved by admin. XP credited to your balance.` : "Your task was approved.",
         { submissionId, taskId: sub.taskId, xpAmount: task?.xpAmount ?? 0 });
+      logActivity(sub.userId, "task_approved", "task", sub.taskId, taskName, { xpAmount: task?.xpAmount ?? 0, reward: rewardAmount });
     } else {
       await createNotification(sub.userId, "task_rejected", "Task Rejected",
         taskName ? `"${taskName}" was rejected. Reason: ${rejectionReason || "See admin notes."}` : "Your task was rejected.",
         { submissionId, taskId: sub.taskId, reason: rejectionReason });
+      logActivity(sub.userId, "task_rejected", "task", sub.taskId, taskName, { reason: rejectionReason });
     }
 
     if (taskName) {

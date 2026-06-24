@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { useListTasks, useGetMe } from "@workspace/api-client-react";
+import { useListTasks, useGetMe, useListVaultEntries } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -59,19 +59,26 @@ function SubmitModal({ task, onClose, onDone }: {
   const [notes, setNotes] = useState("");
   const [cost, setCost] = useState("");
   const [profit, setProfit] = useState("");
-  const [entities, setEntities] = useState<string[]>([""]);
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
+  const { data: vaultData } = useListVaultEntries();
 
   const token = localStorage.getItem("ayzen_token") ?? "";
+  const vaultEntries = Array.isArray(vaultData) ? vaultData : [];
 
   const roi = profit && cost
     ? (((Number(profit) - Number(cost)) / Number(cost)) * 100).toFixed(1)
     : null;
 
-  const addEntity = () => setEntities(e => [...e, ""]);
-  const updateEntity = (i: number, v: string) => setEntities(e => e.map((x, j) => j === i ? v : x));
-  const removeEntity = (i: number) => setEntities(e => e.filter((_, j) => j !== i));
+  const toggleEntity = (id: number) => {
+    setSelectedEntityIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const submit = async () => {
     setLoading(true);
@@ -85,7 +92,7 @@ function SubmitModal({ task, onClose, onDone }: {
           cost: cost ? Number(cost) : undefined,
           profit: profit ? Number(profit) : undefined,
           roi: roi ? Number(roi) : undefined,
-          entities: entities.filter(Boolean).length ? entities.filter(Boolean) : undefined,
+          entityIds: selectedEntityIds.size > 0 ? [...selectedEntityIds] : undefined,
         }),
       });
       const data = await res.json();
@@ -201,36 +208,62 @@ function SubmitModal({ task, onClose, onDone }: {
                 />
               </div>
 
-              {/* Multiple entity submissions */}
+              {/* Vault entity multi-select */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Entities / Accounts — optional
+                    Select Entities — optional
                   </label>
-                  <button onClick={addEntity} className="text-[10px] font-mono text-primary hover:text-primary/80 transition-colors">
-                    + Add entity
-                  </button>
+                  {selectedEntityIds.size > 0 && (
+                    <span className="text-[10px] font-mono text-primary">
+                      {selectedEntityIds.size} selected
+                    </span>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  {entities.map((e, i) => (
-                    <div key={i} className="flex gap-2">
-                      <Input
-                        placeholder={`Entity ${i + 1} (wallet, username, email…)`}
-                        value={e}
-                        onChange={ev => updateEntity(i, ev.target.value)}
-                        className="font-mono text-xs h-9 bg-input border-border focus-visible:ring-primary/50"
-                      />
-                      {entities.length > 1 && (
-                        <button onClick={() => removeEntity(i)} className="text-muted-foreground hover:text-red-400 transition-colors shrink-0">
-                          <X className="w-3.5 h-3.5" />
+                {vaultEntries.length === 0 ? (
+                  <p className="text-[10px] font-mono text-muted-foreground/50 py-2 text-center bg-muted/20 rounded border border-border">
+                    No vault entities yet. Add entities in the Vault.
+                  </p>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
+                    {vaultEntries.map((entry: any) => {
+                      const serial = `AYZNA-${String(entry.id).padStart(4, "0")}`;
+                      const selected = selectedEntityIds.has(entry.id);
+                      return (
+                        <button
+                          key={entry.id}
+                          type="button"
+                          onClick={() => toggleEntity(entry.id)}
+                          className={cn(
+                            "w-full flex items-center gap-2.5 px-3 py-2 rounded border text-left transition-all",
+                            selected
+                              ? "bg-primary/10 border-primary/40 text-primary"
+                              : "bg-muted/20 border-border/40 text-muted-foreground hover:border-border hover:text-foreground"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-all",
+                            selected ? "bg-primary border-primary" : "border-border/60"
+                          )}>
+                            {selected && <span className="text-primary-foreground text-[8px] font-bold">✓</span>}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-mono text-[11px] font-medium truncate">
+                              {entry.projectName || serial}
+                            </div>
+                            <div className="font-mono text-[9px] text-muted-foreground/60 truncate">
+                              {serial} · {entry.category ?? "General"}
+                              {entry.twitterUsername && ` · @${entry.twitterUsername}`}
+                            </div>
+                          </div>
                         </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {entities.filter(Boolean).length > 1 && (
-                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-1">
-                    {entities.filter(Boolean).length} entities will be submitted
+                      );
+                    })}
+                  </div>
+                )}
+                {selectedEntityIds.size > 1 && (
+                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-1.5">
+                    {selectedEntityIds.size} entities will be included in this submission
                   </p>
                 )}
               </div>

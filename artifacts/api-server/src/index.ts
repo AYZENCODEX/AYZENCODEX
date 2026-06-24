@@ -93,6 +93,23 @@ const MIGRATIONS = [
   )`,
   // Rejection reason on task_submissions
   "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT",
+  // Project category (DeFi, NFT, GameFi, Layer2, Testnet, CEX, Social, Other)
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Other'",
+  // Entity IDs on task submissions (JSON array)
+  "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS entity_ids TEXT",
+  // User activity log
+  `CREATE TABLE IF NOT EXISTS user_activity (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    entity_type TEXT,
+    entity_id INTEGER,
+    entity_name TEXT,
+    meta TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_user_activity_user_id ON user_activity(user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_user_activity_created_at ON user_activity(created_at DESC)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

@@ -7,7 +7,7 @@ import {
   Trophy, Settings, Terminal, LogOut,
   Vault, Inbox, ShieldCheck, KeyRound, ChevronDown, ChevronRight,
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
-  Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle,
+  Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,10 @@ const ADMIN_NAV: NavGroup[] = [
 const USER_NAV: NavGroup[] = [
   {
     label: "Command", icon: LayoutDashboard,
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/history",   label: "Activity Log", icon: History },
+    ],
   },
   {
     label: "Protocols", icon: FolderGit2,
