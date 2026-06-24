@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { ActivityHeatmap } from "@/components/activity-heatmap";
 import { useCountUp } from "@/hooks/use-count-up";
+import StatsBar from "@/components/stats-bar";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -141,6 +142,8 @@ export default function UserDashboard() {
 
   return (
     <div className="space-y-6 page-enter">
+      <StatsBar />
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

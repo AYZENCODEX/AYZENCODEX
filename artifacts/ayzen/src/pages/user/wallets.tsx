@@ -471,7 +471,7 @@ export default function UserWallets() {
       const data = await r.json();
       if (r.ok) {
         toast({ title: "✅ Wallet added", description: `${form.chain} · ${shortenAddr(form.address)}` });
-        setForm({ address: "", chain: "ETH", label: "", notes: "" });
+        setForm({ address: "", chain: "ETH", label: "", notes: "", phrase: "", showPhraseField: false });
         setShowAdd(false);
         await fetchWallets();
       } else {

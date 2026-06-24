@@ -312,6 +312,7 @@ export default function UserVault() {
           { id: "entities", label: "Entities", icon: Hash },
           { id: "2fa", label: "2FA Codes", icon: QrCode },
           { id: "local", label: "Local Accounts", icon: Smartphone },
+          { id: "other", label: "Other", icon: UserPlus },
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -330,6 +331,92 @@ export default function UserVault() {
 
       {/* ── Local Accounts section ── */}
       {activeTab === "local" && <LocalAccounts />}
+
+      {/* ── Other Entities section ── */}
+      {activeTab === "other" && (() => {
+        const allEntries = (data as EntryAny[] | undefined) ?? [];
+        const otherEntries = allEntries.filter(e => e.category === "Other" || !e.category);
+        return (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                {otherEntries.length} {otherEntries.length === 1 ? "entity" : "entities"} in Other
+              </div>
+              <Button size="sm" className="font-mono text-xs gap-2 h-7 px-3" onClick={() => setOpen(true)}>
+                <Plus className="w-3 h-3" /> New Entity
+              </Button>
+            </div>
+            {isLoading ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="bg-card border border-card-border rounded-xl overflow-hidden">
+                    <div className="h-12 bg-muted/10" />
+                    <div className="p-4 space-y-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-3 w-24" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : otherEntries.length === 0 ? (
+              <div className="py-20 flex flex-col items-center gap-4 border border-dashed border-primary/20 rounded-xl bg-primary/2">
+                <UserPlus className="w-10 h-10 text-primary/20" />
+                <div className="text-center">
+                  <div className="font-mono font-bold text-foreground/50 text-sm">No "Other" entities</div>
+                  <div className="text-[10px] font-mono text-muted-foreground/40 mt-1">Create a vault entity and set its category to "Other"</div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {otherEntries.map(entry => (
+                  <div
+                    key={entry.id}
+                    className="bg-card border border-card-border hover:border-primary/40 transition-all duration-300 rounded-xl overflow-hidden group hover-lift"
+                  >
+                    <div className="bg-gradient-to-r from-muted/20 to-transparent border-b border-card-border px-4 py-3 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Hash className="w-3 h-3 text-primary/60" />
+                        <span className="font-mono font-bold text-primary text-xs tracking-[0.15em]">
+                          {entry.entitySerial || `AYZNA${entry.id}`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-[9px] font-mono uppercase border font-bold px-2 py-0.5 text-muted-foreground border-border bg-muted/20">
+                          Other
+                        </Badge>
+                        <button
+                          onClick={() => setDeleteId(entry.id)}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-red-400 transition-all duration-200"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="px-4 py-3">
+                      <div className="font-mono font-bold text-sm text-foreground flex items-center gap-2 mb-2">
+                        <Shield className="w-3.5 h-3.5 text-primary/40" />
+                        {entry.projectName}
+                      </div>
+                      <PlatformSection title="Email" icon={Mail} color="text-emerald-400" fields={[
+                        { label: "address", value: entry.email },
+                        { label: "pass", value: entry.emailPassword },
+                      ]} />
+                      {entry.notes && (
+                        <p className="text-[10px] font-mono text-muted-foreground/50 mt-2 truncate">{entry.notes}</p>
+                      )}
+                    </div>
+                    <div className="px-4 py-2 border-t border-border/20">
+                      <span className="text-[9px] font-mono text-muted-foreground/30">
+                        {new Date(entry.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── 2FA section ── */}
       {activeTab === "2fa" && (() => {

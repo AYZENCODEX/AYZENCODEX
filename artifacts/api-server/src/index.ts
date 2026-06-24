@@ -132,9 +132,17 @@ const MIGRATIONS = [
   "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS profit_category TEXT",
   // Project completion percentage (cached)
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS completion_pct REAL DEFAULT 0",
-  // Bookmark (user-local, stored in localStorage on frontend)
   // User display color tag
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS color_tag TEXT DEFAULT '#22d3ee'",
+  // Task steps guide (JSON array of {title, description})
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS steps TEXT",
+  // Cost entries JSON array on submissions (multiple line items)
+  "ALTER TABLE task_submissions ADD COLUMN IF NOT EXISTS cost_entries TEXT",
+  // Project meta fields
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS duration_type TEXT DEFAULT 'long'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS difficulty TEXT DEFAULT 'average'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS cost_type TEXT DEFAULT 'free'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS tutorial_notes TEXT",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

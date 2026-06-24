@@ -275,7 +275,7 @@ function AccountFormDialog({
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(toFormState(editAccount));
-  const [activeSection, setActiveSection] = useState<"creds" | "meta">("creds");
+  const [activeSection, setActiveSection] = useState<"creds" | "dates" | "value">("creds");
 
   useEffect(() => {
     if (open) {
@@ -285,6 +285,12 @@ function AccountFormDialog({
       setActiveSection("creds");
     }
   }, [open, editAccount, selectedCategory]);
+
+  const SECTIONS: { id: "creds" | "dates" | "value"; label: string }[] = [
+    { id: "creds", label: "Credentials" },
+    { id: "dates", label: "Dates" },
+    { id: "value", label: "Value / ROI" },
+  ];
 
   const fv = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(prev => ({ ...prev, [k]: e.target.value }));
@@ -381,27 +387,25 @@ function AccountFormDialog({
             </div>
           </div>
 
-          {/* Label / nickname */}
-          <FField label="Label / Nickname (optional)" fkey="label" placeholder="e.g. Main acc, farming1..." type="text" />
-
-          {/* Section toggle */}
+          {/* Section toggle (3 tabs) */}
           <div className="flex gap-1 p-1 bg-muted/30 rounded-lg">
-            {(["creds", "meta"] as const).map(s => (
+            {SECTIONS.map(s => (
               <button
-                key={s}
-                onClick={() => setActiveSection(s)}
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
                 className={cn(
                   "flex-1 py-1 rounded-md font-mono text-[10px] uppercase tracking-wider transition-all",
-                  activeSection === s
+                  activeSection === s.id
                     ? "bg-card text-primary shadow-sm font-bold"
                     : "text-muted-foreground/50 hover:text-muted-foreground"
                 )}
               >
-                {s === "creds" ? "Credentials" : "Dates & Value"}
+                {s.label}
               </button>
             ))}
           </div>
 
+          {/* Tab 1: Credentials */}
           {activeSection === "creds" && (
             <div className="space-y-2">
               <TwoCol l1="Username" k1="username" p1="@handle" t1="text" l2="Password" k2="password" p2="••••••••" />
@@ -423,26 +427,39 @@ function AccountFormDialog({
                   placeholder="Paste backup codes (one per line or space separated)"
                 />
               </div>
-              <FField label="Followers" fkey="followers" placeholder="e.g. 1200" type="text" />
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
-                <Textarea
-                  value={(form as any).notes ?? ""}
-                  onChange={fv("notes")}
-                  className="font-mono text-xs bg-input min-h-[50px] resize-none"
-                  placeholder="Any notes..."
-                />
+            </div>
+          )}
+
+          {/* Tab 2: Dates & Meta */}
+          {activeSection === "dates" && (
+            <div className="space-y-3">
+              <FField label="Label / Nickname" fkey="label" placeholder="e.g. Main acc, farming1..." type="text" />
+              <FField label="Followers / Following" fkey="followers" placeholder="e.g. 1200" type="text" />
+              <div className="p-3 rounded-lg bg-primary/3 border border-primary/10 space-y-2">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-3 h-3 text-primary/60" />
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70 font-bold">Important Dates</span>
+                </div>
+                <FField label="Account Create Date" fkey="account_create_date" type="date" />
+                <FField label="Account Buy Date" fkey="account_buy_date" type="date" />
+                <FField label="Last Login Date" fkey="account_last_login_date" type="date" />
+                {form.account_create_date && (
+                  <div className="flex items-center gap-1.5 text-muted-foreground/50">
+                    <Clock className="w-3 h-3" />
+                    <span className="text-[10px] font-mono">Account Age: <strong className="text-foreground/70">{calcAge(form.account_create_date)}</strong></span>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-          {activeSection === "meta" && (
+          {/* Tab 3: Value & ROI */}
+          {activeSection === "value" && (
             <div className="space-y-3">
-              {/* Worth + ROI */}
               <div className="p-3 rounded-lg bg-emerald-400/5 border border-emerald-400/10 space-y-2">
                 <div className="flex items-center gap-1.5">
                   <TrendingUp className="w-3 h-3 text-emerald-400" />
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Value & ROI</span>
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Account Value & ROI</span>
                 </div>
                 <TwoCol
                   l1="Account Worth ($)" k1="account_worth" p1="0.00" t1="number"
@@ -462,22 +479,14 @@ function AccountFormDialog({
                   </div>
                 )}
               </div>
-
-              {/* Dates */}
-              <div className="p-3 rounded-lg bg-primary/3 border border-primary/10 space-y-2">
-                <div className="flex items-center gap-1.5">
-                  <Calendar className="w-3 h-3 text-primary/60" />
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70 font-bold">Important Dates</span>
-                </div>
-                <FField label="Account Create Date" fkey="account_create_date" type="date" />
-                <FField label="Account Buy Date" fkey="account_buy_date" type="date" />
-                <FField label="Last Login Date" fkey="account_last_login_date" type="date" />
-                {form.account_create_date && (
-                  <div className="flex items-center gap-1.5 text-muted-foreground/50">
-                    <Clock className="w-3 h-3" />
-                    <span className="text-[10px] font-mono">Account Age: <strong className="text-foreground/70">{calcAge(form.account_create_date)}</strong></span>
-                  </div>
-                )}
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
+                <Textarea
+                  value={(form as any).notes ?? ""}
+                  onChange={fv("notes")}
+                  className="font-mono text-xs bg-input min-h-[80px] resize-none"
+                  placeholder="Any notes about this account..."
+                />
               </div>
             </div>
           )}

@@ -11,7 +11,9 @@ import {
   Play, CheckCircle2, Clock, XCircle, Loader2,
   Filter, Search, Zap, Trophy, Send, DollarSign,
   Star, Settings2, Info, X, Download, AlertTriangle, ArrowUp, TimerIcon,
+  Plus, Trash2, BookOpen, CheckSquare,
 } from "lucide-react";
+import StatsBar from "@/components/stats-bar";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import confetti from "canvas-confetti";
@@ -117,22 +119,36 @@ interface Task {
   category?: string | null;
   deadline?: string | null;
   timeLimitMinutes?: number | null;
+  steps?: { title: string; description?: string }[];
 }
 
-type SubmitTab = "details" | "cost-roi" | "points" | "settings";
+interface CostEntry {
+  id: string;
+  type: "cost" | "profit";
+  category: string;
+  label: string;
+  amount: string;
+}
+
+function newEntry(type: "cost" | "profit"): CostEntry {
+  return { id: Math.random().toString(36).slice(2), type, category: "", label: "", amount: "" };
+}
+
+type SubmitTab = "details" | "guide" | "cost-roi" | "points" | "settings";
 
 function SubmitModal({ task, onClose, onDone }: {
   task: Task;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [tab, setTab] = useState<SubmitTab>("details");
+  const steps: { title: string; description?: string }[] = Array.isArray(task.steps) ? task.steps : [];
+  const hasSteps = steps.length > 0;
+
+  const [tab, setTab] = useState<SubmitTab>(hasSteps ? "guide" : "details");
   const [proofUrl, setProofUrl] = useState("");
   const [notes, setNotes] = useState("");
-  const [cost, setCost] = useState("");
-  const [costCategory, setCostCategory] = useState("");
-  const [profit, setProfit] = useState("");
-  const [profitCategory, setProfitCategory] = useState("");
+  const [costEntries, setCostEntries] = useState<CostEntry[]>([]);
+  const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -141,15 +157,27 @@ function SubmitModal({ task, onClose, onDone }: {
   const token = localStorage.getItem("ayzen_token") ?? "";
   const vaultEntries = Array.isArray(vaultData) ? vaultData : [];
 
-  const roi = profit && cost
-    ? (((Number(profit) - Number(cost)) / Number(cost)) * 100).toFixed(1)
+  const totalCost = costEntries.filter(e => e.type === "cost").reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const totalProfit = costEntries.filter(e => e.type === "profit").reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const roi = totalCost > 0 && totalProfit > 0
+    ? (((totalProfit - totalCost) / totalCost) * 100).toFixed(1)
     : null;
+
+  const addEntry = (type: "cost" | "profit") => setCostEntries(e => [...e, newEntry(type)]);
+  const removeEntry = (id: string) => setCostEntries(e => e.filter(x => x.id !== id));
+  const updateEntry = (id: string, patch: Partial<CostEntry>) =>
+    setCostEntries(e => e.map(x => x.id === id ? { ...x, ...patch } : x));
+
+  const toggleStep = (i: number) => setCheckedSteps(prev => {
+    const next = new Set(prev);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    return next;
+  });
 
   const toggleEntity = (id: number) => {
     setSelectedEntityIds(prev => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
   };
@@ -163,11 +191,7 @@ function SubmitModal({ task, onClose, onDone }: {
         body: JSON.stringify({
           proofUrl: proofUrl.trim() || undefined,
           notes: notes.trim() || undefined,
-          cost: cost ? Number(cost) : undefined,
-          costCategory: costCategory || undefined,
-          profit: profit ? Number(profit) : undefined,
-          profitCategory: profitCategory || undefined,
-          roi: roi ? Number(roi) : undefined,
+          costEntries: costEntries.length > 0 ? costEntries.map(({ id: _id, ...rest }) => ({ ...rest, amount: Number(rest.amount) || 0 })) : undefined,
           entityIds: selectedEntityIds.size > 0 ? [...selectedEntityIds] : undefined,
         }),
       });
@@ -191,8 +215,9 @@ function SubmitModal({ task, onClose, onDone }: {
   };
 
   const TABS: { id: SubmitTab; label: string; icon: React.ElementType }[] = [
+    ...(hasSteps ? [{ id: "guide" as SubmitTab, label: "Guide", icon: BookOpen }] : []),
     { id: "details",  label: "Details",   icon: Info },
-    { id: "cost-roi", label: "Cost / ROI",icon: DollarSign },
+    { id: "cost-roi", label: "Cost / ROI", icon: DollarSign },
     { id: "points",   label: "Points",    icon: Star },
     { id: "settings", label: "Settings",  icon: Settings2 },
   ];
@@ -226,11 +251,16 @@ function SubmitModal({ task, onClose, onDone }: {
             <Badge variant="outline" className="font-mono text-[10px] border-muted-foreground/30 text-muted-foreground">
               {task.verificationType === "auto" ? "⚡ Auto" : "👤 Manual"}
             </Badge>
+            {hasSteps && (
+              <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary">
+                {checkedSteps.size}/{steps.length} steps
+              </Badge>
+            )}
           </div>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-border mt-4 px-5">
+        <div className="flex border-b border-border mt-4 px-5 overflow-x-auto">
           {TABS.map(t => {
             const Icon = t.icon;
             return (
@@ -238,7 +268,7 @@ function SubmitModal({ task, onClose, onDone }: {
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={cn(
-                  "flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider border-b-2 transition-all -mb-px",
+                  "flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider border-b-2 transition-all -mb-px whitespace-nowrap",
                   tab === t.id
                     ? "border-primary text-primary"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -252,9 +282,66 @@ function SubmitModal({ task, onClose, onDone }: {
         </div>
 
         {/* Tab content */}
-        <div className="p-5 space-y-4 min-h-[200px]">
+        <div className="p-5 space-y-4 min-h-[200px] max-h-[60vh] overflow-y-auto">
 
-          {/* ── Details ─────────────────────────────────────────── */}
+          {/* ── Guide ────────────────────────────────────────────── */}
+          {tab === "guide" && (
+            <>
+              <p className="text-[11px] font-mono text-muted-foreground">
+                Follow the step-by-step guide below. Check off each step as you complete it.
+              </p>
+              {steps.length === 0 ? (
+                <div className="text-center py-8 font-mono text-muted-foreground/40 text-sm">
+                  No steps configured for this task.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {steps.map((step, i) => {
+                    const done = checkedSteps.has(i);
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => toggleStep(i)}
+                        className={cn(
+                          "w-full text-left rounded-lg border p-3 transition-all",
+                          done
+                            ? "bg-emerald-500/5 border-emerald-500/30"
+                            : "bg-muted/20 border-border/40 hover:border-primary/30"
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={cn(
+                            "mt-0.5 w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-all",
+                            done ? "bg-emerald-500 border-emerald-500" : "border-border/60"
+                          )}>
+                            {done && <span className="text-white text-[9px] font-bold">✓</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={cn("font-mono text-xs font-bold", done && "line-through text-muted-foreground")}>
+                              Step {i + 1}: {step.title}
+                            </div>
+                            {step.description && (
+                              <div className="font-mono text-[10px] text-muted-foreground/70 mt-0.5 leading-relaxed">
+                                {step.description}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {checkedSteps.size === steps.length && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3 text-center font-mono text-xs text-emerald-400">
+                      ✅ All steps completed! Head to Details to submit proof.
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── Details ──────────────────────────────────────────── */}
           {tab === "details" && (
             <>
               {task.description && (
@@ -339,88 +426,143 @@ function SubmitModal({ task, onClose, onDone }: {
                     })}
                   </div>
                 )}
-                {selectedEntityIds.size > 1 && (
-                  <p className="text-[10px] font-mono text-muted-foreground/60 mt-1.5">
-                    {selectedEntityIds.size} entities will be included in this submission
-                  </p>
-                )}
               </div>
             </>
           )}
 
-          {/* ── Cost / ROI ──────────────────────────────────────── */}
+          {/* ── Cost / ROI ───────────────────────────────────────── */}
           {tab === "cost-roi" && (
             <>
               <p className="text-[11px] font-mono text-muted-foreground">
-                Track your spending and earnings for this task. Used in your ROI dashboard.
+                Track your spending and earnings for this task. Add multiple entries per category.
               </p>
 
-              {/* Cost section */}
-              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2.5">
-                <div className="font-mono text-[10px] uppercase tracking-widest text-red-400 font-bold">Cost</div>
-                <div>
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Category</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {COST_CATEGORIES.map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setCostCategory(c => c === cat ? "" : cat)}
-                        className={cn(
-                          "px-2.5 py-1 rounded-full font-mono text-[10px] border transition-all",
-                          costCategory === cat
-                            ? "bg-red-500/20 border-red-500/50 text-red-400 font-bold"
-                            : "border-border/40 text-muted-foreground/60 hover:border-red-500/30 hover:text-red-400/70"
+              {/* Cost entries */}
+              <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-red-400 font-bold">
+                    Costs {totalCost > 0 && <span className="ml-1 opacity-70">(${totalCost.toFixed(2)})</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addEntry("cost")}
+                    className="flex items-center gap-1 font-mono text-[10px] text-red-400 hover:text-red-300 border border-red-500/30 hover:border-red-400/50 rounded px-2 py-1 transition-all"
+                  >
+                    <Plus className="w-3 h-3" /> Add Cost
+                  </button>
+                </div>
+
+                {costEntries.filter(e => e.type === "cost").length === 0 ? (
+                  <p className="font-mono text-[10px] text-muted-foreground/50 text-center py-1">No cost entries yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {costEntries.filter(e => e.type === "cost").map(entry => (
+                      <div key={entry.id} className="space-y-2 p-2 rounded bg-black/20 border border-red-500/10">
+                        <div className="flex flex-wrap gap-1">
+                          {COST_CATEGORIES.map(cat => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => updateEntry(entry.id, { category: cat })}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full font-mono text-[9px] border transition-all",
+                                entry.category === cat
+                                  ? "bg-red-500/20 border-red-500/50 text-red-400 font-bold"
+                                  : "border-border/40 text-muted-foreground/60 hover:border-red-500/30"
+                              )}
+                            >{cat}</button>
+                          ))}
+                        </div>
+                        {entry.category === "Manual" && (
+                          <Input
+                            placeholder="Custom name..."
+                            value={entry.label}
+                            onChange={e => updateEntry(entry.id, { label: e.target.value })}
+                            className="font-mono text-[10px] h-7 bg-input border-border"
+                          />
                         )}
-                      >{cat}</button>
+                        <div className="flex gap-2 items-center">
+                          <div className="relative flex-1">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-[10px]">$</span>
+                            <Input
+                              type="number" min="0" step="0.01" placeholder="0.00"
+                              value={entry.amount}
+                              onChange={e => updateEntry(entry.id, { amount: e.target.value })}
+                              className="font-mono text-[10px] h-7 bg-input border-border pl-5"
+                            />
+                          </div>
+                          <button onClick={() => removeEntry(entry.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Amount ($)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
-                    <Input
-                      type="number" min="0" step="0.01" placeholder="0.00" value={cost}
-                      onChange={e => setCost(e.target.value)}
-                      className="font-mono text-xs h-9 bg-input border-border focus-visible:ring-red-500/40 pl-6"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
 
-              {/* Profit section */}
-              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-2.5">
-                <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400 font-bold">Profit / Return</div>
-                <div>
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Category</label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {PROFIT_CATEGORIES.map(cat => (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => setProfitCategory(c => c === cat ? "" : cat)}
-                        className={cn(
-                          "px-2.5 py-1 rounded-full font-mono text-[10px] border transition-all",
-                          profitCategory === cat
-                            ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 font-bold"
-                            : "border-border/40 text-muted-foreground/60 hover:border-emerald-500/30 hover:text-emerald-400/70"
+              {/* Profit entries */}
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-emerald-400 font-bold">
+                    Profit / Return {totalProfit > 0 && <span className="ml-1 opacity-70">(${totalProfit.toFixed(2)})</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addEntry("profit")}
+                    className="flex items-center gap-1 font-mono text-[10px] text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 hover:border-emerald-400/50 rounded px-2 py-1 transition-all"
+                  >
+                    <Plus className="w-3 h-3" /> Add Profit
+                  </button>
+                </div>
+
+                {costEntries.filter(e => e.type === "profit").length === 0 ? (
+                  <p className="font-mono text-[10px] text-muted-foreground/50 text-center py-1">No profit entries yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {costEntries.filter(e => e.type === "profit").map(entry => (
+                      <div key={entry.id} className="space-y-2 p-2 rounded bg-black/20 border border-emerald-500/10">
+                        <div className="flex flex-wrap gap-1">
+                          {PROFIT_CATEGORIES.map(cat => (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => updateEntry(entry.id, { category: cat })}
+                              className={cn(
+                                "px-2 py-0.5 rounded-full font-mono text-[9px] border transition-all",
+                                entry.category === cat
+                                  ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 font-bold"
+                                  : "border-border/40 text-muted-foreground/60 hover:border-emerald-500/30"
+                              )}
+                            >{cat}</button>
+                          ))}
+                        </div>
+                        {entry.category === "Manual" && (
+                          <Input
+                            placeholder="Custom name..."
+                            value={entry.label}
+                            onChange={e => updateEntry(entry.id, { label: e.target.value })}
+                            className="font-mono text-[10px] h-7 bg-input border-border"
+                          />
                         )}
-                      >{cat}</button>
+                        <div className="flex gap-2 items-center">
+                          <div className="relative flex-1">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-[10px]">$</span>
+                            <Input
+                              type="number" min="0" step="0.01" placeholder="0.00"
+                              value={entry.amount}
+                              onChange={e => updateEntry(entry.id, { amount: e.target.value })}
+                              className="font-mono text-[10px] h-7 bg-input border-border pl-5"
+                            />
+                          </div>
+                          <button onClick={() => removeEntry(entry.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
                     ))}
                   </div>
-                </div>
-                <div>
-                  <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Amount ($)</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-xs">$</span>
-                    <Input
-                      type="number" min="0" step="0.01" placeholder="0.00" value={profit}
-                      onChange={e => setProfit(e.target.value)}
-                      className="font-mono text-xs h-9 bg-input border-border focus-visible:ring-emerald-500/40 pl-6"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* ROI auto-calc */}
@@ -430,9 +572,7 @@ function SubmitModal({ task, onClose, onDone }: {
                   ? Number(roi) >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5"
                   : "border-border bg-muted/20"
               )}>
-                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">
-                  Calculated ROI
-                </div>
+                <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">Calculated ROI</div>
                 <div className={cn(
                   "font-mono text-3xl font-bold",
                   roi
@@ -441,19 +581,16 @@ function SubmitModal({ task, onClose, onDone }: {
                 )}>
                   {roi ? `${Number(roi) >= 0 ? "+" : ""}${roi}%` : "—"}
                 </div>
-                {cost && profit && (
+                {totalCost > 0 && totalProfit > 0 && (
                   <div className="font-mono text-[10px] text-muted-foreground mt-1">
-                    Net: ${(Number(profit) - Number(cost)).toFixed(2)}
+                    Net: ${(totalProfit - totalCost).toFixed(2)}
                   </div>
                 )}
               </div>
-              <p className="text-[10px] font-mono text-muted-foreground/50">
-                These figures are stored privately and used to calculate your total platform ROI.
-              </p>
             </>
           )}
 
-          {/* ── Points ──────────────────────────────────────────── */}
+          {/* ── Points ───────────────────────────────────────────── */}
           {tab === "points" && (
             <>
               <p className="text-[11px] font-mono text-muted-foreground">
@@ -475,29 +612,22 @@ function SubmitModal({ task, onClose, onDone }: {
                   <div className="font-mono text-[10px] text-muted-foreground/60 mt-1">USD</div>
                 </div>
               </div>
-
-              <div className="bg-muted/20 border border-border rounded-lg p-4 space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">Task Category</span>
-                  <Badge variant="outline" className="font-mono text-[10px] border-violet-400/30 text-violet-400">
-                    {task.taskCategory ?? task.category ?? "General"}
-                  </Badge>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">Type</span>
-                  <span className="font-mono text-[10px] text-foreground">{task.taskType}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">Verification</span>
-                  <span className="font-mono text-[10px] text-foreground">
-                    {task.verificationType === "auto" ? "⚡ Automatic" : "👤 Manual review"}
-                  </span>
-                </div>
+              <div className="bg-muted/20 border border-border rounded-lg divide-y divide-border">
+                {[
+                  { label: "Task Category", value: task.taskCategory ?? task.category ?? "General" },
+                  { label: "Type", value: task.taskType },
+                  { label: "Verification", value: task.verificationType === "auto" ? "⚡ Automatic" : "👤 Manual review" },
+                ].map(row => (
+                  <div key={row.label} className="flex justify-between items-center px-4 py-2.5">
+                    <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">{row.label}</span>
+                    <span className="font-mono text-[10px] text-foreground">{row.value}</span>
+                  </div>
+                ))}
               </div>
             </>
           )}
 
-          {/* ── Settings ────────────────────────────────────────── */}
+          {/* ── Settings ─────────────────────────────────────────── */}
           {tab === "settings" && (
             <>
               <p className="text-[11px] font-mono text-muted-foreground">
@@ -512,6 +642,7 @@ function SubmitModal({ task, onClose, onDone }: {
                   { label: "Verification", value: task.verificationType === "auto" ? "Automatic" : "Manual review" },
                   { label: "Time Limit", value: task.timeLimitMinutes ? `${task.timeLimitMinutes} min` : "No limit" },
                   { label: "Deadline", value: task.deadline ? new Date(task.deadline).toLocaleDateString() : "None" },
+                  { label: "Steps Guide", value: hasSteps ? `${steps.length} steps` : "Not configured" },
                 ].map(row => (
                   <div key={row.label} className="flex justify-between items-center px-4 py-2.5">
                     <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">{row.label}</span>
@@ -590,7 +721,6 @@ export default function UserTasks() {
     queryClient.invalidateQueries({ queryKey: ["user-stats"] });
   }, [refetch, queryClient]);
 
-  // Cmd+E shortcut to export CSV
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "e") {
@@ -617,6 +747,8 @@ export default function UserTasks() {
 
   return (
     <div className="space-y-6">
+      <StatsBar />
+
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase">Task Center</h1>
@@ -684,6 +816,7 @@ export default function UserTasks() {
             const StatusIcon = statusCfg?.icon;
             const isDone = task.userStatus === "approved";
             const isPending = task.userStatus === "pending";
+            const hasTaskSteps = Array.isArray(task.steps) && task.steps.length > 0;
 
             return (
               <Card
@@ -705,6 +838,11 @@ export default function UserTasks() {
                       {task.taskCategory && (
                         <Badge variant="outline" className="font-mono text-[10px] uppercase rounded-sm shrink-0 border-violet-400/30 text-violet-400">
                           {task.taskCategory}
+                        </Badge>
+                      )}
+                      {hasTaskSteps && (
+                        <Badge variant="outline" className="font-mono text-[10px] rounded-sm shrink-0 border-primary/30 text-primary flex items-center gap-1">
+                          <BookOpen className="w-2.5 h-2.5" /> {task.steps!.length} steps
                         </Badge>
                       )}
                       {(task as any).priority && (task as any).priority !== "normal" && (

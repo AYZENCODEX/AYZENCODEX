@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Plus, CheckSquare, ClipboardList, Check, X, ExternalLink, RefreshCw, Zap } from "lucide-react";
+import { Plus, CheckSquare, ClipboardList, Check, X, ExternalLink, RefreshCw, Zap, Trash2, BookOpen } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -37,6 +37,7 @@ export default function AdminTasks() {
     name: "", description: "", projectId: "",
     rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual",
   });
+  const [steps, setSteps] = useState<{ id: string; title: string; description: string }[]>([]);
 
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [subsLoading, setSubsLoading] = useState(false);
@@ -45,7 +46,7 @@ export default function AdminTasks() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDialog, setRejectDialog] = useState<Submission | null>(null);
 
-  const resetForm = () => setForm({ name: "", description: "", projectId: "", rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual" });
+  const resetForm = () => { setForm({ name: "", description: "", projectId: "", rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual" }); setSteps([]); };
 
   // Load projects for dropdown
   useEffect(() => {
@@ -124,6 +125,7 @@ export default function AdminTasks() {
         taskType: form.taskType,
         verificationType: form.verificationType,
         xpAmount: form.xpAmount ? parseFloat(form.xpAmount) : 0,
+        steps: steps.length > 0 ? steps.map(({ title, description }) => ({ title, description })) : undefined,
       };
       if (form.projectId) body.projectId = parseInt(form.projectId, 10);
       if (form.rewardAmount) body.rewardAmount = parseFloat(form.rewardAmount);
@@ -418,6 +420,56 @@ export default function AdminTasks() {
                 ≈ {(parseFloat(form.xpAmount) * selectedProject.xpPrice).toFixed(4)} AZN will be auto-awarded on approval
               </p>
             ) : null}
+
+            {/* Steps Guide */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <BookOpen className="w-3 h-3 text-primary/60" />
+                  <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Step Guide (optional)</Label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSteps(s => [...s, { id: Math.random().toString(36).slice(2), title: "", description: "" }])}
+                  className="flex items-center gap-1 font-mono text-[10px] text-primary hover:text-primary/80 border border-primary/30 hover:border-primary/50 rounded px-2 py-1 transition-all"
+                >
+                  <Plus className="w-3 h-3" /> Add Step
+                </button>
+              </div>
+              {steps.length === 0 ? (
+                <p className="text-[10px] font-mono text-muted-foreground/40 text-center py-2 border border-dashed border-border/30 rounded">
+                  No steps — click "Add Step" to create a guide for users
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                  {steps.map((step, i) => (
+                    <div key={step.id} className="flex gap-2 items-start bg-muted/20 rounded-lg p-2 border border-border/30">
+                      <span className="font-mono text-[10px] text-muted-foreground mt-2 w-5 flex-shrink-0">{i + 1}.</span>
+                      <div className="flex-1 space-y-1">
+                        <Input
+                          value={step.title}
+                          onChange={e => setSteps(s => s.map(x => x.id === step.id ? { ...x, title: e.target.value } : x))}
+                          placeholder={`Step ${i + 1} title...`}
+                          className="font-mono text-[10px] h-7 bg-input border-border"
+                        />
+                        <Input
+                          value={step.description}
+                          onChange={e => setSteps(s => s.map(x => x.id === step.id ? { ...x, description: e.target.value } : x))}
+                          placeholder="Description (optional)"
+                          className="font-mono text-[10px] h-7 bg-input border-border"
+                        />
+                      </div>
+                      <button
+                        onClick={() => setSteps(s => s.filter(x => x.id !== step.id))}
+                        className="text-muted-foreground/40 hover:text-red-400 transition-colors mt-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="gap-2">
