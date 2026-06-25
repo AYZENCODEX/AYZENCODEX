@@ -162,6 +162,16 @@ const MIGRATIONS = [
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS difficulty TEXT DEFAULT 'average'",
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS cost_type TEXT DEFAULT 'free'",
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS tutorial_notes TEXT",
+  `CREATE TABLE IF NOT EXISTS local_account_points (
+    id SERIAL PRIMARY KEY,
+    account_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_local_account_points_account_id ON local_account_points(account_id)",
+  "CREATE INDEX IF NOT EXISTS idx_local_account_points_user_id ON local_account_points(user_id)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

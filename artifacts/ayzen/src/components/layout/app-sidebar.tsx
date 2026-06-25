@@ -92,16 +92,9 @@ const USER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: "DAO Vault", icon: Database,
+    label: "Vault", icon: Vault,
     items: [
-      { href: "/vault",          label: "Entity Vault", icon: Vault,       pluginSlug: "vault" },
-      { href: "/authenticator",  label: "2FA Codes",    icon: ShieldCheck, pluginSlug: "authenticator" },
-    ],
-  },
-  {
-    label: "Assets", icon: Wallet,
-    items: [
-      { href: "/wallets", label: "My Wallets", icon: Wallet, pluginSlug: "wallets" },
+      { href: "/vault", label: "DAO Vault", icon: Vault, pluginSlug: "vault" },
     ],
   },
   {

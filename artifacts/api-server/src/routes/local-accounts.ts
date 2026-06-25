@@ -13,7 +13,6 @@ function getUserId(req: { headers: { authorization?: string } }): number {
   } catch { return 1; }
 }
 
-// ─── DEFAULT CATEGORIES ───────────────────────────────────────────────────────
 const DEFAULT_CATEGORIES = [
   { id: "facebook",  name: "Facebook",  color: "#1877F2", icon: "facebook" },
   { id: "github",    name: "GitHub",    color: "#24292e", icon: "github" },
@@ -22,7 +21,6 @@ const DEFAULT_CATEGORIES = [
   { id: "discord",   name: "Discord",   color: "#5865F2", icon: "discord" },
 ];
 
-// ─── GET /api/local-accounts ─────────────────────────────────────────────────
 router.get("/local-accounts", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const category = (req.query.category as string) || null;
@@ -37,7 +35,6 @@ router.get("/local-accounts", async (req, res): Promise<void> => {
   }
 });
 
-// ─── POST /api/local-accounts ────────────────────────────────────────────────
 router.post("/local-accounts", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const {
@@ -76,7 +73,6 @@ router.post("/local-accounts", async (req, res): Promise<void> => {
   }
 });
 
-// ─── PUT /api/local-accounts/:id ─────────────────────────────────────────────
 router.put("/local-accounts/:id", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const id = parseInt(req.params.id as string);
@@ -118,7 +114,6 @@ router.put("/local-accounts/:id", async (req, res): Promise<void> => {
   }
 });
 
-// ─── DELETE /api/local-accounts/:id ─────────────────────────────────────────
 router.delete("/local-accounts/:id", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const id = parseInt(req.params.id as string);
@@ -131,7 +126,6 @@ router.delete("/local-accounts/:id", async (req, res): Promise<void> => {
   }
 });
 
-// ─── GET /api/local-accounts/categories ─────────────────────────────────────
 router.get("/local-accounts/categories", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   try {
@@ -144,7 +138,6 @@ router.get("/local-accounts/categories", async (req, res): Promise<void> => {
   }
 });
 
-// ─── POST /api/local-accounts/categories ────────────────────────────────────
 router.post("/local-accounts/categories", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const { name } = req.body;
@@ -159,13 +152,60 @@ router.post("/local-accounts/categories", async (req, res): Promise<void> => {
   }
 });
 
-// ─── DELETE /api/local-accounts/categories/:id ──────────────────────────────
 router.delete("/local-accounts/categories/:id", async (req, res): Promise<void> => {
   const userId = getUserId(req);
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   try {
     await db.execute(sql.raw(`DELETE FROM local_account_categories WHERE id = ${id} AND user_id = ${userId}`));
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
+// ─── POINTS: GET /api/local-accounts/:id/points ───────────────────────────────
+router.get("/local-accounts/:id/points", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const accountId = parseInt(req.params.id as string);
+  if (isNaN(accountId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    const result = await db.execute(sql.raw(
+      `SELECT * FROM local_account_points WHERE account_id = ${accountId} AND user_id = ${userId} ORDER BY created_at DESC`
+    ));
+    const rows = result.rows as any[];
+    const total = rows.reduce((s: number, r: any) => s + Number(r.amount ?? 0), 0);
+    res.json({ entries: rows, total });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
+// ─── POINTS: POST /api/local-accounts/:id/points ──────────────────────────────
+router.post("/local-accounts/:id/points", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const accountId = parseInt(req.params.id as string);
+  if (isNaN(accountId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  const { amount, notes = null } = req.body;
+  if (!amount || isNaN(Number(amount))) { res.status(400).json({ error: "amount required" }); return; }
+  const safe = (v: any) => v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`;
+  try {
+    const result = await db.execute(sql.raw(
+      `INSERT INTO local_account_points (account_id, user_id, amount, notes) VALUES (${accountId}, ${userId}, ${Number(amount)}, ${safe(notes)}) RETURNING *`
+    ));
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
+// ─── POINTS: DELETE /api/local-accounts/points/:pointId ──────────────────────
+router.delete("/local-accounts/points/:pointId", async (req, res): Promise<void> => {
+  const userId = getUserId(req);
+  const pointId = parseInt(req.params.pointId as string);
+  if (isNaN(pointId)) { res.status(400).json({ error: "Invalid ID" }); return; }
+  try {
+    await db.execute(sql.raw(`DELETE FROM local_account_points WHERE id = ${pointId} AND user_id = ${userId}`));
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });

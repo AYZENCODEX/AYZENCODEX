@@ -9,8 +9,8 @@ import {
   Plus, Trash2, Eye, EyeOff, Copy, Check,
   Lock, Shield, Users, TrendingUp,
   Calendar, DollarSign, Edit3, X, Tag, Smartphone,
-  Clock, UserCheck, Star, BarChart2, GitBranch,
-  Award, Linkedin, Github,
+  Clock, UserCheck, Star, BarChart2,
+  Award, Linkedin, Github, Zap, Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -347,7 +347,12 @@ function AccountFormDialog({
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(toFormState(editAccount));
-  const [activeSection, setActiveSection] = useState<"creds" | "dates" | "value" | "platform">("creds");
+  const [activeSection, setActiveSection] = useState<"creds" | "dates" | "value" | "platform" | "points">("creds");
+  const [pointsData, setPointsData] = useState<{ entries: any[]; total: number }>({ entries: [], total: 0 });
+  const [pointsLoading, setPointsLoading] = useState(false);
+  const [addingPoint, setAddingPoint] = useState(false);
+  const [pointAmount, setPointAmount] = useState("");
+  const [pointNotes, setPointNotes] = useState("");
 
   useEffect(() => {
     if (open) {
@@ -355,14 +360,59 @@ function AccountFormDialog({
       if (!editAccount && selectedCategory) base.category = selectedCategory;
       setForm(base);
       setActiveSection("creds");
+      setPointAmount("");
+      setPointNotes("");
     }
   }, [open, editAccount, selectedCategory]);
 
-  const SECTIONS: { id: "creds" | "dates" | "value" | "platform"; label: string }[] = [
-    { id: "creds",    label: "Credentials" },
+  const loadPoints = useCallback(async () => {
+    if (!editAccount?.id) return;
+    setPointsLoading(true);
+    try {
+      const data = await customFetch<{ entries: any[]; total: number }>(`/api/local-accounts/${editAccount.id}/points`);
+      setPointsData(data);
+    } catch { setPointsData({ entries: [], total: 0 }); }
+    finally { setPointsLoading(false); }
+  }, [editAccount?.id]);
+
+  useEffect(() => {
+    if (open && activeSection === "points" && editAccount?.id) {
+      loadPoints();
+    }
+  }, [open, activeSection, editAccount?.id, loadPoints]);
+
+  const handleAddPoint = async () => {
+    if (!editAccount?.id || !pointAmount || isNaN(Number(pointAmount))) return;
+    setAddingPoint(true);
+    try {
+      await customFetch<unknown>(`/api/local-accounts/${editAccount.id}/points`, {
+        method: "POST",
+        body: JSON.stringify({ amount: Number(pointAmount), notes: pointNotes || null }),
+      });
+      toast({ title: `+${pointAmount} points added` });
+      setPointAmount("");
+      setPointNotes("");
+      await loadPoints();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to add points" });
+    } finally { setAddingPoint(false); }
+  };
+
+  const handleDeletePoint = async (pointId: number) => {
+    try {
+      await customFetch<unknown>(`/api/local-accounts/points/${pointId}`, { method: "DELETE" });
+      await loadPoints();
+    } catch {
+      toast({ variant: "destructive", title: "Failed to delete" });
+    }
+  };
+
+  const SECTIONS: { id: "creds" | "dates" | "value" | "platform" | "points"; label: string }[] = [
+    { id: "creds",    label: "Creds" },
     { id: "dates",    label: "Dates" },
-    { id: "value",    label: "Value / ROI" },
+    { id: "value",    label: "Value" },
     { id: "platform", label: form.category || "Platform" },
+    { id: "points",   label: "Points" },
   ];
 
   const fv = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -551,6 +601,97 @@ function AccountFormDialog({
                   </div>
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Tab 5: Points */}
+          {activeSection === "points" && (
+            <div className="space-y-3">
+              {!editAccount ? (
+                <div className="py-10 text-center text-muted-foreground/50 font-mono text-xs border border-dashed border-border/30 rounded-xl">
+                  Save the account first to track points
+                </div>
+              ) : (
+                <>
+                  {/* Balance card */}
+                  <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-violet-500/5 border border-primary/20 flex items-center justify-between">
+                    <div>
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-primary/60 mb-1">Points Balance</div>
+                      <div className="font-mono text-2xl font-bold text-primary">{pointsData.total.toLocaleString()}</div>
+                      <div className="font-mono text-[9px] text-muted-foreground/40 mt-0.5">{pointsData.entries.length} entries</div>
+                    </div>
+                    <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
+                      <Zap className="w-5 h-5 text-primary" />
+                    </div>
+                  </div>
+
+                  {/* Add points form */}
+                  <div className="p-3 rounded-xl border border-border/40 bg-muted/10 space-y-2">
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50 mb-2">Add Points</div>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        value={pointAmount}
+                        onChange={e => setPointAmount(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && handleAddPoint()}
+                        className="h-8 font-mono text-xs bg-input flex-1"
+                        placeholder="Amount (e.g. 500)"
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleAddPoint}
+                        disabled={addingPoint || !pointAmount}
+                        className="h-8 font-mono text-[10px] gap-1.5 px-3"
+                      >
+                        {addingPoint ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                        Add
+                      </Button>
+                    </div>
+                    <Input
+                      value={pointNotes}
+                      onChange={e => setPointNotes(e.target.value)}
+                      className="h-8 font-mono text-xs bg-input"
+                      placeholder="Note (optional — e.g. Google Play reward)"
+                    />
+                  </div>
+
+                  {/* History */}
+                  <div className="space-y-1">
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">History</div>
+                    {pointsLoading ? (
+                      <div className="flex items-center justify-center py-6">
+                        <Loader2 className="w-4 h-4 text-primary/40 animate-spin" />
+                      </div>
+                    ) : pointsData.entries.length === 0 ? (
+                      <div className="py-6 text-center text-muted-foreground/40 font-mono text-[10px] border border-dashed border-border/20 rounded-lg">
+                        No points recorded yet
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                        {pointsData.entries.map((entry: any) => (
+                          <div key={entry.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-card border border-border/30 group hover:border-primary/20 transition-all">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="font-mono font-bold text-sm text-primary">+{Number(entry.amount).toLocaleString()}</span>
+                              {entry.notes && <span className="font-mono text-[10px] text-muted-foreground/50 truncate">{entry.notes}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="font-mono text-[9px] text-muted-foreground/40">
+                                {new Date(entry.created_at).toLocaleDateString()}
+                              </span>
+                              <button
+                                onClick={() => handleDeletePoint(entry.id)}
+                                className="opacity-0 group-hover:opacity-100 text-muted-foreground/30 hover:text-red-400 transition-all"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 
