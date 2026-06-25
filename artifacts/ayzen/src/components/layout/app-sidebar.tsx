@@ -128,12 +128,6 @@ const USER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: "Tools", icon: DollarSign,
-    items: [
-      { href: "/calculator", label: "ROI Calculator", icon: DollarSign },
-    ],
-  },
-  {
     label: "System", icon: Settings,
     items: [
       { href: "/credits",       label: "Credits & AZN", icon: Coins },

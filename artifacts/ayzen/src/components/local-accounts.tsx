@@ -7,9 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Plus, Trash2, Eye, EyeOff, Copy, Check,
-  Lock, Shield, ChevronRight, Users, TrendingUp,
+  Lock, Shield, Users, TrendingUp,
   Calendar, DollarSign, Edit3, X, Tag, Smartphone,
-  Clock, UserCheck, Star, BarChart2,
+  Clock, UserCheck, Star, BarChart2, GitBranch,
+  Award, Linkedin, Github,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,77 @@ interface Category {
   color: string;
   icon: string;
   isCustom?: boolean;
+}
+
+// ─── Platform metric config ───────────────────────────────────────────────────
+interface PlatformMeta {
+  metricLabel: string;
+  metricPlaceholder: string;
+  icon: React.ElementType;
+  tips: string[];
+  color: string;
+}
+
+const PLATFORM_META: Record<string, PlatformMeta> = {
+  Google: {
+    metricLabel: "Points / Rewards",
+    metricPlaceholder: "e.g. 2500",
+    icon: Award,
+    color: "#EA4335",
+    tips: ["Check Google One rewards", "Track Maps contributions", "Monitor Play Points balance"],
+  },
+  Facebook: {
+    metricLabel: "Friends / Followers",
+    metricPlaceholder: "e.g. 500",
+    icon: Users,
+    color: "#1877F2",
+    tips: ["Profile vs Page accounts behave differently", "Keep profile active to avoid lock"],
+  },
+  Twitter: {
+    metricLabel: "Followers",
+    metricPlaceholder: "e.g. 1200",
+    icon: Users,
+    color: "#1DA1F2",
+    tips: ["Age 6+ months for airdrops", "Minimum 50 followers typical", "Keep bio + avatar set"],
+  },
+  Reddit: {
+    metricLabel: "Karma",
+    metricPlaceholder: "e.g. 1500",
+    icon: Award,
+    color: "#FF4500",
+    tips: ["Post karma + comment karma matter", "2FA required by most projects", "Old accounts valued more"],
+  },
+  GitHub: {
+    metricLabel: "Repositories",
+    metricPlaceholder: "e.g. 12",
+    icon: Github,
+    color: "#6e40c9",
+    tips: ["Contribution graph visibility matters", "Star relevant repos for whitelist", "Fork target repos"],
+  },
+  LinkedIn: {
+    metricLabel: "Connections",
+    metricPlaceholder: "e.g. 500+",
+    icon: Linkedin,
+    color: "#0A66C2",
+    tips: ["500+ connections = 'Level 1' trust", "Keep industry set to crypto/web3", "Engage with protocol posts"],
+  },
+  Discord: {
+    metricLabel: "Servers Joined",
+    metricPlaceholder: "e.g. 15",
+    icon: Users,
+    color: "#5865F2",
+    tips: ["Join official server first", "Verify in every server", "Boost servers for higher roles"],
+  },
+};
+
+function getPlatformMeta(category: string): PlatformMeta {
+  return PLATFORM_META[category] ?? {
+    metricLabel: "Social Metric",
+    metricPlaceholder: "e.g. followers, points...",
+    icon: Star,
+    color: "#22d3ee",
+    tips: ["Track your key metric for this platform"],
+  };
 }
 
 // ─── Platform configs ─────────────────────────────────────────────────────────
@@ -275,7 +347,7 @@ function AccountFormDialog({
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(toFormState(editAccount));
-  const [activeSection, setActiveSection] = useState<"creds" | "dates" | "value">("creds");
+  const [activeSection, setActiveSection] = useState<"creds" | "dates" | "value" | "platform">("creds");
 
   useEffect(() => {
     if (open) {
@@ -286,10 +358,11 @@ function AccountFormDialog({
     }
   }, [open, editAccount, selectedCategory]);
 
-  const SECTIONS: { id: "creds" | "dates" | "value"; label: string }[] = [
-    { id: "creds", label: "Credentials" },
-    { id: "dates", label: "Dates" },
-    { id: "value", label: "Value / ROI" },
+  const SECTIONS: { id: "creds" | "dates" | "value" | "platform"; label: string }[] = [
+    { id: "creds",    label: "Credentials" },
+    { id: "dates",    label: "Dates" },
+    { id: "value",    label: "Value / ROI" },
+    { id: "platform", label: form.category || "Platform" },
   ];
 
   const fv = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
@@ -434,7 +507,6 @@ function AccountFormDialog({
           {activeSection === "dates" && (
             <div className="space-y-3">
               <FField label="Label / Nickname" fkey="label" placeholder="e.g. Main acc, farming1..." type="text" />
-              <FField label="Followers / Following" fkey="followers" placeholder="e.g. 1200" type="text" />
               <div className="p-3 rounded-lg bg-primary/3 border border-primary/10 space-y-2">
                 <div className="flex items-center gap-1.5">
                   <Calendar className="w-3 h-3 text-primary/60" />
@@ -479,17 +551,68 @@ function AccountFormDialog({
                   </div>
                 )}
               </div>
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
-                <Textarea
-                  value={(form as any).notes ?? ""}
-                  onChange={fv("notes")}
-                  className="font-mono text-xs bg-input min-h-[80px] resize-none"
-                  placeholder="Any notes about this account..."
-                />
-              </div>
             </div>
           )}
+
+          {/* Tab 4: Platform-specific */}
+          {activeSection === "platform" && (() => {
+            const meta = getPlatformMeta(form.category);
+            const MetaIcon = meta.icon;
+            return (
+              <div className="space-y-3">
+                {/* Platform header */}
+                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border/30 bg-muted/20">
+                  <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: meta.color + "22", border: `1px solid ${meta.color}44` }}>
+                    <MetaIcon className="w-3.5 h-3.5" style={{ color: meta.color }} />
+                  </div>
+                  <div>
+                    <div className="font-mono text-xs font-bold text-foreground">{form.category || "Platform"}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground/50">Platform-specific stats & notes</div>
+                  </div>
+                </div>
+
+                {/* Primary metric */}
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider flex items-center gap-1.5">
+                    <MetaIcon className="w-3 h-3" style={{ color: meta.color }} />
+                    {meta.metricLabel}
+                  </Label>
+                  <Input
+                    value={(form as any).followers ?? ""}
+                    onChange={fv("followers")}
+                    className="font-mono text-xs h-8 bg-input"
+                    placeholder={meta.metricPlaceholder}
+                  />
+                </div>
+
+                {/* Tips */}
+                {meta.tips.length > 0 && (
+                  <div className="p-3 rounded-lg border border-primary/10 bg-primary/3 space-y-1.5">
+                    <div className="font-mono text-[9px] uppercase tracking-wider text-primary/60 font-bold flex items-center gap-1">
+                      <Star className="w-2.5 h-2.5" /> Farming Tips
+                    </div>
+                    {meta.tips.map((tip, i) => (
+                      <div key={i} className="flex items-start gap-1.5">
+                        <span className="font-mono text-[9px] text-primary/40 mt-0.5">→</span>
+                        <span className="font-mono text-[10px] text-muted-foreground/70">{tip}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Notes */}
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
+                  <Textarea
+                    value={(form as any).notes ?? ""}
+                    onChange={fv("notes")}
+                    className="font-mono text-xs bg-input min-h-[70px] resize-none"
+                    placeholder={`Notes about this ${form.category || "account"}...`}
+                  />
+                </div>
+              </div>
+            );
+          })()}
         </div>
 
         <DialogFooter className="gap-2">
