@@ -26,6 +26,7 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [demoCode, setDemoCode] = useState<string | null>(null);
 
   const startCountdown = () => {
     setCountdown(60);
@@ -48,7 +49,12 @@ export default function ForgotPassword() {
       });
       const data = await res.json();
       if (res.ok) {
-        toast({ title: "Code sent!", description: `Check ${email} for your reset code.` });
+        if (data._demo_code) {
+          setDemoCode(data._demo_code);
+          toast({ title: "Demo mode", description: "Email not configured — code shown below for testing." });
+        } else {
+          toast({ title: "Code sent!", description: `Check ${email} for your reset code.` });
+        }
         setStep("code");
         startCountdown();
       } else {
@@ -185,6 +191,17 @@ export default function ForgotPassword() {
                 <p className="font-mono text-xs text-muted-foreground">Code sent to</p>
                 <p className="font-mono text-sm text-foreground font-bold">{email}</p>
               </div>
+              {demoCode && (
+                <div className="bg-amber-400/10 border border-amber-400/30 rounded-lg p-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-mono text-[10px] text-amber-400/80 uppercase tracking-wider mb-0.5">Demo Code (email not configured)</p>
+                    <p className="font-mono text-xl font-bold tracking-[0.3em] text-amber-400">{demoCode}</p>
+                  </div>
+                  <button type="button" onClick={() => setCode(demoCode)} className="font-mono text-[10px] text-amber-400 border border-amber-400/30 rounded px-2 py-1 hover:bg-amber-400/10 transition-colors">
+                    Use
+                  </button>
+                </div>
+              )}
               <div className="space-y-2">
                 <Label className="font-mono text-xs uppercase tracking-wider text-muted-foreground">6-Digit Code</Label>
                 <Input

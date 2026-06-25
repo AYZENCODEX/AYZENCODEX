@@ -1,5 +1,6 @@
 import { useState, lazy, Suspense } from "react";
-import { useListVaultEntries, useCreateVaultEntry, useDeleteVaultEntry } from "@workspace/api-client-react";
+import { useLocation, useSearch } from "wouter";
+import { useListVaultEntries, useCreateVaultEntry, useDeleteVaultEntry, customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,7 +13,7 @@ import {
   Copy, Check, Mail, Hash, Lock, Shield,
   Phone, AtSign, X, Smartphone,
   QrCode, Search, Download, Wallet, AlertTriangle, Star,
-  Loader2,
+  Loader2, Edit2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -194,6 +195,7 @@ function EntityTab() {
 
   const [open, setOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [editId, setEditId] = useState<number | null>(null);
   const [qrAddress, setQrAddress] = useState<string | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
   const [otherAccounts, setOtherAccounts] = useState<OtherAccount[]>([]);
@@ -202,6 +204,8 @@ function EntityTab() {
   const [sortBy, setSortBy] = useState<"date" | "name" | "category">("date");
   const [filterCat, setFilterCat] = useState("all");
   const [pinned, setPinned] = useState<number[]>([]);
+  const [viewEntry, setViewEntry] = useState<EntryAny | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const allEntries: EntryAny[] = (data as EntryAny[] | undefined) ?? [];
   const total2fa = allEntries.reduce((s, e) => s + (e.twitter2fa ? 1 : 0) + (e.discord2fa ? 1 : 0) + (e.telegram2fa ? 1 : 0), 0);
@@ -230,6 +234,49 @@ function EntityTab() {
     setForm(prev => ({ ...prev, [key]: e.target.value }));
 
   const resetForm = () => { setForm({ ...EMPTY_FORM }); setOtherAccounts([]); setFormTab("main"); };
+
+  const openEdit = (entry: EntryAny) => {
+    setEditId(entry.id);
+    setForm({
+      category: entry.category ?? "",
+      projectName: entry.projectName ?? "",
+      email: entry.email ?? "",
+      emailPassword: entry.emailPassword ?? "",
+      emailRecovery: entry.emailRecovery ?? "",
+      emailRecoveryPassword: entry.emailRecoveryPassword ?? "",
+      twitterUsername: entry.twitterUsername ?? "",
+      twitterPassword: entry.twitterPassword ?? "",
+      twitterEmail: entry.twitterEmail ?? "",
+      twitterEmailPassword: entry.twitterEmailPassword ?? "",
+      twitterFollowers: entry.twitterFollowers ?? "",
+      twitter2fa: entry.twitter2fa ?? "",
+      twitterEmailRecovery: entry.twitterEmailRecovery ?? "",
+      twitterEmailRecoveryPassword: entry.twitterEmailRecoveryPassword ?? "",
+      discordUsername: entry.discordUsername ?? "",
+      discordPassword: entry.discordPassword ?? "",
+      discordEmail: entry.discordEmail ?? "",
+      discordEmailPassword: entry.discordEmailPassword ?? "",
+      discord2fa: entry.discord2fa ?? "",
+      discordEmailRecovery: entry.discordEmailRecovery ?? "",
+      discordEmailRecoveryPassword: entry.discordEmailRecoveryPassword ?? "",
+      telegramUsername: entry.telegramUsername ?? "",
+      telegramPassword: entry.telegramPassword ?? "",
+      telegramPhone: entry.telegramPhone ?? "",
+      telegram2fa: entry.telegram2fa ?? "",
+      telegramLinkedEmail: entry.telegramLinkedEmail ?? "",
+      telegramLinkedEmailPassword: entry.telegramLinkedEmailPassword ?? "",
+      walletAddresses: Array.isArray(entry.walletAddresses) ? entry.walletAddresses.join("\n") : (entry.walletAddresses ?? ""),
+      backupCodes: Array.isArray(entry.backupCodes) ? entry.backupCodes.join("\n") : (entry.backupCodes ?? ""),
+      notes: entry.notes ?? "",
+    });
+    try {
+      const others = entry.otherAccounts ? JSON.parse(entry.otherAccounts) : [];
+      setOtherAccounts(others.map((o: any) => ({ ...o, id: Math.random().toString(36).slice(2) })));
+    } catch { setOtherAccounts([]); }
+    setFormTab("main");
+    setOpen(true);
+  };
+
   const addOther = () => setOtherAccounts(p => [...p, newOther()]);
   const updateOther = (id: string, u: OtherAccount) => setOtherAccounts(p => p.map(a => a.id === id ? u : a));
   const removeOther = (id: string) => setOtherAccounts(p => p.filter(a => a.id !== id));
@@ -245,11 +292,7 @@ function EntityTab() {
     URL.revokeObjectURL(url);
   };
 
-  const handleCreate = () => {
-    if (!form.category || !form.projectName) {
-      toast({ variant: "destructive", title: "Category and Entity Name are required." });
-      return;
-    }
+  const buildPayload = () => {
     const payload: Record<string, any> = { category: form.category, projectName: form.projectName };
     const strFields: (keyof typeof EMPTY_FORM)[] = [
       "email", "emailPassword", "emailRecovery", "emailRecoveryPassword",
@@ -265,16 +308,53 @@ function EntityTab() {
     if (form.backupCodes) payload.backupCodes = form.backupCodes.split("\n").map(s => s.trim()).filter(Boolean);
     const validOther = otherAccounts.filter(a => a.platform.trim());
     if (validOther.length > 0) payload.otherAccounts = JSON.stringify(validOther.map(({ id: _id, ...rest }) => rest));
+    return payload;
+  };
 
-    createMutation.mutate({ data: payload as any }, {
+  const handleCreate = () => {
+    if (!form.category || !form.projectName) {
+      toast({ variant: "destructive", title: "Category and Entity Name are required." });
+      return;
+    }
+    createMutation.mutate({ data: buildPayload() as any }, {
       onSuccess: () => {
         toast({ title: "Entity secured" });
         queryClient.invalidateQueries();
         setOpen(false);
         resetForm();
+        setEditId(null);
       },
       onError: () => toast({ variant: "destructive", title: "Failed to create entity" }),
     });
+  };
+
+  const handleUpdate = async () => {
+    if (!form.category || !form.projectName) {
+      toast({ variant: "destructive", title: "Category and Entity Name are required." });
+      return;
+    }
+    setSaving(true);
+    try {
+      const token = localStorage.getItem("ayzen_token") ?? "";
+      const res = await fetch(`/api/vault/${editId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(buildPayload()),
+      });
+      if (res.ok) {
+        toast({ title: "Entity updated" });
+        queryClient.invalidateQueries();
+        setOpen(false);
+        resetForm();
+        setEditId(null);
+      } else {
+        const d = await res.json();
+        toast({ variant: "destructive", title: d.error ?? "Failed to update entity" });
+      }
+    } catch {
+      toast({ variant: "destructive", title: "Connection error" });
+    }
+    setSaving(false);
   };
 
   const handleDelete = (id: number) => {
@@ -282,6 +362,157 @@ function EntityTab() {
       onSuccess: () => { toast({ title: "Entity removed" }); queryClient.invalidateQueries(); setDeleteId(null); }
     });
   };
+
+  const isEditing = editId !== null;
+
+  const EntityFormContent = (
+    <>
+      {/* Form tabs */}
+      <div className="flex gap-1 p-1 bg-muted/30 rounded-lg flex-wrap">
+        {[
+          { id: "main", label: "Main" }, { id: "twitter", label: "Twitter" },
+          { id: "discord", label: "Discord" }, { id: "telegram", label: "Telegram" },
+          { id: "other", label: "Other" }, { id: "wallet", label: "Wallet" },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setFormTab(t.id)}
+            className={cn(
+              "flex-1 py-1 rounded-md font-mono text-[9px] uppercase tracking-wider transition-all",
+              formTab === t.id ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/50 hover:text-muted-foreground"
+            )}
+          >{t.label}</button>
+        ))}
+      </div>
+
+      <div className="space-y-3 py-1">
+        {formTab === "main" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Category *</Label>
+                <Select value={form.category} onValueChange={v => setForm(p => ({ ...p, category: v }))}>
+                  <SelectTrigger className="h-8 font-mono text-xs bg-input">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CATEGORIES.map(c => <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Entity Name *</Label>
+                <Input value={form.projectName} onChange={f("projectName")} className="h-8 font-mono text-xs bg-input" placeholder="Project / protocol name" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Email</Label>
+                <Input value={form.email} onChange={f("email")} className="h-8 font-mono text-xs bg-input" placeholder="main@email.com" />
+              </div>
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label>
+                <Input type="password" value={form.emailPassword} onChange={f("emailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label>
+                <Input value={form.emailRecovery} onChange={f("emailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" />
+              </div>
+              <div className="space-y-1">
+                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Pass</Label>
+                <Input type="password" value={form.emailRecoveryPassword} onChange={f("emailRecoveryPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Backup Codes</Label>
+              <Textarea value={form.backupCodes} onChange={f("backupCodes")} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Paste backup codes (one per line)" />
+            </div>
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
+              <Textarea value={form.notes} onChange={f("notes")} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Any notes..." />
+            </div>
+          </div>
+        )}
+
+        {formTab === "twitter" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.twitterUsername} onChange={f("twitterUsername")} className="h-8 font-mono text-xs bg-input" placeholder="@handle" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.twitterPassword} onChange={f("twitterPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Linked Email</Label><Input value={form.twitterEmail} onChange={f("twitterEmail")} className="h-8 font-mono text-xs bg-input" placeholder="twitter@email.com" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.twitterEmailPassword} onChange={f("twitterEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Followers</Label><Input value={form.twitterFollowers} onChange={f("twitterFollowers")} className="h-8 font-mono text-xs bg-input" placeholder="e.g. 1200" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.twitter2fa} onChange={f("twitter2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label><Input value={form.twitterEmailRecovery} onChange={f("twitterEmailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Pass</Label><Input type="password" value={form.twitterEmailRecoveryPassword} onChange={f("twitterEmailRecoveryPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+          </div>
+        )}
+
+        {formTab === "discord" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.discordUsername} onChange={f("discordUsername")} className="h-8 font-mono text-xs bg-input" placeholder="User#1234" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.discordPassword} onChange={f("discordPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Email</Label><Input value={form.discordEmail} onChange={f("discordEmail")} className="h-8 font-mono text-xs bg-input" placeholder="discord@email.com" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.discordEmailPassword} onChange={f("discordEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.discord2fa} onChange={f("discord2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label><Input value={form.discordEmailRecovery} onChange={f("discordEmailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" /></div>
+            </div>
+          </div>
+        )}
+
+        {formTab === "telegram" && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.telegramUsername} onChange={f("telegramUsername")} className="h-8 font-mono text-xs bg-input" placeholder="@username" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.telegramPassword} onChange={f("telegramPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Phone</Label><Input value={form.telegramPhone} onChange={f("telegramPhone")} className="h-8 font-mono text-xs bg-input" placeholder="+1234567890" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.telegram2fa} onChange={f("telegram2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Linked Email</Label><Input value={form.telegramLinkedEmail} onChange={f("telegramLinkedEmail")} className="h-8 font-mono text-xs bg-input" placeholder="linked@email.com" /></div>
+              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.telegramLinkedEmailPassword} onChange={f("telegramLinkedEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
+            </div>
+          </div>
+        )}
+
+        {formTab === "other" && (
+          <div className="space-y-3">
+            {otherAccounts.map(a => (
+              <OtherAccountForm key={a.id} account={a} onChange={u => updateOther(a.id, u)} onRemove={() => removeOther(a.id)} />
+            ))}
+            <Button variant="outline" size="sm" className="w-full h-8 font-mono text-[10px] border-dashed border-border/60 gap-1.5 text-muted-foreground" onClick={addOther}>
+              <Plus className="w-3 h-3" /> Add Account
+            </Button>
+          </div>
+        )}
+
+        {formTab === "wallet" && (
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Wallet Addresses</Label>
+              <Textarea value={form.walletAddresses} onChange={f("walletAddresses")} className="font-mono text-xs bg-input min-h-[100px] resize-none" placeholder="Paste wallet addresses (one per line)" />
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <div className="space-y-4">
@@ -319,7 +550,7 @@ function EntityTab() {
           <Button size="sm" variant="outline" className="h-8 font-mono text-[10px] gap-1.5 border-border/40 text-muted-foreground" onClick={exportVault}>
             <Download className="w-3 h-3" /> Export
           </Button>
-          <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider gap-1.5" onClick={() => setOpen(true)}>
+          <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider gap-1.5" onClick={() => { resetForm(); setEditId(null); setOpen(true); }}>
             <Plus className="h-3.5 w-3.5" /> New Entity
           </Button>
         </div>
@@ -364,7 +595,7 @@ function EntityTab() {
             <div className="font-mono font-bold text-foreground/60 mb-1">No entities yet</div>
             <div className="text-[10px] font-mono text-muted-foreground/40">Create your first vault entity to secure your credentials</div>
           </div>
-          <Button size="sm" className="gap-2 font-mono text-xs" onClick={() => setOpen(true)}>
+          <Button size="sm" className="gap-2 font-mono text-xs" onClick={() => { resetForm(); setEditId(null); setOpen(true); }}>
             <Plus className="w-3.5 h-3.5" /> Create First Entity
           </Button>
         </div>
@@ -386,9 +617,14 @@ function EntityTab() {
                   <Hash className="w-3 h-3 text-primary/60 flex-shrink-0" />
                   <span className="font-mono font-bold text-primary text-xs tracking-[0.15em] truncate">{entry.entitySerial || `AYZNA${entry.id}`}</span>
                 </div>
-                <button onClick={() => setDeleteId(entry.id)} className="opacity-0 group-hover:opacity-100 text-muted-foreground/40 hover:text-red-400 transition-all">
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                  <button onClick={() => openEdit(entry)} className="text-muted-foreground/40 hover:text-primary transition-colors p-1 rounded hover:bg-primary/10">
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => setDeleteId(entry.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-400/10">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
 
               {/* Body */}
@@ -444,176 +680,30 @@ function EntityTab() {
         </div>
       )}
 
-      {/* Create dialog */}
-      <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); resetForm(); } }}>
+      {/* Create / Edit dialog */}
+      <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); resetForm(); setEditId(null); } }}>
         <DialogContent className="bg-card border-card-border max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-mono uppercase tracking-wider text-primary flex items-center gap-2">
-              <Shield className="w-4 h-4" /> New Vault Entity
+              {isEditing ? <Edit2 className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
+              {isEditing ? "Edit Vault Entity" : "New Vault Entity"}
             </DialogTitle>
           </DialogHeader>
-
-          {/* Form tabs */}
-          <div className="flex gap-1 p-1 bg-muted/30 rounded-lg">
-            {[
-              { id: "main", label: "Main" }, { id: "twitter", label: "Twitter" },
-              { id: "discord", label: "Discord" }, { id: "telegram", label: "Telegram" },
-              { id: "other", label: "Other" }, { id: "wallet", label: "Wallet" },
-            ].map(t => (
-              <button
-                key={t.id}
-                onClick={() => setFormTab(t.id)}
-                className={cn(
-                  "flex-1 py-1 rounded-md font-mono text-[9px] uppercase tracking-wider transition-all",
-                  formTab === t.id ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/50 hover:text-muted-foreground"
-                )}
-              >{t.label}</button>
-            ))}
-          </div>
-
-          <div className="space-y-3 py-1">
-            {formTab === "main" && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Category *</Label>
-                    <Select value={form.category} onValueChange={v => setForm(p => ({ ...p, category: v }))}>
-                      <SelectTrigger className="h-8 font-mono text-xs bg-input">
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CATEGORIES.map(c => <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Entity Name *</Label>
-                    <Input value={form.projectName} onChange={f("projectName")} className="h-8 font-mono text-xs bg-input" placeholder="Project / protocol name" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Email</Label>
-                    <Input value={form.email} onChange={f("email")} className="h-8 font-mono text-xs bg-input" placeholder="main@email.com" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label>
-                    <Input type="password" value={form.emailPassword} onChange={f("emailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1">
-                    <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label>
-                    <Input value={form.emailRecovery} onChange={f("emailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Pass</Label>
-                    <Input type="password" value={form.emailRecoveryPassword} onChange={f("emailRecoveryPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Backup Codes</Label>
-                  <Textarea value={form.backupCodes} onChange={f("backupCodes")} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Paste backup codes (one per line)" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
-                  <Textarea value={form.notes} onChange={f("notes")} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Any notes..." />
-                </div>
-              </div>
-            )}
-
-            {formTab === "twitter" && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.twitterUsername} onChange={f("twitterUsername")} className="h-8 font-mono text-xs bg-input" placeholder="@handle" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.twitterPassword} onChange={f("twitterPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Linked Email</Label><Input value={form.twitterEmail} onChange={f("twitterEmail")} className="h-8 font-mono text-xs bg-input" placeholder="twitter@email.com" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.twitterEmailPassword} onChange={f("twitterEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Followers</Label><Input value={form.twitterFollowers} onChange={f("twitterFollowers")} className="h-8 font-mono text-xs bg-input" placeholder="e.g. 1200" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.twitter2fa} onChange={f("twitter2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label><Input value={form.twitterEmailRecovery} onChange={f("twitterEmailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Pass</Label><Input type="password" value={form.twitterEmailRecoveryPassword} onChange={f("twitterEmailRecoveryPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-                </div>
-              </div>
-            )}
-
-            {formTab === "discord" && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.discordUsername} onChange={f("discordUsername")} className="h-8 font-mono text-xs bg-input" placeholder="User#1234" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.discordPassword} onChange={f("discordPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Email</Label><Input value={form.discordEmail} onChange={f("discordEmail")} className="h-8 font-mono text-xs bg-input" placeholder="discord@email.com" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.discordEmailPassword} onChange={f("discordEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.discord2fa} onChange={f("discord2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label><Input value={form.discordEmailRecovery} onChange={f("discordEmailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" /></div>
-                </div>
-              </div>
-            )}
-
-            {formTab === "telegram" && (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.telegramUsername} onChange={f("telegramUsername")} className="h-8 font-mono text-xs bg-input" placeholder="@handle" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Phone</Label><Input value={form.telegramPhone} onChange={f("telegramPhone")} className="h-8 font-mono text-xs bg-input" placeholder="+1 234 567 890" /></div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Password</Label><Input type="password" value={form.telegram2fa} onChange={f("telegram2fa")} className="h-8 font-mono text-xs bg-input" placeholder="Cloud password" /></div>
-                  <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Linked Email</Label><Input value={form.telegramLinkedEmail} onChange={f("telegramLinkedEmail")} className="h-8 font-mono text-xs bg-input" placeholder="telegram@email.com" /></div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Linked Email Pass</Label>
-                  <Input type="password" value={form.telegramLinkedEmailPassword} onChange={f("telegramLinkedEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
-                </div>
-              </div>
-            )}
-
-            {formTab === "other" && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">Other Platform Accounts</span>
-                  <Button size="sm" variant="outline" onClick={addOther} className="h-7 font-mono text-[10px] gap-1 border-border/40">
-                    <Plus className="w-3 h-3" /> Add Platform
-                  </Button>
-                </div>
-                {otherAccounts.length === 0 && (
-                  <div className="py-8 text-center text-muted-foreground/40 font-mono text-xs border border-dashed border-border/30 rounded-xl">
-                    No other platforms added
-                  </div>
-                )}
-                {otherAccounts.map(a => (
-                  <OtherAccountForm key={a.id} account={a} onChange={u => updateOther(a.id, u)} onRemove={() => removeOther(a.id)} />
-                ))}
-              </div>
-            )}
-
-            {formTab === "wallet" && (
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Wallet Addresses</Label>
-                <Textarea value={form.walletAddresses} onChange={f("walletAddresses")} className="font-mono text-xs bg-input min-h-[120px] resize-none" placeholder={"One address per line:\n0x123...\n0xabc..."} />
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setOpen(false); resetForm(); }} className="font-mono text-xs">Cancel</Button>
-            <Button onClick={handleCreate} disabled={createMutation.isPending} className="font-mono text-xs uppercase tracking-wider gap-2">
-              {createMutation.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Securing...</> : <><Shield className="w-3.5 h-3.5" /> Secure Entity</>}
+          {EntityFormContent}
+          <DialogFooter className="gap-2 pt-2">
+            <Button variant="outline" onClick={() => { setOpen(false); resetForm(); setEditId(null); }} className="font-mono text-xs">Cancel</Button>
+            <Button
+              onClick={isEditing ? handleUpdate : handleCreate}
+              disabled={createMutation.isPending || saving}
+              className="font-mono text-xs uppercase tracking-wider"
+            >
+              {(createMutation.isPending || saving) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (isEditing ? "Save Changes" : "Secure Entity")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirm */}
+      {/* Delete confirmation */}
       <Dialog open={deleteId !== null} onOpenChange={o => !o && setDeleteId(null)}>
         <DialogContent className="bg-card border-card-border max-w-sm">
           <DialogHeader>
@@ -637,15 +727,9 @@ function EntityTab() {
 // ── Main Vault Page ────────────────────────────────────────────────────────────
 type VaultTab = "entity" | "wallet" | "local" | "2fa";
 
-const VAULT_TABS: { id: VaultTab; label: string; icon: React.ElementType }[] = [
-  { id: "entity",  label: "Entity",   icon: Shield    },
-  { id: "wallet",  label: "Wallet",   icon: Wallet    },
-  { id: "local",   label: "Local",    icon: Smartphone },
-  { id: "2fa",     label: "2FA",      icon: QrCode    },
-];
-
 export default function UserVault() {
-  const [tab, setTab] = useState<VaultTab>("entity");
+  const search = useSearch();
+  const tab = (new URLSearchParams(search).get("tab") as VaultTab) || "entity";
 
   return (
     <div className="space-y-5 page-enter">
@@ -658,28 +742,12 @@ export default function UserVault() {
             </div>
             DAO Vault
           </h1>
-          <p className="text-muted-foreground font-mono text-xs mt-1 pl-0.5">Secure command center for all your accounts & credentials</p>
-        </div>
-      </div>
-
-      {/* Tab bar — scrollable on mobile */}
-      <div className="overflow-x-auto pb-0.5 -mx-1 px-1">
-        <div className="flex gap-1 p-1 bg-muted/20 border border-border/30 rounded-xl w-max min-w-full sm:w-auto sm:min-w-0">
-          {VAULT_TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => setTab(id)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg font-mono text-xs font-medium transition-all whitespace-nowrap",
-                tab === id
-                  ? "bg-card text-primary border border-primary/25 shadow-sm"
-                  : "text-muted-foreground/60 hover:text-foreground hover:bg-muted/30"
-              )}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </button>
-          ))}
+          <p className="text-muted-foreground font-mono text-xs mt-1 pl-0.5">
+            {tab === "entity" && "Secure command center for all your accounts & credentials"}
+            {tab === "wallet" && "Manage and track your blockchain wallets"}
+            {tab === "local" && "Local platform accounts manager"}
+            {tab === "2fa" && "Two-factor authentication codes"}
+          </p>
         </div>
       </div>
 

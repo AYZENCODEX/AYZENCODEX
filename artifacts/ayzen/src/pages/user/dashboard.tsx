@@ -6,7 +6,7 @@ import { Link, useLocation } from "wouter";
 import {
   Trophy, CheckSquare, Zap, Activity, TrendingUp, Clock, Radio,
   Wallet, Search, Vault, UserCircle, FolderGit2, LayoutDashboard,
-  ArrowRight, Star,
+  ArrowRight, Star, Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -88,7 +88,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 
 const QUICK_TILES = [
   {
-    href: "/vault",
+    href: "/vault?tab=entity",
     label: "Vault",
     sub: "Entities, Wallets, 2FA",
     icon: Vault,
@@ -106,19 +106,19 @@ const QUICK_TILES = [
     glow: "from-violet-400/20",
   },
   {
-    href: "/tasks",
-    label: "Tasks",
-    sub: "Earn rewards & XP",
-    icon: CheckSquare,
+    href: "/dashboard",
+    label: "Dashboard",
+    sub: "Stats & analytics",
+    icon: LayoutDashboard,
     color: "text-emerald-400",
     border: "hover:border-emerald-400/40 group-hover:bg-emerald-400/5",
     glow: "from-emerald-400/20",
   },
   {
-    href: "/profile",
-    label: "Profile",
-    sub: "Account & settings",
-    icon: UserCircle,
+    href: "/settings",
+    label: "Settings",
+    sub: "Account & preferences",
+    icon: Settings,
     color: "text-amber-400",
     border: "hover:border-amber-400/40 group-hover:bg-amber-400/5",
     glow: "from-amber-400/20",

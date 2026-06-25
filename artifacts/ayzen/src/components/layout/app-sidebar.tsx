@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Link, useLocation } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { usePlugins } from "@/hooks/use-plugins";
 import {
@@ -8,7 +8,7 @@ import {
   Vault, ShieldCheck, ChevronDown, ChevronRight,
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
-  DollarSign, Link2, Sun, Moon, Search, Keyboard,
+  DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -94,7 +94,10 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Vault", icon: Vault,
     items: [
-      { href: "/vault", label: "DAO Vault", icon: Vault, pluginSlug: "vault" },
+      { href: "/vault?tab=entity", label: "Entity",     icon: Shield,      pluginSlug: "vault" },
+      { href: "/vault?tab=wallet", label: "Wallet",     icon: Wallet,      pluginSlug: "vault" },
+      { href: "/vault?tab=local",  label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
+      { href: "/vault?tab=2fa",    label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
     ],
   },
   {
@@ -260,16 +263,30 @@ function SidebarAiPanel() {
   );
 }
 
-function NavGroupComp({ group, location, isEnabled, onNavigate }: {
+function NavGroupComp({ group, location, search, isEnabled, onNavigate }: {
   group: NavGroup;
   location: string;
+  search: string;
   isEnabled: (slug: string) => boolean;
   onNavigate?: () => void;
 }) {
   const visibleItems = group.items.filter(i => !i.pluginSlug || isEnabled(i.pluginSlug));
-  const hasActive = visibleItems.some(i => location === i.href || location.startsWith(i.href + "/"));
+
+  const isItemActive = (href: string) => {
+    if (href.includes("?")) {
+      const [path, qs] = href.split("?");
+      return location === path && search === `?${qs}`;
+    }
+    return location === href || location.startsWith(href + "/");
+  };
+
+  const hasActive = visibleItems.some(i => isItemActive(i.href));
   const [open, setOpen] = useState(hasActive || visibleItems.length === 1);
   const GroupIcon = group.icon;
+
+  useEffect(() => {
+    if (hasActive) setOpen(true);
+  }, [hasActive]);
 
   if (visibleItems.length === 0) return null;
 
@@ -293,7 +310,7 @@ function NavGroupComp({ group, location, isEnabled, onNavigate }: {
         <nav className="space-y-0.5 px-2 pb-1">
           {visibleItems.map(item => {
             const Icon = item.icon;
-            const isActive = location === item.href || location.startsWith(item.href + "/");
+            const isActive = isItemActive(item.href);
             return (
               <Link key={item.href} href={item.href} onClick={onNavigate}>
                 <div className={cn(
@@ -335,6 +352,7 @@ function useThemeToggle() {
 
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
   const [location] = useLocation();
+  const search = useSearch();
   const { isAdmin, logout, user } = useAuth();
   const { isEnabled } = usePlugins();
   const { isDark, toggle: toggleTheme } = useThemeToggle();
@@ -362,11 +380,10 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
       </div>
       <div className="flex-1 overflow-y-auto py-2 space-y-1">
         {groups.map(group => (
-          <NavGroupComp key={group.label} group={group} location={location} isEnabled={isEnabled} onNavigate={onNavigate} />
+          <NavGroupComp key={group.label} group={group} location={location} search={search} isEnabled={isEnabled} onNavigate={onNavigate} />
         ))}
       </div>
 
-      {/* AI Assistant Panel */}
       <SidebarAiPanel />
 
       <div className="p-3 border-t border-sidebar-border">

@@ -354,8 +354,13 @@ router.post("/auth/forgot-password", async (req, res): Promise<void> => {
   <div class="footer">&copy; 2026 AYZEN</div>
 </div></body></html>`;
 
-  await sendEmail({ to: email, subject: "AYZEN — Password Reset Code", html, text: `Your AYZEN password reset code: ${code}` });
-  res.json({ message: "If this email exists, a reset code has been sent." });
+  const emailResult = await sendEmail({ to: email, subject: "AYZEN — Password Reset Code", html, text: `Your AYZEN password reset code: ${code}` });
+  const response: Record<string, any> = { message: "If this email exists, a reset code has been sent." };
+  if (!emailResult.success) {
+    response._demo_code = code;
+    response._demo_note = "Email delivery unavailable — code shown for demo use only";
+  }
+  res.json(response);
 });
 
 // ─── POST /auth/reset-password — verify OTP + set new password ────────────────

@@ -10,7 +10,7 @@ import {
   Lock, Shield, Users, TrendingUp,
   Calendar, DollarSign, Edit3, X, Tag, Smartphone,
   Clock, UserCheck, Star, BarChart2,
-  Award, Linkedin, Github, Zap, Loader2,
+  Award, Linkedin, Github, Zap, Loader2, ChevronDown,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -892,6 +892,7 @@ export default function LocalAccounts() {
   };
 
   const [view, setView] = useState<"accounts" | "dashboard">("accounts");
+  const [catDropOpen, setCatDropOpen] = useState(false);
   const totalWorth = allAccounts.reduce((s, a) => s + (a.account_worth || 0), 0);
   const totalBuyPrice = allAccounts.reduce((s, a) => s + (a.buy_price || 0), 0);
   const overallRoi = totalBuyPrice > 0 ? ((totalWorth - totalBuyPrice) / totalBuyPrice) * 100 : null;
@@ -989,96 +990,75 @@ export default function LocalAccounts() {
 
       {/* ── Accounts view ─────────────────────────────────────────────────── */}
       {view === "accounts" && (
-        <div className="flex gap-4 h-full min-h-0">
-          {/* ── Sidebar ─────────────────────────────────────────────────────── */}
-          <div className="w-44 flex-shrink-0 space-y-0.5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">Platforms</span>
+        <div className="space-y-4">
+          {/* ── Compact category selector ──────────────────────────────────── */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Category button */}
+            <div className="relative">
               <button
-                onClick={() => setCatDialogOpen(true)}
-                className="text-muted-foreground/40 hover:text-primary transition-colors"
-                title="Add category"
+                onClick={() => setCatDropOpen(o => !o)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/40 bg-card font-mono text-xs hover:border-primary/40 transition-all"
               >
-                <Plus className="w-3.5 h-3.5" />
+                <div
+                  className="w-2 h-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: categories.find(c => c.name === selectedCat)?.color ?? "#8b5cf6", boxShadow: `0 0 6px ${categories.find(c => c.name === selectedCat)?.color ?? "#8b5cf6"}80` }}
+                />
+                <span className="font-bold text-foreground">{selectedCat}</span>
+                <span className="text-muted-foreground/50">({catStats(selectedCat).count})</span>
+                <ChevronDown className="w-3 h-3 text-muted-foreground/50" />
               </button>
+              {catDropOpen && (
+                <div className="absolute top-full mt-1 left-0 z-50 bg-card border border-card-border rounded-xl shadow-2xl overflow-hidden min-w-[160px]">
+                  <div className="p-1 space-y-0.5">
+                    {categories.map(cat => {
+                      const stats = catStats(cat.name);
+                      const isActive = selectedCat === cat.name;
+                      return (
+                        <button
+                          key={cat.id}
+                          onClick={() => { setSelectedCat(cat.name); setCatDropOpen(false); }}
+                          className={cn(
+                            "w-full flex items-center justify-between px-3 py-2 rounded-lg font-mono text-xs transition-all text-left",
+                            isActive ? "bg-primary/15 text-primary font-bold" : "text-muted-foreground/70 hover:bg-muted/30 hover:text-foreground"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                            <span>{cat.name}</span>
+                          </div>
+                          {stats.count > 0 && (
+                            <span className={cn("text-[9px] px-1.5 py-0.5 rounded-full", isActive ? "bg-primary/20 text-primary" : "bg-muted/50 text-muted-foreground/50")}>
+                              {stats.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="border-t border-border/30 p-1">
+                    <button
+                      onClick={() => { setCatDialogOpen(true); setCatDropOpen(false); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 rounded-lg font-mono text-[10px] text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors text-left"
+                    >
+                      <Plus className="w-3 h-3" /> Add Platform
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            {categories.map(cat => {
-              const stats = catStats(cat.name);
-              const isActive = selectedCat === cat.name;
-              return (
-                <div key={cat.id} className="relative group/cat">
-                  <button
-                    onClick={() => setSelectedCat(cat.name)}
-                    className={cn(
-                      "w-full flex items-center justify-between px-3 py-2 rounded-lg font-mono text-xs transition-all text-left",
-                      isActive
-                        ? "bg-primary/15 text-primary font-bold border border-primary/20"
-                        : "text-muted-foreground/60 hover:bg-muted/30 hover:text-foreground"
-                    )}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div
-                        className="w-2 h-2 rounded-full flex-shrink-0 transition-all"
-                        style={{ backgroundColor: cat.color, boxShadow: isActive ? `0 0 6px ${cat.color}80` : "none" }}
-                      />
-                      <span className="truncate">{cat.name}</span>
-                    </div>
-                    {stats.count > 0 && (
-                      <span className={cn(
-                        "text-[9px] font-mono px-1.5 py-0.5 rounded-full flex-shrink-0",
-                        isActive ? "bg-primary/20 text-primary" : "bg-muted/50 text-muted-foreground/50"
-                      )}>
-                        {stats.count}
-                      </span>
-                    )}
-                  </button>
-                  {cat.isCustom && (
-                    <button
-                      onClick={() => handleDeleteCategory(cat)}
-                      className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/cat:opacity-100 text-muted-foreground/30 hover:text-red-400 transition-all p-1"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Portfolio summary */}
+            {/* Portfolio mini-stat */}
             {allAccounts.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-border/20 space-y-1.5">
-                <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground/40">Portfolio</span>
-                <div className="flex items-center gap-1">
-                  <DollarSign className="w-3 h-3 text-emerald-400" />
-                  <span className="font-mono text-sm font-bold text-emerald-400">
-                    ${totalWorth.toFixed(2)}
-                  </span>
-                </div>
-                <div className="text-[9px] font-mono text-muted-foreground/40">{allAccounts.length} accounts total</div>
-              </div>
+              <span className="font-mono text-[10px] text-muted-foreground/50">
+                ${catStats(selectedCat).totalWorth.toFixed(2)} total
+              </span>
             )}
+
+            {catDropOpen && <div className="fixed inset-0 z-40" onClick={() => setCatDropOpen(false)} />}
           </div>
 
-          {/* ── Content ──────────────────────────────────────────────────────── */}
-          <div className="flex-1 min-w-0 space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="font-mono font-bold text-base uppercase tracking-wider text-foreground flex items-center gap-2">
-                  <div
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: categories.find(c => c.name === selectedCat)?.color ?? "#8b5cf6" }}
-                  />
-                  {selectedCat}
-                </h2>
-                <p className="text-[10px] font-mono text-muted-foreground/40 mt-0.5">
-                  {accounts.length} account{accounts.length !== 1 ? "s" : ""}
-                  {accounts.length > 0 && ` · $${accounts.reduce((s, a) => s + (a.account_worth || 0), 0).toFixed(2)} total`}
-                </p>
-              </div>
-            </div>
-
+          {/* ── Accounts content ────────────────────────────────────────────── */}
+          <div className="space-y-4">
             {/* Accounts grid */}
             {loadingAccts ? (
               <div className="grid gap-3 sm:grid-cols-2">
