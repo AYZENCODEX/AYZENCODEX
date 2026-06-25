@@ -265,8 +265,19 @@ export default function UserDashboard() {
     <div className="space-y-6 page-enter">
       <StatsBar />
 
-      {/* Workspace Hero */}
-      <WorkspaceHero username={userLoading ? undefined : (user?.username ?? user?.email?.split("@")[0])} />
+      {/* Compact header */}
+      <div className="flex items-center justify-between">
+        <div>
+          {userLoading ? <Skeleton className="h-6 w-40 mb-1" /> : (
+            <h1 className="font-mono font-bold text-xl tracking-tight">
+              <span className="text-muted-foreground/50 font-normal text-sm">Gm, </span>
+              <span className="text-foreground">{user?.username ?? user?.email?.split("@")[0] ?? "Operator"}</span>
+            </h1>
+          )}
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 mt-0.5">Airdrop Command Center</p>
+        </div>
+        <LiveDot />
+      </div>
 
       {/* Primary stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
@@ -284,25 +295,6 @@ export default function UserDashboard() {
           numericValue={stats?.streak ?? 0}
           icon={Activity} color="text-violet-400"
           sub="Consecutive days active" loading={statsLoading} />
-      </div>
-
-      {/* Secondary stats row */}
-      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 stagger-children">
-        {[
-          { label: "Active Protocols", value: activeProjects, color: "text-sky-400" },
-          { label: "Points", value: (stats?.points ?? (user as any)?.points ?? 0).toLocaleString(), color: "text-orange-400" },
-          { label: "Referrals", value: stats?.referrals ?? 0, color: "text-pink-400" },
-          { label: "Wallet USD",
-            value: walletUsd !== null ? `$${walletUsd.toFixed(2)}` : "—",
-            color: "text-cyan-400",
-            sub: walletCount > 0 ? `${walletCount} wallet${walletCount !== 1 ? "s" : ""}` : null },
-        ].map(({ label, value, color, sub }: any) => (
-          <div key={label} className="bg-card border border-card-border rounded-xl p-4">
-            <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1">{label}</div>
-            <div className={cn("text-xl font-bold font-mono", color)}>{value}</div>
-            {sub && <div className="text-[9px] font-mono text-muted-foreground/50 mt-0.5">{sub}</div>}
-          </div>
-        ))}
       </div>
 
       {/* Charts row */}

@@ -85,6 +85,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [refCode, setRefCode] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -638,6 +639,22 @@ export default function Login() {
               </div>
             </div>
 
+            {tab === "signup" && (
+              <div className="space-y-2">
+                <Label htmlFor="refCode" className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+                  Referral Code <span className="text-muted-foreground/40">(optional)</span>
+                </Label>
+                <Input
+                  id="refCode"
+                  type="text"
+                  placeholder="AYZNXXXXXX"
+                  value={refCode}
+                  onChange={e => setRefCode(e.target.value.toUpperCase())}
+                  className="bg-input border-border font-mono h-11 focus-visible:ring-primary/50 focus-visible:border-primary uppercase placeholder:normal-case placeholder:text-muted-foreground"
+                />
+                {refCode && <p className="text-[10px] font-mono text-primary">✓ Referral code will be applied on registration</p>}
+              </div>
+            )}
             {tab === "signup" && (
               <div className="space-y-2">
                 <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
