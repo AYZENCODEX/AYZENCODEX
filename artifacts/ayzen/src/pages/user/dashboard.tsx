@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useGetMe, useGetUserStats, useListProjects, useListTasks } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   Trophy, CheckSquare, Zap, Activity, TrendingUp, Clock, Radio,
-  Wallet, DollarSign, MousePointerClick,
+  Wallet, Search, Vault, UserCircle, FolderGit2, LayoutDashboard,
+  ArrowRight, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -85,6 +86,129 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   );
 };
 
+const QUICK_TILES = [
+  {
+    href: "/vault",
+    label: "Vault",
+    sub: "Entities, Wallets, 2FA",
+    icon: Vault,
+    color: "text-cyan-400",
+    border: "hover:border-cyan-400/40 group-hover:bg-cyan-400/5",
+    glow: "from-cyan-400/20",
+  },
+  {
+    href: "/projects",
+    label: "Projects",
+    sub: "Protocols & Airdrops",
+    icon: FolderGit2,
+    color: "text-violet-400",
+    border: "hover:border-violet-400/40 group-hover:bg-violet-400/5",
+    glow: "from-violet-400/20",
+  },
+  {
+    href: "/tasks",
+    label: "Tasks",
+    sub: "Earn rewards & XP",
+    icon: CheckSquare,
+    color: "text-emerald-400",
+    border: "hover:border-emerald-400/40 group-hover:bg-emerald-400/5",
+    glow: "from-emerald-400/20",
+  },
+  {
+    href: "/profile",
+    label: "Profile",
+    sub: "Account & settings",
+    icon: UserCircle,
+    color: "text-amber-400",
+    border: "hover:border-amber-400/40 group-hover:bg-amber-400/5",
+    glow: "from-amber-400/20",
+  },
+];
+
+function WorkspaceHero({ username }: { username?: string }) {
+  const [query, setQuery] = useState("");
+  const [, navigate] = useLocation();
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (query.trim()) navigate(`/tasks?search=${encodeURIComponent(query.trim())}`);
+  };
+
+  return (
+    <div className="relative rounded-2xl overflow-hidden border border-card-border mb-8">
+      {/* Animated gradient background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_50%,hsl(174,100%,42%,0.08)_0%,transparent_60%),radial-gradient(ellipse_at_80%_20%,hsl(250,80%,60%,0.07)_0%,transparent_60%),radial-gradient(ellipse_at_60%_80%,hsl(174,100%,42%,0.05)_0%,transparent_50%)] animate-pulse-slow" />
+      <div className="absolute inset-0 bg-card/80" />
+
+      {/* Grid lines */}
+      <div className="absolute inset-0 opacity-[0.03]" style={{
+        backgroundImage: "linear-gradient(hsl(174,100%,42%) 1px, transparent 1px), linear-gradient(90deg, hsl(174,100%,42%) 1px, transparent 1px)",
+        backgroundSize: "40px 40px",
+      }} />
+
+      <div className="relative z-10 px-6 py-10 sm:px-10 sm:py-14 text-center">
+        {/* Greeting */}
+        {username && (
+          <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground/60 mb-3">
+            Welcome back, <span className="text-primary">{username}</span>
+          </div>
+        )}
+
+        {/* Main heading */}
+        <h1 className="font-mono font-black text-3xl sm:text-4xl md:text-5xl tracking-tighter mb-2 select-none">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-300 to-violet-400">
+            AYZEN
+          </span>
+          {" "}
+          <span className="text-foreground">WORKSPACE</span>
+        </h1>
+        <p className="font-mono text-xs text-muted-foreground/50 tracking-widest uppercase mb-8">
+          Crypto Airdrop Command Center
+        </p>
+
+        {/* Search bar */}
+        <form onSubmit={handleSearch} className="max-w-md mx-auto mb-8 relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+          <input
+            type="text"
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search tasks, protocols..."
+            className="w-full h-12 pl-11 pr-4 rounded-xl bg-background/60 border border-border/60 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30 font-mono text-sm placeholder:text-muted-foreground/40 transition-all backdrop-blur-sm"
+          />
+          {query && (
+            <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2">
+              <ArrowRight className="w-4 h-4 text-primary" />
+            </button>
+          )}
+        </form>
+
+        {/* Quick-access tiles */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto">
+          {QUICK_TILES.map(tile => {
+            const Icon = tile.icon;
+            return (
+              <Link key={tile.href} href={tile.href}>
+                <div className={cn(
+                  "group relative flex flex-col items-center gap-2 p-4 rounded-xl border border-card-border transition-all duration-300 cursor-pointer card-lift",
+                  tile.border
+                )}>
+                  <div className={cn("absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br to-transparent", tile.glow)} />
+                  <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center bg-current/10 transition-transform group-hover:scale-110", tile.color)}>
+                    <Icon className={cn("w-5 h-5", tile.color)} />
+                  </div>
+                  <div className="font-mono font-bold text-sm text-foreground">{tile.label}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground/60 text-center leading-tight">{tile.sub}</div>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const { data: user, isLoading: userLoading } = useGetMe({ query: { refetchInterval: 30_000 } });
   const { data: stats, isLoading: statsLoading } = useGetUserStats(user?.id || 0, {
@@ -100,7 +224,6 @@ export default function UserDashboard() {
   useEffect(() => {
     const token = localStorage.getItem("ayzen_token") ?? "";
     if (!token) return;
-    // Fetch chart data
     fetch(`${BASE}/api/history/chart`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : [])
       .then((rows: any[]) => {
@@ -111,7 +234,6 @@ export default function UserDashboard() {
             submitted: Number(r.submitted ?? 0),
           })));
         } else {
-          // Synthetic fallback
           const weeks = ["W1","W2","W3","W4","W5","W6","W7","W8"];
           setChartData(weeks.map(w => ({
             week: w,
@@ -120,7 +242,6 @@ export default function UserDashboard() {
           })));
         }
       }).catch(() => {});
-    // Fetch wallets summary
     fetch(`${BASE}/api/wallets`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : [])
       .then((ws: any[]) => {
@@ -144,20 +265,8 @@ export default function UserDashboard() {
     <div className="space-y-6 page-enter">
       <StatsBar />
 
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
-            <Radio className="w-5 h-5 text-primary" /> Operator Terminal
-          </h1>
-          <p className="text-muted-foreground font-mono text-sm mt-0.5">
-            {userLoading
-              ? <Skeleton className="h-4 w-32 inline-block" />
-              : <>Welcome back, <span className="text-primary">{user?.username || "Hunter"}</span></>}
-          </p>
-        </div>
-        <LiveDot />
-      </div>
+      {/* Workspace Hero */}
+      <WorkspaceHero username={userLoading ? undefined : (user?.username ?? user?.email?.split("@")[0])} />
 
       {/* Primary stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
@@ -198,7 +307,6 @@ export default function UserDashboard() {
 
       {/* Charts row */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Weekly task chart */}
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-card-border flex items-center justify-between">
             <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
@@ -226,7 +334,6 @@ export default function UserDashboard() {
           </div>
         </div>
 
-        {/* ROI chart */}
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
           <div className="px-5 py-3.5 border-b border-card-border flex items-center justify-between">
             <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
@@ -265,7 +372,7 @@ export default function UserDashboard() {
 
       {/* Wallet quick panel */}
       {walletCount > 0 && (
-        <Link href="/wallets">
+        <Link href="/vault">
           <div className="bg-card border border-card-border hover:border-primary/30 rounded-xl p-4 flex items-center gap-4 cursor-pointer transition-all card-lift group">
             <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
               <Wallet className="w-5 h-5 text-primary" />
@@ -327,6 +434,13 @@ export default function UserDashboard() {
               ))
             )}
           </div>
+          <div className="px-5 py-3 border-t border-border/30">
+            <Link href="/tasks">
+              <span className="font-mono text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+                View all tasks <Star className="w-3 h-3" />
+              </span>
+            </Link>
+          </div>
         </div>
 
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
@@ -366,6 +480,13 @@ export default function UserDashboard() {
                 </div>
               ))
             )}
+          </div>
+          <div className="px-5 py-3 border-t border-border/30">
+            <Link href="/projects">
+              <span className="font-mono text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+                View all protocols <Star className="w-3 h-3" />
+              </span>
+            </Link>
           </div>
         </div>
       </div>

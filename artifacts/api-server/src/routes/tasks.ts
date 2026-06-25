@@ -44,6 +44,7 @@ function formatTask(t: any, projectName?: string | null, userStatus?: string | n
     taskCategory: t.taskCategory ?? t.task_category ?? t.category ?? "B1",
     timeLimitMinutes: t.timeLimitMinutes ?? t.time_limit_minutes ?? null,
     xpAmount: t.xpAmount ?? t.xp_amount ?? 0,
+    taskLink: t.taskLink ?? t.task_link ?? null,
     steps,
   };
 }
@@ -99,8 +100,10 @@ router.post("/tasks", async (req, res): Promise<void> => {
   const projIdSql = projectId ? `${Number(projectId)}` : "NULL";
   const stepsJson = steps && Array.isArray(steps) ? JSON.stringify(steps) : "[]";
   try {
+    const { taskLink } = req.body;
+    const taskLinkSql = taskLink ? `'${String(taskLink).replace(/'/g, "''")}'` : "NULL";
     const result = await db.execute(sql.raw(
-      `INSERT INTO tasks (project_id, name, description, reward_amount, xp_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes, steps)
+      `INSERT INTO tasks (project_id, name, description, reward_amount, xp_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes, steps, task_link)
        VALUES (${projIdSql}, '${name.replace(/'/g, "''")}',
          ${description ? `'${description.replace(/'/g, "''")}'` : "NULL"},
          ${rewardAmount != null ? Number(rewardAmount) : "NULL"},
@@ -112,7 +115,8 @@ router.post("/tasks", async (req, res): Promise<void> => {
          '${(taskCategory ?? "B1").replace(/'/g, "''")}',
          ${deadline ? `'${deadline}'` : "NULL"},
          ${timeLimitMinutes ? Number(timeLimitMinutes) : "NULL"},
-         '${stepsJson.replace(/'/g, "''")}')
+         '${stepsJson.replace(/'/g, "''")}',
+         ${taskLinkSql})
        RETURNING *`
     ));
     const task = result.rows[0] as any;
@@ -158,6 +162,36 @@ router.get("/tasks/submissions", async (req, res): Promise<void> => {
   }));
 });
 
+// ── POST /tasks/:id/visit — record link visit ────────────────────────────────
+router.post("/tasks/:id/visit", async (req, res): Promise<void> => {
+  const taskId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const userId = getUserId(req);
+  try {
+    await db.execute(sql.raw(
+      `INSERT INTO task_link_visits (task_id, user_id) VALUES (${taskId}, ${userId})
+       ON CONFLICT (task_id, user_id) DO UPDATE SET visited_at = NOW()`
+    ));
+    res.json({ ok: true, visitedAt: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
+// ── GET /tasks/:id/visit — check if user visited ─────────────────────────────
+router.get("/tasks/:id/visit", async (req, res): Promise<void> => {
+  const taskId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const userId = getUserId(req);
+  try {
+    const result = await db.execute(sql.raw(
+      `SELECT visited_at FROM task_link_visits WHERE task_id = ${taskId} AND user_id = ${userId} LIMIT 1`
+    ));
+    const row = result.rows[0] as any;
+    res.json({ visited: !!row, visitedAt: row?.visited_at ?? null });
+  } catch {
+    res.json({ visited: false, visitedAt: null });
+  }
+});
+
 // ── GET /tasks/:id ──────────────────────────────────────────────────────────
 router.get("/tasks/:id", async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
@@ -185,6 +219,7 @@ router.patch("/tasks/:id", async (req, res): Promise<void> => {
   if (req.body.timeLimitMinutes !== undefined) rawSets.push(`time_limit_minutes = ${req.body.timeLimitMinutes ? Number(req.body.timeLimitMinutes) : "NULL"}`);
   if (req.body.projectId !== undefined) rawSets.push(`project_id = ${req.body.projectId ? Number(req.body.projectId) : "NULL"}`);
   if (req.body.steps !== undefined) rawSets.push(`steps = '${JSON.stringify(req.body.steps).replace(/'/g, "''")}'`);
+  if (req.body.taskLink !== undefined) rawSets.push(`task_link = ${req.body.taskLink ? `'${String(req.body.taskLink).replace(/'/g, "''")}'` : "NULL"}`);
 
   try {
     let task: any;

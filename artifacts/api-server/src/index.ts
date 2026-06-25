@@ -172,6 +172,16 @@ const MIGRATIONS = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_local_account_points_account_id ON local_account_points(account_id)",
   "CREATE INDEX IF NOT EXISTS idx_local_account_points_user_id ON local_account_points(user_id)",
+  // Task external link for in-app link completion flow
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS task_link TEXT",
+  // Track link visits per user/task
+  `CREATE TABLE IF NOT EXISTS task_link_visits (
+    id SERIAL PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    visited_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(task_id, user_id)
+  )`,
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

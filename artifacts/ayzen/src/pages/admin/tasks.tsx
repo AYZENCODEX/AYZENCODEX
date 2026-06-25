@@ -34,7 +34,7 @@ export default function AdminTasks() {
   const [saving, setSaving] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [form, setForm] = useState({
-    name: "", description: "", projectId: "",
+    name: "", description: "", projectId: "", taskLink: "",
     rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual",
   });
   const [steps, setSteps] = useState<{ id: string; title: string; description: string }[]>([]);
@@ -46,7 +46,7 @@ export default function AdminTasks() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectDialog, setRejectDialog] = useState<Submission | null>(null);
 
-  const resetForm = () => { setForm({ name: "", description: "", projectId: "", rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual" }); setSteps([]); };
+  const resetForm = () => { setForm({ name: "", description: "", projectId: "", taskLink: "", rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual" }); setSteps([]); };
 
   // Load projects for dropdown
   useEffect(() => {
@@ -126,6 +126,7 @@ export default function AdminTasks() {
         verificationType: form.verificationType,
         xpAmount: form.xpAmount ? parseFloat(form.xpAmount) : 0,
         steps: steps.length > 0 ? steps.map(({ title, description }) => ({ title, description })) : undefined,
+        taskLink: form.taskLink.trim() || undefined,
       };
       if (form.projectId) body.projectId = parseInt(form.projectId, 10);
       if (form.rewardAmount) body.rewardAmount = parseFloat(form.rewardAmount);
@@ -380,6 +381,14 @@ export default function AdminTasks() {
             <div className="space-y-1.5">
               <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Description</Label>
               <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="font-mono text-xs bg-input min-h-[60px] resize-none" placeholder="What operators need to do..." />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                <ExternalLink className="w-3 h-3 text-sky-400" /> Task Website Link (optional)
+              </Label>
+              <Input value={form.taskLink} onChange={e => setForm(f => ({ ...f, taskLink: e.target.value }))} className="font-mono text-xs h-9 bg-input" placeholder="https://galxe.com/..." type="url" />
+              <p className="font-mono text-[10px] text-muted-foreground/50">Users will see an in-app browser to complete the task</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

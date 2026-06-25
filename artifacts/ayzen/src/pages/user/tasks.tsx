@@ -11,7 +11,7 @@ import {
   Play, CheckCircle2, Clock, XCircle, Loader2,
   Filter, Search, Zap, Trophy, Send, DollarSign,
   Star, Settings2, Info, X, Download, AlertTriangle, ArrowUp, TimerIcon,
-  Plus, Trash2, BookOpen, CheckSquare,
+  Plus, Trash2, BookOpen, CheckSquare, Link2, ExternalLink, Globe, CheckCheck,
 } from "lucide-react";
 import StatsBar from "@/components/stats-bar";
 import { cn } from "@/lib/utils";
@@ -119,7 +119,142 @@ interface Task {
   category?: string | null;
   deadline?: string | null;
   timeLimitMinutes?: number | null;
+  taskLink?: string | null;
   steps?: { title: string; description?: string }[];
+}
+
+function LinkBrowserModal({ task, onClose, onSubmit }: {
+  task: Task;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const [iframeError, setIframeError] = useState(false);
+  const [visited, setVisited] = useState(false);
+  const [marking, setMarking] = useState(false);
+  const { toast } = useToast();
+  const token = localStorage.getItem("ayzen_token") ?? "";
+
+  const markVisited = async () => {
+    setMarking(true);
+    try {
+      await fetch(`${BASE}/api/tasks/${task.id}/visit`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setVisited(true);
+      toast({ title: "✅ Visit recorded", description: "You can now submit your proof." });
+    } catch {
+      setVisited(true);
+    }
+    setMarking(false);
+  };
+
+  const openExternal = () => {
+    window.open(task.taskLink!, "_blank", "noopener,noreferrer");
+    setTimeout(markVisited, 1500);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-card border border-card-border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent" />
+
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-primary" />
+            <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">Link Task</span>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Task info */}
+        <div className="px-5 py-4 border-b border-border/50">
+          <p className="font-mono font-semibold text-sm text-foreground mb-1">{task.name}</p>
+          {task.description && (
+            <p className="font-mono text-xs text-muted-foreground/70">{task.description}</p>
+          )}
+        </div>
+
+        {/* URL display */}
+        <div className="px-5 py-4 border-b border-border/50">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2 flex items-center gap-1">
+            <Link2 className="w-3 h-3" /> Task Website
+          </div>
+          <div className="flex items-center gap-2 bg-background/60 border border-border/60 rounded-lg px-3 py-2">
+            <span className="font-mono text-xs text-primary/80 truncate flex-1">{task.taskLink}</span>
+            <button
+              onClick={openExternal}
+              className="flex items-center gap-1.5 text-[10px] font-mono text-primary hover:text-primary/80 transition-colors shrink-0"
+            >
+              <ExternalLink className="w-3 h-3" /> Open
+            </button>
+          </div>
+        </div>
+
+        {/* Iframe attempt */}
+        <div className="relative bg-background/30" style={{ height: "280px" }}>
+          {!iframeError ? (
+            <>
+              <iframe
+                src={task.taskLink!}
+                className="w-full h-full border-0"
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                onError={() => setIframeError(true)}
+                title="Task Website"
+              />
+              <div className="absolute inset-0 pointer-events-none flex items-end justify-center pb-3">
+                <div className="bg-black/60 backdrop-blur-sm rounded-lg px-3 py-1.5 font-mono text-[10px] text-muted-foreground">
+                  If blocked, use the Open button above ↑
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center gap-4 text-center px-8">
+              <Globe className="w-10 h-10 text-muted-foreground/30" />
+              <div>
+                <p className="font-mono text-sm text-muted-foreground">This site can't be embedded</p>
+                <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">Click "Open" to visit in a new tab</p>
+              </div>
+              <button
+                onClick={openExternal}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary font-mono text-xs hover:bg-primary/20 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Open Task Website
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-border flex items-center gap-3">
+          {!visited ? (
+            <Button
+              variant="outline"
+              className="flex-1 font-mono text-xs h-10 border-border gap-2"
+              onClick={openExternal}
+              disabled={marking}
+            >
+              {marking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5" />}
+              Open Website
+            </Button>
+          ) : (
+            <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 font-mono text-xs text-emerald-400">
+              <CheckCheck className="w-3.5 h-3.5" /> Website visited
+            </div>
+          )}
+          <Button
+            className="flex-1 font-mono text-xs h-10 gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+            onClick={onSubmit}
+          >
+            <Send className="w-3.5 h-3.5" /> Submit Proof
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface CostEntry {
@@ -694,6 +829,7 @@ export default function UserTasks() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "pending" | "completed" | "available">("all");
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [linkTask, setLinkTask] = useState<Task | null>(null);
   const { toast } = useToast();
 
   const tasks: Task[] = (Array.isArray(data) ? data : []) as Task[];
@@ -742,7 +878,11 @@ export default function UserTasks() {
       toast({ title: "Under review", description: "Your submission is awaiting admin verification." });
       return;
     }
-    setActiveTask(task);
+    if (task.taskLink) {
+      setLinkTask(task);
+    } else {
+      setActiveTask(task);
+    }
   };
 
   return (
@@ -845,6 +985,11 @@ export default function UserTasks() {
                           <BookOpen className="w-2.5 h-2.5" /> {task.steps!.length} steps
                         </Badge>
                       )}
+                      {task.taskLink && (
+                        <Badge variant="outline" className="font-mono text-[10px] rounded-sm shrink-0 border-sky-400/40 text-sky-400 flex items-center gap-1">
+                          <Link2 className="w-2.5 h-2.5" /> Website
+                        </Badge>
+                      )}
                       {(task as any).priority && (task as any).priority !== "normal" && (
                         <Badge variant="outline" className={cn("font-mono text-[9px] uppercase rounded-sm shrink-0", PRIORITY_CONFIG[(task as any).priority as keyof typeof PRIORITY_CONFIG]?.color)}>
                           {PRIORITY_CONFIG[(task as any).priority as keyof typeof PRIORITY_CONFIG]?.label ?? (task as any).priority}
@@ -910,6 +1055,14 @@ export default function UserTasks() {
           })
         )}
       </div>
+
+      {linkTask && (
+        <LinkBrowserModal
+          task={linkTask}
+          onClose={() => setLinkTask(null)}
+          onSubmit={() => { setActiveTask(linkTask); setLinkTask(null); }}
+        />
+      )}
 
       {activeTask && (
         <SubmitModal
