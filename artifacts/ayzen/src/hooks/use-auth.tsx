@@ -5,13 +5,22 @@ import { setAuthTokenGetter } from "@workspace/api-client-react";
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (user: User, token: string) => void;
+  login: (user: User, token: string, keepSignedIn?: boolean) => void;
   logout: () => void;
   isAdmin: boolean;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+function readStorage(key: string): string | null {
+  return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+}
+
+function clearStorage(key: string) {
+  localStorage.removeItem(key);
+  sessionStorage.removeItem(key);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -21,16 +30,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const doLogout = useCallback(() => {
     setUser(null);
     setToken(null);
-    localStorage.removeItem("ayzen_user");
-    localStorage.removeItem("ayzen_token");
+    clearStorage("ayzen_user");
+    clearStorage("ayzen_token");
     setAuthTokenGetter(null);
   }, []);
 
   useEffect(() => {
-    setAuthTokenGetter(() => localStorage.getItem("ayzen_token"));
+    setAuthTokenGetter(() => readStorage("ayzen_token"));
 
-    const storedUser = localStorage.getItem("ayzen_user");
-    const storedToken = localStorage.getItem("ayzen_token");
+    const storedUser = readStorage("ayzen_user");
+    const storedToken = readStorage("ayzen_token");
     if (storedUser && storedToken) {
       try {
         setUser(JSON.parse(storedUser));
@@ -41,11 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = useCallback((u: User, t: string) => {
+  const login = useCallback((u: User, t: string, keepSignedIn = true) => {
     setUser(u);
     setToken(t);
-    localStorage.setItem("ayzen_user", JSON.stringify(u));
-    localStorage.setItem("ayzen_token", t);
+    const storage = keepSignedIn ? localStorage : sessionStorage;
+    clearStorage("ayzen_user");
+    clearStorage("ayzen_token");
+    storage.setItem("ayzen_user", JSON.stringify(u));
+    storage.setItem("ayzen_token", t);
     setAuthTokenGetter(() => t);
   }, []);
 

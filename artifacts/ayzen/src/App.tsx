@@ -40,6 +40,7 @@ const AdminCreditsPage  = lazy(() => import("@/pages/admin/credits"));
 const AdminSubscriptions = lazy(() => import("@/pages/admin/subscriptions"));
 const AdminActivity      = lazy(() => import("@/pages/admin/activity"));
 
+const UserHome          = lazy(() => import("@/pages/user/home"));
 const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
 const UserProjects      = lazy(() => import("@/pages/user/projects"));
 const UserProjectDetail = lazy(() => import("@/pages/user/project-detail"));
@@ -93,7 +94,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/dashboard" />) : <Landing />}
+        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/home" />) : <Landing />}
       </Route>
 
       <Route path="/login" component={Login} />
@@ -122,6 +123,7 @@ function Router() {
       <Route path="/admin/activity">{() => <ProtectedRoute component={AdminActivity} adminOnly />}</Route>
 
       {/* User Routes */}
+      <Route path="/home">{() => <ProtectedRoute component={UserHome} />}</Route>
       <Route path="/dashboard">{() => <ProtectedRoute component={UserDashboard} />}</Route>
       <Route path="/projects">{() => <ProtectedRoute component={UserProjects} />}</Route>
       <Route path="/projects/:id">{() => <ProtectedRoute component={UserProjectDetail} />}</Route>

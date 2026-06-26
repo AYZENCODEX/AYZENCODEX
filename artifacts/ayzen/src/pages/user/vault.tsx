@@ -74,7 +74,7 @@ function CredField({ label, value }: { label: string; value: string | null | und
       <span className={cn("flex-1 font-mono text-[11px] truncate", shown ? "text-foreground/90" : "text-muted-foreground/60")}>
         {shown ? value : "•".repeat(Math.min(value.length, 12))}
       </span>
-      <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity flex-shrink-0">
+      <div className="flex items-center gap-1 flex-shrink-0">
         <button onClick={() => setShown(s => !s)} className="text-muted-foreground/40 hover:text-primary transition-colors">
           {shown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
         </button>

@@ -620,7 +620,7 @@ function SubmitModal({ task, onClose, onDone }: {
                           <div className="relative flex-1">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-[10px]">$</span>
                             <Input
-                              type="number" min="0" step="0.01" placeholder="0.00"
+                              type="text" inputMode="decimal" placeholder="0.00"
                               value={entry.amount}
                               onChange={e => updateEntry(entry.id, { amount: e.target.value })}
                               className="font-mono text-[10px] h-7 bg-input border-border pl-5"
@@ -684,7 +684,7 @@ function SubmitModal({ task, onClose, onDone }: {
                           <div className="relative flex-1">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-[10px]">$</span>
                             <Input
-                              type="number" min="0" step="0.01" placeholder="0.00"
+                              type="text" inputMode="decimal" placeholder="0.00"
                               value={entry.amount}
                               onChange={e => updateEntry(entry.id, { amount: e.target.value })}
                               className="font-mono text-[10px] h-7 bg-input border-border pl-5"

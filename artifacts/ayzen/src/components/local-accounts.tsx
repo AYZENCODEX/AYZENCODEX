@@ -177,7 +177,7 @@ function SecretField({ label, value }: { label: string; value: string | null | u
       <span className="flex-1 font-mono text-[11px] truncate text-muted-foreground/70">
         {shown ? value : "•".repeat(Math.min(value.length, 12))}
       </span>
-      <div className="flex gap-1 opacity-0 group-hover/sf:opacity-100 transition-opacity">
+      <div className="flex gap-1">
         <button onClick={() => setShown(s => !s)} className="text-muted-foreground/30 hover:text-primary transition-colors">
           {shown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
         </button>
