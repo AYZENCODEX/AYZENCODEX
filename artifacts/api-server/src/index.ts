@@ -347,20 +347,13 @@ const MIGRATIONS = [
     metric_type TEXT NOT NULL DEFAULT 'followers',
     captured_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
-  // Request metrics table (telemetry)
-  `CREATE TABLE IF NOT EXISTS request_metrics (
-    id SERIAL PRIMARY KEY,
-    route TEXT NOT NULL,
-    method TEXT NOT NULL,
-    status_code INTEGER NOT NULL,
-    duration_ms REAL NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
-  )`,
-  // Seed default health rules
-  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('missing_2fa', NULL, 'warning', true) ON CONFLICT DO NOTHING",
-  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('missing_wallet', NULL, 'warning', true) ON CONFLICT DO NOTHING",
-  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('inactive_days', '30', 'critical', true) ON CONFLICT DO NOTHING",
-  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('missing_email', NULL, 'warning', true) ON CONFLICT DO NOTHING",
+  // request_metrics already created above — skip duplicate definition
+  // Seed default health rules — use correct column names matching schema
+  "CREATE UNIQUE INDEX IF NOT EXISTS health_rules_name_idx ON health_rules(name)",
+  "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing 2FA', 'Entity does not have 2FA configured', 'entity', '{\"check\":\"missing_2fa\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing Wallet', 'Entity has no wallet address linked', 'entity', '{\"check\":\"missing_wallet\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Inactive 30 Days', 'Entity has not been active for 30+ days', 'entity', '{\"check\":\"inactive_days\",\"threshold\":30}', 'critical', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing Email', 'Entity has no email configured', 'entity', '{\"check\":\"missing_email\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

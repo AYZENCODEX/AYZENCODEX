@@ -5,26 +5,27 @@ import { broadcastEvent, broadcastToUser } from "./events";
 import { notifyTaskVerified } from "../lib/telegram";
 import { createNotification } from "./notifications";
 import { logActivity } from "../lib/activity";
-import { requireAdmin } from "../middlewares/auth";
+import { requireAdmin, requireAuth } from "../middlewares/auth";
 
 const router = Router();
 
-function getUserId(req: { headers: { authorization?: string } }): number {
+/** Extract userId — returns null if unauthenticated (B1 fix: no silent fallback to 1). */
+function getUserId(req: { headers: { authorization?: string } }): number | null {
   const auth = req.headers.authorization;
-  if (!auth) return 1;
+  if (!auth) return null;
   try {
     const p = JSON.parse(Buffer.from(auth.replace("Bearer ", ""), "base64").toString());
-    return p.userId ?? 1;
-  } catch { return 1; }
+    return p.userId ? Number(p.userId) : null;
+  } catch { return null; }
 }
 
-function getAuthInfo(req: { headers: { authorization?: string } }): { id: number; role: string } {
+function getAuthInfo(req: { headers: { authorization?: string } }): { id: number | null; role: string } {
   const auth = req.headers.authorization;
-  if (!auth) return { id: 1, role: "user" };
+  if (!auth) return { id: null, role: "user" };
   try {
     const p = JSON.parse(Buffer.from(auth.replace("Bearer ", ""), "base64").toString());
-    return { id: p.userId ?? 1, role: p.role ?? "user" };
-  } catch { return { id: 1, role: "user" }; }
+    return { id: p.userId ? Number(p.userId) : null, role: p.role ?? "user" };
+  } catch { return { id: null, role: "user" }; }
 }
 
 function taskIdStr(id: number): string { return `#TSK-${String(id).padStart(4, "0")}`; }
@@ -164,9 +165,9 @@ router.get("/tasks/submissions", async (req, res): Promise<void> => {
 });
 
 // ── POST /tasks/:id/visit — record link visit ────────────────────────────────
-router.post("/tasks/:id/visit", async (req, res): Promise<void> => {
+router.post("/tasks/:id/visit", requireAuth, async (req, res): Promise<void> => {
   const taskId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
   try {
     await db.execute(sql.raw(
       `INSERT INTO task_link_visits (task_id, user_id) VALUES (${taskId}, ${userId})
@@ -179,9 +180,9 @@ router.post("/tasks/:id/visit", async (req, res): Promise<void> => {
 });
 
 // ── GET /tasks/:id/visit — check if user visited ─────────────────────────────
-router.get("/tasks/:id/visit", async (req, res): Promise<void> => {
+router.get("/tasks/:id/visit", requireAuth, async (req, res): Promise<void> => {
   const taskId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
   try {
     const result = await db.execute(sql.raw(
       `SELECT visited_at FROM task_link_visits WHERE task_id = ${taskId} AND user_id = ${userId} LIMIT 1`
@@ -282,10 +283,10 @@ router.put("/tasks/:id/steps", async (req, res): Promise<void> => {
 });
 
 // ── POST /tasks/:id/submit — submit task ────────────────────────────────────
-router.post("/tasks/:id/submit", async (req, res): Promise<void> => {
+router.post("/tasks/:id/submit", requireAuth, async (req, res): Promise<void> => {
   const taskId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const { proofUrl, notes, cost, profit, entityIds, costEntries } = req.body;
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
 
   try {
     const result = await db.execute(sql.raw(`SELECT * FROM tasks WHERE id = ${taskId}`));

@@ -1,17 +1,9 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
+import { requireAuth } from "../middlewares/auth";
 
 const router = Router();
-
-function getUserId(req: { headers: { authorization?: string } }): number {
-  const auth = req.headers.authorization;
-  if (!auth) return 1;
-  try {
-    const payload = JSON.parse(Buffer.from(auth.replace("Bearer ", ""), "base64").toString());
-    return payload.userId ?? 1;
-  } catch { return 1; }
-}
 
 const DEFAULT_CATEGORIES = [
   { id: "facebook",  name: "Facebook",  color: "#1877F2", icon: "facebook" },
@@ -21,12 +13,18 @@ const DEFAULT_CATEGORIES = [
   { id: "discord",   name: "Discord",   color: "#5865F2", icon: "discord" },
 ];
 
-router.get("/local-accounts", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// Safely escape a string for SQL — only used for string values; integers are coerced with Number()
+const safe = (v: unknown) => v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`;
+const safeNum = (v: unknown) => isNaN(Number(v)) ? 0 : Number(v);
+const safeDate = (v: unknown) => v ? `'${String(v).replace(/'/g, "''")}'` : "NULL";
+
+// ─── GET /local-accounts — list user's accounts ───────────────────────────────
+router.get("/local-accounts", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const category = (req.query.category as string) || null;
   try {
     const q = category
-      ? sql.raw(`SELECT * FROM local_accounts WHERE user_id = ${userId} AND category = '${category.replace(/'/g, "''")}' ORDER BY created_at DESC`)
+      ? sql.raw(`SELECT * FROM local_accounts WHERE user_id = ${userId} AND category = ${safe(category)} ORDER BY created_at DESC`)
       : sql.raw(`SELECT * FROM local_accounts WHERE user_id = ${userId} ORDER BY created_at DESC`);
     const result = await db.execute(q);
     res.json(result.rows);
@@ -35,8 +33,9 @@ router.get("/local-accounts", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/local-accounts", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── POST /local-accounts — create account ────────────────────────────────────
+router.post("/local-accounts", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const {
     category = "Other", label = null, username = null,
     email = null, password = null,
@@ -48,10 +47,6 @@ router.post("/local-accounts", async (req, res): Promise<void> => {
   } = req.body;
 
   if (!category) { res.status(400).json({ error: "Category required" }); return; }
-
-  const safe = (v: any) => v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`;
-  const safeNum = (v: any) => isNaN(Number(v)) ? 0 : Number(v);
-  const safeDate = (v: any) => v ? `'${v}'` : "NULL";
 
   try {
     const result = await db.execute(sql.raw(`
@@ -73,8 +68,9 @@ router.post("/local-accounts", async (req, res): Promise<void> => {
   }
 });
 
-router.put("/local-accounts/:id", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── PUT /local-accounts/:id — update account ────────────────────────────────
+router.put("/local-accounts/:id", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
 
@@ -85,10 +81,6 @@ router.put("/local-accounts/:id", async (req, res): Promise<void> => {
     followers, accountWorth, buyPrice,
     accountCreateDate, accountBuyDate, accountLastLoginDate, notes,
   } = req.body;
-
-  const safe = (v: any) => v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`;
-  const safeNum = (v: any) => isNaN(Number(v)) ? 0 : Number(v);
-  const safeDate = (v: any) => v ? `'${v}'` : "NULL";
 
   try {
     const result = await db.execute(sql.raw(`
@@ -107,15 +99,16 @@ router.put("/local-accounts/:id", async (req, res): Promise<void> => {
       WHERE id = ${id} AND user_id = ${userId}
       RETURNING *
     `));
-    if (!result.rows.length) { res.status(404).json({ error: "Not found" }); return; }
+    if (!result.rows.length) { res.status(404).json({ error: "Not found or forbidden" }); return; }
     res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: "DB error", detail: err?.message });
   }
 });
 
-router.delete("/local-accounts/:id", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── DELETE /local-accounts/:id — delete account ─────────────────────────────
+router.delete("/local-accounts/:id", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   try {
@@ -126,8 +119,9 @@ router.delete("/local-accounts/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.get("/local-accounts/categories", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── GET /local-accounts/categories — list categories ────────────────────────
+router.get("/local-accounts/categories", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   try {
     const result = await db.execute(sql.raw(
       `SELECT * FROM local_account_categories WHERE user_id = ${userId} ORDER BY created_at ASC`
@@ -138,13 +132,14 @@ router.get("/local-accounts/categories", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/local-accounts/categories", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── POST /local-accounts/categories — create category ───────────────────────
+router.post("/local-accounts/categories", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const { name } = req.body;
   if (!name?.trim()) { res.status(400).json({ error: "Category name required" }); return; }
   try {
     const result = await db.execute(sql.raw(
-      `INSERT INTO local_account_categories (user_id, name) VALUES (${userId}, '${name.trim().replace(/'/g, "''")}') RETURNING *`
+      `INSERT INTO local_account_categories (user_id, name) VALUES (${userId}, ${safe(name.trim())}) RETURNING *`
     ));
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
@@ -152,8 +147,9 @@ router.post("/local-accounts/categories", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/local-accounts/categories/:id", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── DELETE /local-accounts/categories/:id — delete category ─────────────────
+router.delete("/local-accounts/categories/:id", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const id = parseInt(req.params.id as string);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid ID" }); return; }
   try {
@@ -164,9 +160,9 @@ router.delete("/local-accounts/categories/:id", async (req, res): Promise<void> 
   }
 });
 
-// ─── POINTS: GET /api/local-accounts/:id/points ───────────────────────────────
-router.get("/local-accounts/:id/points", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── GET /local-accounts/:id/points ──────────────────────────────────────────
+router.get("/local-accounts/:id/points", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const accountId = parseInt(req.params.id as string);
   if (isNaN(accountId)) { res.status(400).json({ error: "Invalid ID" }); return; }
   try {
@@ -181,14 +177,13 @@ router.get("/local-accounts/:id/points", async (req, res): Promise<void> => {
   }
 });
 
-// ─── POINTS: POST /api/local-accounts/:id/points ──────────────────────────────
-router.post("/local-accounts/:id/points", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── POST /local-accounts/:id/points ─────────────────────────────────────────
+router.post("/local-accounts/:id/points", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const accountId = parseInt(req.params.id as string);
   if (isNaN(accountId)) { res.status(400).json({ error: "Invalid ID" }); return; }
   const { amount, notes = null } = req.body;
   if (!amount || isNaN(Number(amount))) { res.status(400).json({ error: "amount required" }); return; }
-  const safe = (v: any) => v === null || v === undefined ? "NULL" : `'${String(v).replace(/'/g, "''")}'`;
   try {
     const result = await db.execute(sql.raw(
       `INSERT INTO local_account_points (account_id, user_id, amount, notes) VALUES (${accountId}, ${userId}, ${Number(amount)}, ${safe(notes)}) RETURNING *`
@@ -199,9 +194,9 @@ router.post("/local-accounts/:id/points", async (req, res): Promise<void> => {
   }
 });
 
-// ─── POINTS: DELETE /api/local-accounts/points/:pointId ──────────────────────
-router.delete("/local-accounts/points/:pointId", async (req, res): Promise<void> => {
-  const userId = getUserId(req);
+// ─── DELETE /local-accounts/points/:pointId ──────────────────────────────────
+router.delete("/local-accounts/points/:pointId", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const pointId = parseInt(req.params.pointId as string);
   if (isNaN(pointId)) { res.status(400).json({ error: "Invalid ID" }); return; }
   try {

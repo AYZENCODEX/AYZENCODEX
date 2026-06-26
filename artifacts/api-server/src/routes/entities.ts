@@ -17,16 +17,18 @@ router.get("/entities/:id/summary", requireAuth, async (req, res): Promise<void>
   const entity = entityResult.rows[0] as any;
 
   const roiResult = await db.execute(sql.raw(
-    `SELECT epr.*, p.name as project_name, p.type as project_type, p.status as project_status
+    `SELECT epr.vault_entry_id as entity_id, epr.project_id, epr.total_cost, epr.total_profit, epr.roi,
+            p.name as project_name, p.type as project_type, p.status as project_status
      FROM entity_project_roi epr
      JOIN projects p ON p.id = epr.project_id
-     WHERE epr.entity_id = ${entityId}
-     ORDER BY epr.roi_amount DESC`
-  ));
+     WHERE epr.vault_entry_id = ${entityId}
+     ORDER BY epr.roi DESC`
+  )).catch(() => ({ rows: [] }));
 
-  const rows = roiResult.rows as any[];
-  const totalRoi = rows.reduce((s: number, r: any) => s + (parseFloat(r.roi_amount) || 0), 0);
-  const avgProgress = rows.length ? rows.reduce((s: number, r: any) => s + (parseFloat(r.progress_percent) || 0), 0) / rows.length : 0;
+  const rows = (roiResult as any).rows as any[];
+  const totalRoi = rows.reduce((s: number, r: any) => s + (parseFloat(r.roi) || 0), 0);
+  const totalCost = rows.reduce((s: number, r: any) => s + (parseFloat(r.total_cost) || 0), 0);
+  const totalProfit = rows.reduce((s: number, r: any) => s + (parseFloat(r.total_profit) || 0), 0);
 
   const enrollResult = await db.execute(sql.raw(
     `SELECT pe.*, p.name as project_name, p.category
@@ -40,7 +42,8 @@ router.get("/entities/:id/summary", requireAuth, async (req, res): Promise<void>
     entity,
     roi: {
       total: totalRoi,
-      avgProgress,
+      totalCost,
+      totalProfit,
       projectCount: rows.length,
       projects: rows,
     },
@@ -48,38 +51,41 @@ router.get("/entities/:id/summary", requireAuth, async (req, res): Promise<void>
   });
 });
 
-// ── GET /entities/:id/health — evaluate health rules ────────────────────────
+// ── GET /entities/:id/health — evaluate health rules for an entity ──────────
 router.get("/entities/:id/health", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
   const entityId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
 
   const [entityResult, rulesResult] = await Promise.all([
     db.execute(sql.raw(`SELECT * FROM vault_entries WHERE id = ${entityId} AND user_id = ${userId}`)),
-    db.execute(sql.raw(`SELECT * FROM health_rules WHERE enabled = true ORDER BY severity ASC`)),
+    db.execute(sql.raw(`SELECT * FROM health_rules WHERE is_active = true ORDER BY severity ASC`)),
   ]);
 
   if (!entityResult.rows.length) { res.status(404).json({ error: "Entity not found" }); return; }
   const entity = entityResult.rows[0] as any;
   const rules = rulesResult.rows as any[];
 
-  const flags: { rule_key: string; severity: string; message: string }[] = [];
+  const flags: { rule: string; severity: string; message: string }[] = [];
 
   for (const rule of rules) {
-    const key = rule.rule_key as string;
-    const threshold = parseInt(rule.threshold_value ?? "30", 10);
+    // condition is JSONB: { "check": "missing_2fa", "threshold": 30 }
+    let condition: Record<string, any> = {};
+    try { condition = typeof rule.condition === "string" ? JSON.parse(rule.condition) : (rule.condition ?? {}); } catch {}
+    const check = condition.check as string ?? rule.name?.toLowerCase().replace(/\s+/g, "_");
+    const threshold = Number(condition.threshold ?? 30);
 
-    if (key === "missing_2fa") {
+    if (check === "missing_2fa") {
       const has2fa = entity.twitter_2fa || entity.discord_2fa || entity.telegram_2fa;
-      if (!has2fa) flags.push({ rule_key: key, severity: rule.severity, message: "No 2FA codes configured" });
-    } else if (key === "missing_wallet") {
-      const wallets = entity.wallet_addresses ? JSON.parse(entity.wallet_addresses) : [];
-      if (!wallets.length) flags.push({ rule_key: key, severity: rule.severity, message: "No wallet addresses linked" });
-    } else if (key === "inactive_days") {
+      if (!has2fa) flags.push({ rule: rule.name, severity: rule.severity, message: "No 2FA codes configured" });
+    } else if (check === "missing_wallet") {
+      const wallets = (() => { try { return JSON.parse(entity.wallet_addresses || "[]"); } catch { return []; } })();
+      if (!wallets.length && !entity.encrypted_seed_phrase) flags.push({ rule: rule.name, severity: rule.severity, message: "No wallet addresses linked" });
+    } else if (check === "inactive_days") {
       const last = entity.last_activity_at ? new Date(entity.last_activity_at) : new Date(entity.created_at);
       const diffDays = (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24);
-      if (diffDays > threshold) flags.push({ rule_key: key, severity: rule.severity, message: `Inactive for ${Math.floor(diffDays)} days` });
-    } else if (key === "missing_email") {
-      if (!entity.email) flags.push({ rule_key: key, severity: rule.severity, message: "No email configured" });
+      if (diffDays > threshold) flags.push({ rule: rule.name, severity: rule.severity, message: `Inactive for ${Math.floor(diffDays)} days` });
+    } else if (check === "missing_email") {
+      if (!entity.email) flags.push({ rule: rule.name, severity: rule.severity, message: "No email configured" });
     }
   }
 
@@ -97,82 +103,92 @@ router.get("/entities/health-overview", requireAuth, async (req, res): Promise<v
 
   const [entitiesResult, rulesResult] = await Promise.all([
     db.execute(sql.raw(`SELECT * FROM vault_entries WHERE user_id = ${userId}`)),
-    db.execute(sql.raw(`SELECT * FROM health_rules WHERE enabled = true`)),
+    db.execute(sql.raw(`SELECT * FROM health_rules WHERE is_active = true`)),
   ]);
 
   const entities = entitiesResult.rows as any[];
   const rules = rulesResult.rows as any[];
 
   let missing2fa = 0, missingWallet = 0, missingEmail = 0, inactive = 0;
+
+  const inactiveRule = rules.find((r: any) => {
+    let c: any = {}; try { c = typeof r.condition === "string" ? JSON.parse(r.condition) : (r.condition ?? {}); } catch {}
+    return c.check === "inactive_days";
+  });
+  const inactiveThreshold = inactiveRule ? Number((typeof inactiveRule.condition === "string"
+    ? JSON.parse(inactiveRule.condition) : inactiveRule.condition)?.threshold ?? 30) : 30;
+
   for (const e of entities) {
     const has2fa = e.twitter_2fa || e.discord_2fa || e.telegram_2fa;
     if (!has2fa) missing2fa++;
     const wallets = (() => { try { return JSON.parse(e.wallet_addresses || "[]"); } catch { return []; } })();
-    if (!wallets.length) missingWallet++;
+    if (!wallets.length && !e.encrypted_seed_phrase) missingWallet++;
     if (!e.email) missingEmail++;
-    const inactiveRule = rules.find((r: any) => r.rule_key === "inactive_days");
-    if (inactiveRule) {
-      const threshold = parseInt(inactiveRule.threshold_value ?? "30", 10);
-      const last = e.last_activity_at ? new Date(e.last_activity_at) : new Date(e.created_at);
-      const diffDays = (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24);
-      if (diffDays > threshold) inactive++;
-    }
+    const last = e.last_activity_at ? new Date(e.last_activity_at) : new Date(e.created_at);
+    const diffDays = (Date.now() - last.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays > inactiveThreshold) inactive++;
   }
 
-  res.json({
-    total: entities.length,
-    missing2fa,
-    missingWallet,
-    missingEmail,
-    inactive,
-  });
+  res.json({ total: entities.length, missing2fa, missingWallet, missingEmail, inactive });
 });
 
-// ── GET /entities/:id/roi — ROI for this entity ──────────────────────────────
+// ── GET /entities/:id/roi — ROI breakdown by project ────────────────────────
 router.get("/entities/:id/roi", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
   const entityId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
 
-  const entityCheck = await db.execute(sql.raw(`SELECT id FROM vault_entries WHERE id = ${entityId} AND user_id = ${userId}`));
+  const entityCheck = await db.execute(sql.raw(
+    `SELECT id FROM vault_entries WHERE id = ${entityId} AND user_id = ${userId}`
+  ));
   if (!entityCheck.rows.length) { res.status(403).json({ error: "Forbidden" }); return; }
 
   const result = await db.execute(sql.raw(
-    `SELECT epr.*, p.name as project_name FROM entity_project_roi epr
-     JOIN projects p ON p.id = epr.project_id WHERE epr.entity_id = ${entityId}`
-  ));
-  res.json(result.rows);
+    `SELECT epr.vault_entry_id as entity_id, epr.project_id, epr.total_cost, epr.total_profit, epr.roi,
+            p.name as project_name
+     FROM entity_project_roi epr
+     JOIN projects p ON p.id = epr.project_id
+     WHERE epr.vault_entry_id = ${entityId}`
+  )).catch(() => ({ rows: [] }));
+  res.json((result as any).rows);
 });
 
 // ── POST /entities/:id/roi — upsert ROI for entity+project ──────────────────
 router.post("/entities/:id/roi", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
   const entityId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const { projectId, roiAmount = 0, progressPercent = 0 } = req.body;
+  const { projectId, totalCost = 0, totalProfit = 0 } = req.body;
   if (!projectId) { res.status(400).json({ error: "projectId required" }); return; }
 
+  // Verify ownership
+  const check = await db.execute(sql.raw(
+    `SELECT id FROM vault_entries WHERE id = ${entityId} AND user_id = ${userId}`
+  ));
+  if (!check.rows.length) { res.status(403).json({ error: "Forbidden" }); return; }
+
   const result = await db.execute(sql.raw(
-    `INSERT INTO entity_project_roi (entity_id, project_id, roi_amount, progress_percent)
-     VALUES (${entityId}, ${projectId}, ${roiAmount}, ${progressPercent})
-     ON CONFLICT (entity_id, project_id)
-     DO UPDATE SET roi_amount = ${roiAmount}, progress_percent = ${progressPercent}, last_updated_at = NOW()
+    `INSERT INTO entity_project_roi (user_id, vault_entry_id, project_id, total_cost, total_profit, recorded_at)
+     VALUES (${userId}, ${entityId}, ${projectId}, ${Number(totalCost)}, ${Number(totalProfit)}, NOW())
+     ON CONFLICT (vault_entry_id, project_id)
+     DO UPDATE SET total_cost = ${Number(totalCost)}, total_profit = ${Number(totalProfit)}, recorded_at = NOW()
      RETURNING *`
   ));
-  res.json(result.rows[0]);
+  res.json((result as any).rows[0]);
 });
 
-// ── PATCH /entities/:id/status — update status ───────────────────────────────
+// ── PATCH /entities/:id/status — update entity status ───────────────────────
 router.patch("/entities/:id/status", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
   const entityId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const { status } = req.body;
   const allowed = ["active", "warning", "banned", "suspended"];
-  if (!allowed.includes(status)) { res.status(400).json({ error: "Invalid status" }); return; }
+  if (!allowed.includes(status)) { res.status(400).json({ error: "Invalid status. Allowed: active, warning, banned, suspended" }); return; }
 
   const result = await db.execute(sql.raw(
     `UPDATE vault_entries SET status = '${status}', last_activity_at = NOW()
      WHERE id = ${entityId} AND user_id = ${userId} RETURNING *`
   ));
-  if (!result.rows.length) { res.status(404).json({ error: "Not found" }); return; }
-  res.json(result.rows[0]);
+  if (!(result as any).rows.length) { res.status(404).json({ error: "Not found" }); return; }
+  res.json((result as any).rows[0]);
 });
 
 export default router;

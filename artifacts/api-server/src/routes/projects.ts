@@ -2,17 +2,18 @@ import { Router } from "express";
 import { db, projectsTable, userProjectsTable, tasksTable, usersTable, projectEnrollmentsTable, vaultEntriesTable } from "@workspace/db";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { broadcastEvent } from "./events";
-import { requireAdmin } from "../middlewares/auth";
+import { requireAdmin, requireAuth } from "../middlewares/auth";
 
 const router = Router();
 
-function getUserId(req: { headers: { authorization?: string } }): number {
+/** Extract userId from token — returns null if unauthenticated (B1 fix: no silent fallback to 1). */
+function getUserId(req: { headers: { authorization?: string } }): number | null {
   const authHeader = req.headers.authorization;
-  if (!authHeader) return 1;
+  if (!authHeader) return null;
   try {
     const payload = JSON.parse(Buffer.from(authHeader.replace("Bearer ", ""), "base64").toString());
-    return payload.userId ?? 1;
-  } catch { return 1; }
+    return payload.userId ? Number(payload.userId) : null;
+  } catch { return null; }
 }
 
 function formatProject(p: typeof projectsTable.$inferSelect, taskCount = 0, completedTaskCount = 0, activeUserCount = 0) {
@@ -64,8 +65,8 @@ router.get("/projects/:id", async (req, res): Promise<void> => {
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   const tasks = await db.select().from(tasksTable).where(eq(tasksTable.projectId, id));
   const [{ memberCount }] = await db.select({ memberCount: count() }).from(userProjectsTable).where(eq(userProjectsTable.projectId, id));
-  const enrollments = await db.select().from(projectEnrollmentsTable)
-    .where(and(eq(projectEnrollmentsTable.projectId, id), eq(projectEnrollmentsTable.userId, userId)));
+  const enrollments = userId ? await db.select().from(projectEnrollmentsTable)
+    .where(and(eq(projectEnrollmentsTable.projectId, id), eq(projectEnrollmentsTable.userId, userId))) : [];
   const isJoined = enrollments.length > 0;
   res.json({
     ...formatProject(project, tasks.length, 0, Number(memberCount)),
@@ -124,9 +125,9 @@ router.delete("/projects/:id", requireAdmin, async (req, res): Promise<void> => 
   res.json({ message: "Project deleted" });
 });
 
-router.post("/projects/:id/join", async (req, res): Promise<void> => {
+router.post("/projects/:id/join", requireAuth, async (req, res): Promise<void> => {
   const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
   const existing = await db.select().from(userProjectsTable).where(and(eq(userProjectsTable.userId, userId), eq(userProjectsTable.projectId, projectId)));
   if (existing.length === 0) {
     await db.insert(userProjectsTable).values({ userId, projectId });
@@ -134,9 +135,9 @@ router.post("/projects/:id/join", async (req, res): Promise<void> => {
   res.json({ message: "Joined project" });
 });
 
-router.post("/projects/:id/enroll", async (req, res): Promise<void> => {
+router.post("/projects/:id/enroll", requireAuth, async (req, res): Promise<void> => {
   const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
   const { vaultEntryId } = req.body;
   if (!vaultEntryId) { res.status(400).json({ error: "vaultEntryId is required" }); return; }
 
@@ -156,9 +157,9 @@ router.post("/projects/:id/enroll", async (req, res): Promise<void> => {
   res.status(201).json({ ...enrollment, enrolledAt: enrollment.enrolledAt.toISOString() });
 });
 
-router.get("/projects/:id/enrollments", async (req, res): Promise<void> => {
+router.get("/projects/:id/enrollments", requireAuth, async (req, res): Promise<void> => {
   const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
   const enrollments = await db
     .select({ enrollment: projectEnrollmentsTable, vault: vaultEntriesTable })
     .from(projectEnrollmentsTable)
@@ -175,9 +176,9 @@ router.get("/projects/:id/enrollments", async (req, res): Promise<void> => {
   })));
 });
 
-router.delete("/projects/:id/enrollments/:enrollmentId", async (req, res): Promise<void> => {
+router.delete("/projects/:id/enrollments/:enrollmentId", requireAuth, async (req, res): Promise<void> => {
   const enrollmentId = parseInt(Array.isArray(req.params.enrollmentId) ? req.params.enrollmentId[0] : req.params.enrollmentId, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
   await db.delete(projectEnrollmentsTable)
     .where(and(eq(projectEnrollmentsTable.id, enrollmentId), eq(projectEnrollmentsTable.userId, userId)));
   res.json({ message: "Enrollment removed" });
@@ -224,9 +225,9 @@ router.get("/projects/:id/stats", async (req, res): Promise<void> => {
 });
 
 // ─── GET /api/projects/:id/entity-tasks — per-entity task completion ──────────
-router.get("/projects/:id/entity-tasks", async (req, res): Promise<void> => {
+router.get("/projects/:id/entity-tasks", requireAuth, async (req, res): Promise<void> => {
   const projectId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const userId = getUserId(req);
+  const userId = req.user!.userId;
 
   try {
     const tasks = await db.execute(sql.raw(
