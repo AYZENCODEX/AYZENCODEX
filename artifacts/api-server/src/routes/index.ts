@@ -33,6 +33,9 @@ import notificationsRouter from "./notifications";
 import functionsRouter from "./functions";
 import historyRouter from "./history";
 import earnLinksRouter from "./earn-links";
+import categoriesRouter from "./categories";
+import teamsRouter from "./teams";
+import contentRouter from "./content";
 
 const router: IRouter = Router();
 
@@ -70,5 +73,8 @@ router.use(notificationsRouter);
 router.use(functionsRouter);
 router.use(historyRouter);
 router.use(earnLinksRouter);
+router.use(categoriesRouter);
+router.use(teamsRouter);
+router.use(contentRouter);
 
 export default router;

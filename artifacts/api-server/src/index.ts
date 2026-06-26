@@ -182,6 +182,139 @@ const MIGRATIONS = [
     visited_at TIMESTAMP NOT NULL DEFAULT NOW(),
     UNIQUE(task_id, user_id)
   )`,
+  // ── Phase 5: request_metrics — real telemetry ────────────────────────────
+  `CREATE TABLE IF NOT EXISTS request_metrics (
+    id SERIAL PRIMARY KEY,
+    route TEXT NOT NULL,
+    method TEXT NOT NULL DEFAULT 'GET',
+    status_code INTEGER NOT NULL DEFAULT 200,
+    duration_ms REAL NOT NULL DEFAULT 0,
+    user_id INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_request_metrics_route ON request_metrics(route)",
+  "CREATE INDEX IF NOT EXISTS idx_request_metrics_created_at ON request_metrics(created_at DESC)",
+  // ── Phase 0: auth error_logs table (already defined in Drizzle schema) ───
+  "CREATE TABLE IF NOT EXISTS error_logs (id SERIAL PRIMARY KEY, level TEXT NOT NULL DEFAULT 'ERROR', message TEXT NOT NULL, endpoint TEXT, stack TEXT, timestamp TIMESTAMP NOT NULL DEFAULT NOW())",
+  "CREATE INDEX IF NOT EXISTS idx_error_logs_timestamp ON error_logs(timestamp DESC)",
+  // ── Phase 1: categories + category_templates ─────────────────────────────
+  `CREATE TABLE IF NOT EXISTS categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'task',
+    parent_id INTEGER REFERENCES categories(id) ON DELETE CASCADE,
+    is_custom BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS category_templates (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'task',
+    sub_categories JSONB NOT NULL DEFAULT '[]',
+    created_by INTEGER,
+    is_global BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // ── Phase 2: data integrity — entity_project_roi + health_rules ──────────
+  `CREATE TABLE IF NOT EXISTS entity_project_roi (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    vault_entry_id INTEGER NOT NULL,
+    project_id INTEGER NOT NULL,
+    total_cost REAL NOT NULL DEFAULT 0,
+    total_profit REAL NOT NULL DEFAULT 0,
+    roi REAL GENERATED ALWAYS AS (total_profit - total_cost) STORED,
+    recorded_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(vault_entry_id, project_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS health_rules (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    rule_type TEXT NOT NULL DEFAULT 'wallet',
+    condition JSONB NOT NULL DEFAULT '{}',
+    severity TEXT NOT NULL DEFAULT 'warning',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // ── Phase 3: vault hub additions ─────────────────────────────────────────
+  "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'",
+  "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMP",
+  "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS encrypted_seed_phrase TEXT",
+  `CREATE TABLE IF NOT EXISTS other_two_factor_codes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    vault_entry_id INTEGER,
+    service_name TEXT NOT NULL,
+    totp_secret TEXT,
+    backup_codes TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // ── Phase 6: teams ────────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS teams (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    owner_id INTEGER NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS team_members (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    joined_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(team_id, user_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS team_messages (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_team_messages_team_id ON team_messages(team_id)",
+  "ALTER TABLE vault_entries ADD COLUMN IF NOT EXISTS team_id INTEGER",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_id INTEGER",
+  // ── Phase 7: content / AI generation ─────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS project_memory (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    content_type TEXT NOT NULL DEFAULT 'context',
+    content TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_project_memory_project_id ON project_memory(project_id)",
+  `CREATE TABLE IF NOT EXISTS generated_content (
+    id SERIAL PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    type TEXT NOT NULL DEFAULT 'post',
+    prompt_used TEXT,
+    output TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_generated_content_project_id ON generated_content(project_id)",
+  // ── Phase 8: plan limits ──────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS plan_limits (
+    id SERIAL PRIMARY KEY,
+    plan TEXT NOT NULL UNIQUE,
+    max_projects INTEGER NOT NULL DEFAULT 5,
+    max_entities INTEGER NOT NULL DEFAULT 10,
+    max_content_gen_per_day INTEGER NOT NULL DEFAULT 5,
+    max_team_size INTEGER NOT NULL DEFAULT 3,
+    max_vault_entries INTEGER NOT NULL DEFAULT 20,
+    can_use_ai BOOLEAN NOT NULL DEFAULT FALSE,
+    can_use_teams BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "INSERT INTO plan_limits (plan, max_projects, max_entities, max_content_gen_per_day, max_team_size, max_vault_entries, can_use_ai, can_use_teams) VALUES ('free', 3, 5, 2, 2, 10, false, false) ON CONFLICT (plan) DO NOTHING",
+  "INSERT INTO plan_limits (plan, max_projects, max_entities, max_content_gen_per_day, max_team_size, max_vault_entries, can_use_ai, can_use_teams) VALUES ('starter', 10, 25, 15, 5, 50, true, false) ON CONFLICT (plan) DO NOTHING",
+  "INSERT INTO plan_limits (plan, max_projects, max_entities, max_content_gen_per_day, max_team_size, max_vault_entries, can_use_ai, can_use_teams) VALUES ('pro', 50, 100, 100, 20, 200, true, true) ON CONFLICT (plan) DO NOTHING",
+  "INSERT INTO plan_limits (plan, max_projects, max_entities, max_content_gen_per_day, max_team_size, max_vault_entries, can_use_ai, can_use_teams) VALUES ('unlimited', 9999, 9999, 9999, 9999, 9999, true, true) ON CONFLICT (plan) DO NOTHING",
+  // Extra project meta fields needed by teams / content modules
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'airdrop'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS account_type_filter TEXT",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

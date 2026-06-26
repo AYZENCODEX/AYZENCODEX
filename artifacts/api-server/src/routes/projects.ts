@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, projectsTable, userProjectsTable, tasksTable, usersTable, projectEnrollmentsTable, vaultEntriesTable } from "@workspace/db";
 import { eq, ilike, and, count, sql } from "drizzle-orm";
 import { broadcastEvent } from "./events";
+import { requireAdmin } from "../middlewares/auth";
 
 const router = Router();
 
@@ -41,7 +42,7 @@ router.get("/projects", async (req, res): Promise<void> => {
   res.json({ projects: enriched, total: Number(total), page: pageNum, limit: limitNum });
 });
 
-router.post("/projects", async (req, res): Promise<void> => {
+router.post("/projects", requireAdmin, async (req, res): Promise<void> => {
   const { name, description, xpName, twitterHandle, discordUrl, websiteUrl, tutorialLink, experienceLevel, tier, fundingAmount, rewardEstimate, thumbnailUrl } = req.body;
   if (!name) { res.status(400).json({ error: "name is required" }); return; }
   const [project] = await db.insert(projectsTable).values({
@@ -75,7 +76,7 @@ router.get("/projects/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.patch("/projects/:id", async (req, res): Promise<void> => {
+router.patch("/projects/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const updates: Record<string, unknown> = {};
   const fields = ["name", "description", "xpName", "twitterHandle", "discordUrl", "websiteUrl", "tutorialLink", "experienceLevel", "tier", "fundingAmount", "rewardEstimate", "thumbnailUrl"];
@@ -116,7 +117,7 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
   }
 });
 
-router.delete("/projects/:id", async (req, res): Promise<void> => {
+router.delete("/projects/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   await db.delete(projectsTable).where(eq(projectsTable.id, id));
   broadcastEvent("projects_updated", { action: "deleted", projectId: id });

@@ -5,6 +5,7 @@ import { broadcastEvent, broadcastToUser } from "./events";
 import { notifyTaskVerified } from "../lib/telegram";
 import { createNotification } from "./notifications";
 import { logActivity } from "../lib/activity";
+import { requireAdmin } from "../middlewares/auth";
 
 const router = Router();
 
@@ -94,7 +95,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
 });
 
 // ── POST /tasks — create task ───────────────────────────────────────────────
-router.post("/tasks", async (req, res): Promise<void> => {
+router.post("/tasks", requireAdmin, async (req, res): Promise<void> => {
   const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes, xpAmount, steps } = req.body;
   if (!name) { res.status(400).json({ error: "name is required" }); return; }
   const projIdSql = projectId ? `${Number(projectId)}` : "NULL";
@@ -206,7 +207,7 @@ router.get("/tasks/:id", async (req, res): Promise<void> => {
 });
 
 // ── PATCH /tasks/:id ────────────────────────────────────────────────────────
-router.patch("/tasks/:id", async (req, res): Promise<void> => {
+router.patch("/tasks/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const allowedFields = ["name", "description", "rewardAmount", "verificationType", "taskType", "cost", "profit", "category", "xpAmount"];
   const updates: Record<string, unknown> = {};
@@ -247,7 +248,7 @@ router.patch("/tasks/:id", async (req, res): Promise<void> => {
 });
 
 // ── DELETE /tasks/:id ───────────────────────────────────────────────────────
-router.delete("/tasks/:id", async (req, res): Promise<void> => {
+router.delete("/tasks/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   await db.delete(tasksTable).where(eq(tasksTable.id, id));
   broadcastEvent("tasks_updated", { action: "deleted", taskId: id });
@@ -371,7 +372,7 @@ async function awardXpAsAzn(userId: number, task: any) {
 }
 
 // ── POST /tasks/:id/verify — admin approve/reject ──────────────────────────
-router.post("/tasks/:id/verify", async (req, res): Promise<void> => {
+router.post("/tasks/:id/verify", requireAdmin, async (req, res): Promise<void> => {
   const { submissionId, approved, rejectionReason } = req.body;
   const status = approved ? "approved" : "rejected";
   await db.update(taskSubmissionsTable).set({ status, rejectionReason, reviewedAt: new Date() }).where(eq(taskSubmissionsTable.id, submissionId));
