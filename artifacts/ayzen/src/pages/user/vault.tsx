@@ -631,7 +631,7 @@ function EntityTab() {
           {filteredEntities.map((entry: EntryAny) => (
             <div
               key={entry.id}
-              className="bg-card border border-card-border hover:border-primary/40 transition-all rounded-xl overflow-hidden group relative cursor-pointer"
+              className="bg-card border border-card-border hover:border-primary/40 transition-all rounded-xl group relative cursor-pointer"
               onClick={() => { setMenuOpenId(null); setViewEntry(entry); }}
             >
               {/* Pin */}
@@ -651,6 +651,8 @@ function EntityTab() {
                   <MoreVertical className="w-3.5 h-3.5" />
                 </button>
                 {menuOpenId === entry.id && (
+                  <>
+                  <div className="fixed inset-0 z-[25]" onClick={e => { e.stopPropagation(); setMenuOpenId(null); }} />
                   <div className="absolute right-0 top-7 bg-popover border border-border rounded-lg shadow-xl min-w-[130px] overflow-hidden z-30">
                     <button
                       onClick={e => { e.stopPropagation(); openEdit(entry); setMenuOpenId(null); }}
@@ -665,6 +667,7 @@ function EntityTab() {
                       <Trash2 className="w-3 h-3" /> Remove
                     </button>
                   </div>
+                  </>
                 )}
               </div>
 
@@ -772,160 +775,150 @@ function EntityTab() {
       </Dialog>
 
       {/* ── View Entity Dialog ── */}
-      {viewEntry && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
-          onClick={() => setViewEntry(null)}
-        >
-          <div
-            className="bg-card border border-card-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Dialog header */}
-            <div className="px-5 pt-5 pb-4 border-b border-card-border flex-shrink-0">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <Hash className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
-                    <span className="font-mono font-bold text-primary tracking-[0.15em] text-sm">
-                      {viewEntry.entitySerial || `AYZNA${viewEntry.id}`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono font-bold text-foreground text-base">{viewEntry.projectName}</span>
-                    {viewEntry.category && (
-                      <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border", CATEGORY_COLORS[viewEntry.category] ?? CATEGORY_COLORS.Other)}>
-                        {viewEntry.category}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/40 mt-2 flex items-center gap-1.5">
-                    <Eye className="w-2.5 h-2.5" /> Hover any field → eye icon shows password · copy icon copies value
-                  </p>
+      <Dialog open={viewEntry !== null} onOpenChange={o => !o && setViewEntry(null)}>
+        <DialogContent className="bg-card border-card-border max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+          {viewEntry && (
+            <>
+              {/* Header */}
+              <DialogHeader className="px-5 pt-5 pb-4 border-b border-card-border flex-shrink-0">
+                <div className="flex items-center gap-2 mb-1">
+                  <Hash className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
+                  <span className="font-mono font-bold text-primary tracking-[0.15em] text-sm">
+                    {viewEntry.entitySerial || `AYZNA${viewEntry.id}`}
+                  </span>
                 </div>
-                <button
-                  onClick={() => setViewEntry(null)}
-                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted/30 flex-shrink-0"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+                <DialogTitle className="flex items-center gap-2 flex-wrap font-mono font-bold text-foreground text-base">
+                  {viewEntry.projectName}
+                  {viewEntry.category && (
+                    <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border", CATEGORY_COLORS[viewEntry.category] ?? CATEGORY_COLORS.Other)}>
+                      {viewEntry.category}
+                    </Badge>
+                  )}
+                </DialogTitle>
+                <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/40 mt-1 flex items-center gap-1.5">
+                  <Eye className="w-2.5 h-2.5" /> Hover any field → eye icon reveals value
+                </p>
+              </DialogHeader>
 
-            {/* Scrollable credential content */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              <PlatformSection title="Email" icon={Mail} color="text-emerald-400" fields={[
-                { label: "address", value: viewEntry.email },
-                { label: "password", value: viewEntry.emailPassword },
-                { label: "recovery", value: viewEntry.emailRecovery },
-                { label: "rcv pass", value: viewEntry.emailRecoveryPassword },
-              ]} />
-              <PlatformSection title="Twitter / X" icon={AtSign} color="text-sky-400" fields={[
-                { label: "handle", value: viewEntry.twitterUsername },
-                { label: "password", value: viewEntry.twitterPassword },
-                { label: "email", value: viewEntry.twitterEmail },
-                { label: "email pw", value: viewEntry.twitterEmailPassword },
-                { label: "2fa secret", value: viewEntry.twitter2fa },
-                { label: "followers", value: viewEntry.twitterFollowers },
-                { label: "rcv email", value: viewEntry.twitterEmailRecovery },
-                { label: "rcv pw", value: viewEntry.twitterEmailRecoveryPassword },
-              ]} />
-              <PlatformSection title="Discord" icon={Hash} color="text-indigo-400" fields={[
-                { label: "username", value: viewEntry.discordUsername },
-                { label: "password", value: viewEntry.discordPassword },
-                { label: "email", value: viewEntry.discordEmail },
-                { label: "email pw", value: viewEntry.discordEmailPassword },
-                { label: "2fa secret", value: viewEntry.discord2fa },
-                { label: "rcv email", value: viewEntry.discordEmailRecovery },
-                { label: "rcv pw", value: viewEntry.discordEmailRecoveryPassword },
-              ]} />
-              <PlatformSection title="Telegram" icon={Phone} color="text-blue-400" fields={[
-                { label: "username", value: viewEntry.telegramUsername },
-                { label: "phone", value: viewEntry.telegramPhone },
-                { label: "password", value: viewEntry.telegramPassword },
-                { label: "2fa secret", value: viewEntry.telegram2fa },
-                { label: "linked email", value: viewEntry.telegramLinkedEmail },
-                { label: "linked pw", value: viewEntry.telegramLinkedEmailPassword },
-              ]} />
+              {/* Scrollable credential content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
+                <PlatformSection title="Email" icon={Mail} color="text-emerald-400" fields={[
+                  { label: "address", value: viewEntry.email },
+                  { label: "password", value: viewEntry.emailPassword },
+                  { label: "recovery", value: viewEntry.emailRecovery },
+                  { label: "rcv pass", value: viewEntry.emailRecoveryPassword },
+                ]} />
+                <PlatformSection title="Twitter / X" icon={AtSign} color="text-sky-400" fields={[
+                  { label: "handle", value: viewEntry.twitterUsername },
+                  { label: "password", value: viewEntry.twitterPassword },
+                  { label: "email", value: viewEntry.twitterEmail },
+                  { label: "email pw", value: viewEntry.twitterEmailPassword },
+                  { label: "2fa secret", value: viewEntry.twitter2fa },
+                  { label: "followers", value: viewEntry.twitterFollowers },
+                  { label: "rcv email", value: viewEntry.twitterEmailRecovery },
+                  { label: "rcv pw", value: viewEntry.twitterEmailRecoveryPassword },
+                ]} />
+                <PlatformSection title="Discord" icon={Hash} color="text-indigo-400" fields={[
+                  { label: "username", value: viewEntry.discordUsername },
+                  { label: "password", value: viewEntry.discordPassword },
+                  { label: "email", value: viewEntry.discordEmail },
+                  { label: "email pw", value: viewEntry.discordEmailPassword },
+                  { label: "2fa secret", value: viewEntry.discord2fa },
+                  { label: "rcv email", value: viewEntry.discordEmailRecovery },
+                  { label: "rcv pw", value: viewEntry.discordEmailRecoveryPassword },
+                ]} />
+                <PlatformSection title="Telegram" icon={Phone} color="text-blue-400" fields={[
+                  { label: "username", value: viewEntry.telegramUsername },
+                  { label: "phone", value: viewEntry.telegramPhone },
+                  { label: "password", value: viewEntry.telegramPassword },
+                  { label: "2fa secret", value: viewEntry.telegram2fa },
+                  { label: "linked email", value: viewEntry.telegramLinkedEmail },
+                  { label: "linked pw", value: viewEntry.telegramLinkedEmailPassword },
+                ]} />
 
-              {/* Wallet addresses */}
-              {viewEntry.walletAddresses && (Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).length > 0 && (
-                <div className="space-y-0.5 py-2 border-t border-border/30">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <Wallet className="w-3 h-3 text-cyan-400" />
-                    <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-cyan-400">Wallets</span>
-                  </div>
-                  {(Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).map((addr: string, i: number) => (
-                    <CredField key={i} label={`wallet ${i + 1}`} value={addr} />
-                  ))}
-                </div>
-              )}
-
-              {/* Backup codes */}
-              {viewEntry.backupCodes && (Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).length > 0 && (
-                <div className="space-y-0.5 py-2 border-t border-border/30">
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <Shield className="w-3 h-3 text-violet-400" />
-                    <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-violet-400">Backup Codes</span>
-                  </div>
-                  {(Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).map((code: string, i: number) => (
-                    <CredField key={i} label={`code ${i + 1}`} value={code} />
-                  ))}
-                </div>
-              )}
-
-              {/* Other accounts */}
-              {viewEntry.otherAccounts && (() => {
-                try {
-                  const others = JSON.parse(viewEntry.otherAccounts);
-                  return Array.isArray(others) && others.length > 0 ? (
-                    <div className="space-y-0.5 py-2 border-t border-border/30">
-                      <div className="flex items-center gap-1.5 mb-2">
-                        <Smartphone className="w-3 h-3 text-orange-400" />
-                        <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-orange-400">Other Accounts</span>
-                      </div>
-                      {others.map((acc: any, i: number) => (
-                        <div key={i} className="ml-2 pb-2 mb-2 border-b border-border/20 last:border-0 last:mb-0 last:pb-0">
-                          <p className="font-mono text-[9px] text-primary/60 uppercase tracking-wider mb-1">{acc.platform}</p>
-                          {acc.username && <CredField label="user" value={acc.username} />}
-                          {acc.password && <CredField label="pass" value={acc.password} />}
-                          {acc.email && <CredField label="email" value={acc.email} />}
-                        </div>
-                      ))}
+                {/* Wallet addresses */}
+                {viewEntry.walletAddresses && (Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).length > 0 && (
+                  <div className="space-y-0.5 py-2 border-t border-border/30">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Wallet className="w-3 h-3 text-cyan-400" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-cyan-400">Wallets</span>
                     </div>
-                  ) : null;
-                } catch { return null; }
-              })()}
+                    {(Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).map((addr: string, i: number) => (
+                      <CredField key={i} label={`wallet ${i + 1}`} value={addr} />
+                    ))}
+                  </div>
+                )}
 
-              {/* Notes */}
-              {viewEntry.notes && (
-                <div className="border-t border-border/30 pt-3 mt-1">
-                  <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-1.5">Notes</p>
-                  <p className="font-mono text-xs text-muted-foreground leading-relaxed bg-muted/20 rounded-lg px-3 py-2 border border-border/30">
-                    {viewEntry.notes}
-                  </p>
-                </div>
-              )}
-            </div>
+                {/* Backup codes */}
+                {viewEntry.backupCodes && (Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).length > 0 && (
+                  <div className="space-y-0.5 py-2 border-t border-border/30">
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <Shield className="w-3 h-3 text-violet-400" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-violet-400">Backup Codes</span>
+                    </div>
+                    {(Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).map((code: string, i: number) => (
+                      <CredField key={i} label={`code ${i + 1}`} value={code} />
+                    ))}
+                  </div>
+                )}
 
-            {/* Footer: Edit + Remove */}
-            <div className="px-5 py-3 border-t border-card-border flex items-center justify-between gap-2 flex-shrink-0 bg-muted/5">
-              <button
-                onClick={() => { openEdit(viewEntry); setViewEntry(null); }}
-                className="flex items-center gap-2 font-mono text-xs border border-primary/30 text-primary hover:bg-primary/10 rounded-lg px-4 py-2 transition-all"
-              >
-                <Edit2 className="w-3.5 h-3.5" /> Edit Entity
-              </button>
-              <button
-                onClick={() => { setDeleteId(viewEntry.id); setViewEntry(null); }}
-                className="flex items-center gap-2 font-mono text-xs border border-red-400/30 text-red-400 hover:bg-red-400/10 rounded-lg px-4 py-2 transition-all"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remove
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+                {/* Other accounts */}
+                {viewEntry.otherAccounts && (() => {
+                  try {
+                    const others = JSON.parse(viewEntry.otherAccounts);
+                    return Array.isArray(others) && others.length > 0 ? (
+                      <div className="space-y-0.5 py-2 border-t border-border/30">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Smartphone className="w-3 h-3 text-orange-400" />
+                          <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-orange-400">Other Accounts</span>
+                        </div>
+                        {others.map((acc: any, i: number) => (
+                          <div key={i} className="ml-2 pb-2 mb-2 border-b border-border/20 last:border-0 last:mb-0 last:pb-0">
+                            <p className="font-mono text-[9px] text-primary/60 uppercase tracking-wider mb-1">{acc.platform}</p>
+                            {acc.username && <CredField label="user" value={acc.username} />}
+                            {acc.password && <CredField label="pass" value={acc.password} />}
+                            {acc.email && <CredField label="email" value={acc.email} />}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null;
+                  } catch { return null; }
+                })()}
+
+                {/* Notes */}
+                {viewEntry.notes && (
+                  <div className="border-t border-border/30 pt-3 mt-1">
+                    <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-1.5">Notes</p>
+                    <p className="font-mono text-xs text-muted-foreground leading-relaxed bg-muted/20 rounded-lg px-3 py-2 border border-border/30">
+                      {viewEntry.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <DialogFooter className="px-5 py-3 border-t border-card-border flex-shrink-0 bg-muted/5 flex items-center justify-between gap-2 sm:justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { openEdit(viewEntry); setViewEntry(null); }}
+                  className="font-mono text-xs gap-1.5"
+                >
+                  <Edit2 className="w-3.5 h-3.5" /> Edit Entity
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => { setDeleteId(viewEntry.id); setViewEntry(null); }}
+                  className="font-mono text-xs gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remove
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -10,7 +10,7 @@ import {
   Lock, Shield, Users, TrendingUp,
   Calendar, DollarSign, Edit3, X, Tag, Smartphone,
   Clock, UserCheck, Star, BarChart2,
-  Award, Linkedin, Github, Zap, Loader2, ChevronDown,
+  Award, Linkedin, Github, Zap, Loader2, ChevronDown, MoreVertical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -189,25 +189,155 @@ function SecretField({ label, value }: { label: string; value: string | null | u
   );
 }
 
+// ─── Account View Dialog ──────────────────────────────────────────────────────
+function AccountViewDialog({
+  account, open, onClose, onEdit,
+}: {
+  account: LocalAccount | null;
+  open: boolean;
+  onClose: () => void;
+  onEdit: (a: LocalAccount) => void;
+}) {
+  if (!account) return null;
+  const roi = calcROI(account.account_worth, account.buy_price);
+  const age = calcAge(account.account_create_date);
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="bg-card border-card-border max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="font-mono uppercase tracking-wider text-primary flex items-center gap-2">
+            <Shield className="w-4 h-4" />
+            {account.label || account.username || account.email || `Account #${account.id}`}
+          </DialogTitle>
+          <p className="text-[11px] font-mono text-muted-foreground/50">
+            {account.category}{age !== "—" ? ` · ${age} old` : ""}
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          {/* Credentials */}
+          <div>
+            <p className="font-mono text-[9px] uppercase tracking-widest text-primary/60 mb-2">Credentials</p>
+            <div className="space-y-0.5 bg-muted/10 rounded-lg px-3 py-2 border border-border/30">
+              <SecretField label="Username" value={account.username} />
+              <SecretField label="Email" value={account.email} />
+              <SecretField label="Password" value={account.password} />
+              <SecretField label="Rec. Email" value={account.recovery_email} />
+              <SecretField label="Rec. Pass" value={account.recovery_email_password} />
+              <SecretField label="2FA" value={account.twofa} />
+              <SecretField label="Rec. 2FA" value={account.recovery_email_twofa} />
+              <SecretField label="Backups" value={account.backup_codes} />
+            </div>
+          </div>
+
+          {/* Stats */}
+          {(account.account_worth > 0 || account.buy_price > 0 || account.followers) && (
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-primary/60 mb-2">Stats</p>
+              <div className="grid grid-cols-2 gap-2">
+                {account.account_worth > 0 && (
+                  <div className="bg-muted/10 border border-border/30 rounded-lg px-3 py-2">
+                    <div className="font-mono text-[9px] text-muted-foreground/50 uppercase">Worth</div>
+                    <div className="font-mono font-bold text-emerald-400 text-sm">${account.account_worth.toFixed(2)}</div>
+                  </div>
+                )}
+                {account.buy_price > 0 && (
+                  <div className="bg-muted/10 border border-border/30 rounded-lg px-3 py-2">
+                    <div className="font-mono text-[9px] text-muted-foreground/50 uppercase">Buy Price</div>
+                    <div className="font-mono font-bold text-foreground text-sm">${account.buy_price.toFixed(2)}</div>
+                  </div>
+                )}
+                {roi !== null && (
+                  <div className="bg-muted/10 border border-border/30 rounded-lg px-3 py-2">
+                    <div className="font-mono text-[9px] text-muted-foreground/50 uppercase">ROI</div>
+                    <div className={cn("font-mono font-bold text-sm", roi >= 0 ? "text-green-400" : "text-red-400")}>
+                      {roi >= 0 ? "+" : ""}{roi.toFixed(1)}%
+                    </div>
+                  </div>
+                )}
+                {account.followers && (
+                  <div className="bg-muted/10 border border-border/30 rounded-lg px-3 py-2">
+                    <div className="font-mono text-[9px] text-muted-foreground/50 uppercase">Followers</div>
+                    <div className="font-mono font-bold text-foreground text-sm">{account.followers}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Dates */}
+          {(account.account_create_date || account.account_buy_date || account.account_last_login_date) && (
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-primary/60 mb-2">Dates</p>
+              <div className="space-y-1.5">
+                {account.account_create_date && (
+                  <div className="flex items-center gap-2 text-muted-foreground/60">
+                    <Calendar className="w-3 h-3 flex-shrink-0" />
+                    <span className="font-mono text-[10px]">Created: {new Date(account.account_create_date).toLocaleDateString()}</span>
+                  </div>
+                )}
+                {account.account_buy_date && (
+                  <div className="flex items-center gap-2 text-muted-foreground/60">
+                    <Star className="w-3 h-3 flex-shrink-0" />
+                    <span className="font-mono text-[10px]">Bought: {new Date(account.account_buy_date).toLocaleDateString()}</span>
+                  </div>
+                )}
+                {account.account_last_login_date && (
+                  <div className="flex items-center gap-2 text-muted-foreground/60">
+                    <UserCheck className="w-3 h-3 flex-shrink-0" />
+                    <span className="font-mono text-[10px]">Last Login: {new Date(account.account_last_login_date).toLocaleDateString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          {account.notes && (
+            <div>
+              <p className="font-mono text-[9px] uppercase tracking-widest text-primary/60 mb-2">Notes</p>
+              <p className="font-mono text-xs text-muted-foreground leading-relaxed bg-muted/20 rounded-lg px-3 py-2 border border-border/30">
+                {account.notes}
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} className="font-mono text-xs">Close</Button>
+          <Button onClick={() => { onEdit(account); onClose(); }} className="font-mono text-xs gap-2">
+            <Edit3 className="w-3.5 h-3.5" /> Edit Account
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Account Card ─────────────────────────────────────────────────────────────
 function AccountCard({
-  account, onEdit, onDelete,
+  account, onEdit, onDelete, onView,
 }: {
   account: LocalAccount;
   onEdit: (a: LocalAccount) => void;
   onDelete: (id: number) => void;
+  onView: (a: LocalAccount) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const roi = calcROI(account.account_worth, account.buy_price);
   const age = calcAge(account.account_create_date);
   const grad = getPlatformGradient(account.category);
 
   return (
-    <div className={cn(
-      "bg-card border rounded-xl overflow-hidden group hover-lift hover-shimmer transition-all duration-300",
-      `bg-gradient-to-br ${grad}`
-    )}>
+    <div
+      className={cn(
+        "bg-card border rounded-xl group transition-all duration-300 cursor-pointer hover:border-primary/40 relative",
+        `bg-gradient-to-br ${grad}`
+      )}
+      onClick={() => { setMenuOpen(false); onView(account); }}
+    >
       {/* Header */}
-      <div className="px-4 py-2.5 border-b border-border/30 flex items-center justify-between">
+      <div className="px-4 py-2.5 border-b border-border/30 rounded-t-xl flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <Shield className="w-3 h-3 text-primary/40 flex-shrink-0" />
           <span className="font-mono font-bold text-sm text-foreground truncate">
@@ -217,13 +347,39 @@ function AccountCard({
             <span className="text-[10px] font-mono text-muted-foreground/50 truncate">@{account.username}</span>
           )}
         </div>
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => onEdit(account)} className="text-muted-foreground/40 hover:text-primary transition-colors p-1">
-            <Edit3 className="w-3.5 h-3.5" />
+        {/* 3-dot menu — always visible */}
+        <div className="relative flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            className="p-1.5 rounded-md text-muted-foreground/50 hover:text-foreground hover:bg-muted/40 transition-all"
+          >
+            <MoreVertical className="w-3.5 h-3.5" />
           </button>
-          <button onClick={() => onDelete(account.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors p-1">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+              <div className="absolute right-0 top-8 bg-popover border border-border rounded-lg shadow-xl min-w-[130px] overflow-hidden z-50">
+                <button
+                  onClick={() => { onView(account); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] hover:bg-primary/10 hover:text-primary transition-colors"
+                >
+                  <Eye className="w-3 h-3" /> View
+                </button>
+                <button
+                  onClick={() => { onEdit(account); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] hover:bg-primary/10 hover:text-primary transition-colors"
+                >
+                  <Edit3 className="w-3 h-3" /> Edit
+                </button>
+                <button
+                  onClick={() => { onDelete(account.id); setMenuOpen(false); }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-red-400 hover:bg-red-400/10 transition-colors"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -255,7 +411,7 @@ function AccountCard({
         )}
       </div>
 
-      {/* Credentials */}
+      {/* Credentials preview */}
       <div className="px-4 py-2 space-y-0.5">
         <SecretField label="Email" value={account.email} />
         <SecretField label="Password" value={account.password} />
@@ -829,6 +985,7 @@ export default function LocalAccounts() {
   const [loadingAccts, setLoadingAccts] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editAccount, setEditAccount] = useState<LocalAccount | undefined>();
+  const [viewAccount, setViewAccount] = useState<LocalAccount | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [catDialogOpen, setCatDialogOpen] = useState(false);
@@ -1085,6 +1242,7 @@ export default function LocalAccounts() {
                   <AccountCard
                     key={acc.id}
                     account={acc}
+                    onView={a => setViewAccount(a)}
                     onEdit={a => { setEditAccount(a); setFormOpen(true); }}
                     onDelete={id => setDeleteId(id)}
                   />
@@ -1096,6 +1254,13 @@ export default function LocalAccounts() {
       )}
 
       {/* ── Dialogs ───────────────────────────────────────────────────────── */}
+      <AccountViewDialog
+        account={viewAccount}
+        open={viewAccount !== null}
+        onClose={() => setViewAccount(null)}
+        onEdit={a => { setEditAccount(a); setFormOpen(true); }}
+      />
+
       <AccountFormDialog
         open={formOpen}
         onClose={() => setFormOpen(false)}
