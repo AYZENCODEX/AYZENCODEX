@@ -64,11 +64,14 @@ const ADMIN_NAV: NavGroup[] = [
     label: "Monitoring", icon: History,
     items: [
       { href: "/admin/activity", label: "Activity Log", icon: History },
+      { href: "/admin/health-rules", label: "Health Rules", icon: ShieldCheck },
     ],
   },
   {
     label: "Config", icon: Settings,
     items: [
+      { href: "/admin/categories", label: "Categories", icon: Database },
+      { href: "/admin/tools/networks", label: "Networks", icon: Radio },
       { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
       { href: "/admin/developer", label: "Developer", icon: Code2 },
@@ -89,6 +92,8 @@ const USER_NAV: NavGroup[] = [
     items: [
       { href: "/projects", label: "Projects", icon: FolderGit2,  pluginSlug: "projects" },
       { href: "/tasks",    label: "Tasks",    icon: CheckSquare, pluginSlug: "tasks" },
+      { href: "/content",  label: "Content AI", icon: Bot },
+      { href: "/teams",    label: "Teams",   icon: Users },
     ],
   },
   {

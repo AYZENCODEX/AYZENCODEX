@@ -39,6 +39,9 @@ const AdminReferrals    = lazy(() => import("@/pages/admin/referrals"));
 const AdminCreditsPage  = lazy(() => import("@/pages/admin/credits"));
 const AdminSubscriptions = lazy(() => import("@/pages/admin/subscriptions"));
 const AdminActivity      = lazy(() => import("@/pages/admin/activity"));
+const AdminCategories   = lazy(() => import("@/pages/admin/categories"));
+const AdminNetworks     = lazy(() => import("@/pages/admin/tools/networks"));
+const AdminHealthRules  = lazy(() => import("@/pages/admin/health-rules"));
 
 const UserHome          = lazy(() => import("@/pages/user/home"));
 const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
@@ -61,6 +64,8 @@ const CreditsPage       = lazy(() => import("@/pages/user/credits"));
 const UserHistory       = lazy(() => import("@/pages/user/history"));
 const EarnPage          = lazy(() => import("@/pages/user/earn"));
 const CalculatorPage    = lazy(() => import("@/pages/user/calculator"));
+const TeamsPage         = lazy(() => import("@/pages/user/teams"));
+const ContentPage       = lazy(() => import("@/pages/user/content"));
 
 function PageLoader() {
   return (
@@ -121,6 +126,9 @@ function Router() {
       <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
       <Route path="/admin/subscriptions">{() => <ProtectedRoute component={AdminSubscriptions} adminOnly />}</Route>
       <Route path="/admin/activity">{() => <ProtectedRoute component={AdminActivity} adminOnly />}</Route>
+      <Route path="/admin/categories">{() => <ProtectedRoute component={AdminCategories} adminOnly />}</Route>
+      <Route path="/admin/tools/networks">{() => <ProtectedRoute component={AdminNetworks} adminOnly />}</Route>
+      <Route path="/admin/health-rules">{() => <ProtectedRoute component={AdminHealthRules} adminOnly />}</Route>
 
       {/* User Routes */}
       <Route path="/home">{() => <ProtectedRoute component={UserHome} />}</Route>
@@ -144,6 +152,8 @@ function Router() {
       <Route path="/history">{() => <ProtectedRoute component={UserHistory} />}</Route>
       <Route path="/earn">{() => <ProtectedRoute component={EarnPage} />}</Route>
       <Route path="/calculator">{() => <ProtectedRoute component={CalculatorPage} />}</Route>
+      <Route path="/teams">{() => <ProtectedRoute component={TeamsPage} />}</Route>
+      <Route path="/content">{() => <ProtectedRoute component={ContentPage} />}</Route>
 
       <Route component={NotFound} />
     </Switch>

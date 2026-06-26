@@ -315,6 +315,52 @@ const MIGRATIONS = [
   // Extra project meta fields needed by teams / content modules
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'airdrop'",
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS account_type_filter TEXT",
+  // Networks table (DB-driven, replaces hardcoded NETWORKS array in tools.ts)
+  `CREATE TABLE IF NOT EXISTS networks (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    network_id TEXT,
+    chain TEXT NOT NULL,
+    symbol TEXT,
+    coingecko_id TEXT,
+    rpc_url TEXT,
+    gas_oracle_url TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // Seed default networks
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Ethereum', '1', 'ETH', 'ETH', 'ethereum', 'https://eth.llamarpc.com', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('BNB Chain', '56', 'BSC', 'BNB', 'binancecoin', 'https://bsc-dataseed.binance.org', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Polygon', '137', 'MATIC', 'MATIC', 'matic-network', 'https://polygon-rpc.com', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Arbitrum One', '42161', 'ARB', 'ETH', 'ethereum', 'https://arb1.arbitrum.io/rpc', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Optimism', '10', 'OP', 'ETH', 'optimism', 'https://mainnet.optimism.io', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Avalanche', '43114', 'AVAX', 'AVAX', 'avalanche-2', 'https://api.avax.network/ext/bc/C/rpc', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Base', '8453', 'BASE', 'ETH', 'ethereum', 'https://mainnet.base.org', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('zkSync Era', '324', 'ZK', 'ETH', 'ethereum', 'https://mainnet.era.zksync.io', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Scroll', '534352', 'SCROLL', 'ETH', 'ethereum', 'https://rpc.scroll.io', true) ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO networks (name, network_id, chain, symbol, coingecko_id, rpc_url, enabled) VALUES ('Linea', '59144', 'LINEA', 'ETH', 'ethereum', 'https://rpc.linea.build', true) ON CONFLICT (name) DO NOTHING",
+  // Local account snapshots (progress tracking over time)
+  `CREATE TABLE IF NOT EXISTS local_account_snapshots (
+    id SERIAL PRIMARY KEY,
+    local_account_id INTEGER NOT NULL,
+    metric_value REAL NOT NULL DEFAULT 0,
+    metric_type TEXT NOT NULL DEFAULT 'followers',
+    captured_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // Request metrics table (telemetry)
+  `CREATE TABLE IF NOT EXISTS request_metrics (
+    id SERIAL PRIMARY KEY,
+    route TEXT NOT NULL,
+    method TEXT NOT NULL,
+    status_code INTEGER NOT NULL,
+    duration_ms REAL NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // Seed default health rules
+  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('missing_2fa', NULL, 'warning', true) ON CONFLICT DO NOTHING",
+  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('missing_wallet', NULL, 'warning', true) ON CONFLICT DO NOTHING",
+  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('inactive_days', '30', 'critical', true) ON CONFLICT DO NOTHING",
+  "INSERT INTO health_rules (rule_key, threshold_value, severity, enabled) VALUES ('missing_email', NULL, 'warning', true) ON CONFLICT DO NOTHING",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

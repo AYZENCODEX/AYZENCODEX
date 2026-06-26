@@ -7,6 +7,8 @@ import router from "./routes";
 import { logger } from "./lib/logger";
 import { logBus } from "./lib/log-bus";
 import { globalErrorHandler, notFoundHandler } from "./middlewares/error-handler";
+import { db } from "@workspace/db";
+import { sql } from "drizzle-orm";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,17 +31,26 @@ app.use(
 app.use((req, res, next) => {
   const start = Date.now();
   res.on("finish", () => {
+    const durationMs = Date.now() - start;
     const code = res.statusCode;
     const level = code >= 500 ? "ERROR" : code >= 400 ? "WARN" : "INFO";
+    const route = req.url?.split("?")[0] ?? "/";
     logBus.push({
       time: Date.now(),
       level,
-      msg: `${req.method} ${req.url?.split("?")[0]} → ${code}`,
+      msg: `${req.method} ${route} → ${code}`,
       method: req.method,
-      url: req.url?.split("?")[0],
+      url: route,
       statusCode: code,
-      ms: Date.now() - start,
+      ms: durationMs,
     });
+    // Write to request_metrics table (fire-and-forget, only for /api/* routes)
+    if (route.startsWith("/api/")) {
+      db.execute(sql.raw(
+        `INSERT INTO request_metrics (route, method, status_code, duration_ms)
+         VALUES ('${route.replace(/'/g, "''")}', '${req.method}', ${code}, ${durationMs})`
+      )).catch(() => { /* ignore until table exists after migration */ });
+    }
   });
   next();
 });

@@ -36,6 +36,10 @@ import earnLinksRouter from "./earn-links";
 import categoriesRouter from "./categories";
 import teamsRouter from "./teams";
 import contentRouter from "./content";
+import entitiesRouter from "./entities";
+import twoFactorRouter from "./two-factor";
+import bulkRouter from "./bulk";
+import networksRouter from "./networks";
 
 const router: IRouter = Router();
 
@@ -76,5 +80,9 @@ router.use(earnLinksRouter);
 router.use(categoriesRouter);
 router.use(teamsRouter);
 router.use(contentRouter);
+router.use(entitiesRouter);
+router.use(twoFactorRouter);
+router.use(bulkRouter);
+router.use(networksRouter);
 
 export default router;
