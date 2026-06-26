@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useListVaultEntries, useCreateVaultEntry, useDeleteVaultEntry, customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
@@ -12,8 +12,8 @@ import {
   Plus, KeyRound, Trash2, Eye, EyeOff,
   Copy, Check, Mail, Hash, Lock, Shield,
   Phone, AtSign, X, Smartphone,
-  QrCode, Search, Download, Wallet, AlertTriangle, Star,
-  Loader2, Edit2,
+  QrCode, Search, Download, Upload, Wallet, AlertTriangle, Star,
+  Loader2, Edit2, MoreVertical,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -206,6 +206,8 @@ function EntityTab() {
   const [pinned, setPinned] = useState<number[]>([]);
   const [viewEntry, setViewEntry] = useState<EntryAny | null>(null);
   const [saving, setSaving] = useState(false);
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   const allEntries: EntryAny[] = (data as EntryAny[] | undefined) ?? [];
   const total2fa = allEntries.reduce((s, e) => s + (e.twitter2fa ? 1 : 0) + (e.discord2fa ? 1 : 0) + (e.telegram2fa ? 1 : 0), 0);
@@ -290,6 +292,27 @@ function EntityTab() {
     a.download = `vault-${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const importVault = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const entries = JSON.parse(text);
+      if (!Array.isArray(entries)) { toast({ variant: "destructive", title: "Invalid file — expected a JSON array" }); return; }
+      let count = 0;
+      for (const entry of entries) {
+        const { id: _id, createdAt: _c, updatedAt: _u, userId: _uid, entitySerial: _s, ...rest } = entry;
+        await createMutation.mutateAsync({ data: rest as any });
+        count++;
+      }
+      toast({ title: `✅ Imported ${count} ${count === 1 ? "entity" : "entities"}` });
+      queryClient.invalidateQueries();
+    } catch {
+      toast({ variant: "destructive", title: "Import failed", description: "File must be a valid vault JSON export" });
+    }
+    e.target.value = "";
   };
 
   const buildPayload = () => {
@@ -547,6 +570,10 @@ function EntityTab() {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-1.5 ml-auto">
+          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={importVault} />
+          <Button size="sm" variant="outline" className="h-8 font-mono text-[10px] gap-1.5 border-border/40 text-muted-foreground" onClick={() => importRef.current?.click()}>
+            <Upload className="w-3 h-3" /> Import
+          </Button>
           <Button size="sm" variant="outline" className="h-8 font-mono text-[10px] gap-1.5 border-border/40 text-muted-foreground" onClick={exportVault}>
             <Download className="w-3 h-3" /> Export
           </Button>
@@ -602,37 +629,57 @@ function EntityTab() {
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {filteredEntities.map((entry: EntryAny) => (
-            <div key={entry.id} className="bg-card border border-card-border hover:border-primary/40 transition-all rounded-xl overflow-hidden group relative">
+            <div
+              key={entry.id}
+              className="bg-card border border-card-border hover:border-primary/40 transition-all rounded-xl overflow-hidden group relative cursor-pointer"
+              onClick={() => { setMenuOpenId(null); setViewEntry(entry); }}
+            >
               {/* Pin */}
               <button
-                onClick={() => togglePin(entry.id)}
-                className={cn("absolute top-2 right-2 p-1 rounded transition-all z-10 opacity-0 group-hover:opacity-100", pinned.includes(entry.id) ? "text-amber-400 opacity-100" : "text-muted-foreground/30 hover:text-amber-400")}
+                onClick={e => { e.stopPropagation(); togglePin(entry.id); }}
+                className={cn("absolute top-2 left-2 p-1 rounded transition-all z-10 opacity-0 group-hover:opacity-100", pinned.includes(entry.id) ? "text-amber-400 opacity-100" : "text-muted-foreground/30 hover:text-amber-400")}
               >
                 <Star className="w-3 h-3" fill={pinned.includes(entry.id) ? "currentColor" : "none"} />
               </button>
 
+              {/* 3-dot menu button (always right side) */}
+              <div className="absolute top-2 right-2 z-20">
+                <button
+                  onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === entry.id ? null : entry.id); }}
+                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-all"
+                >
+                  <MoreVertical className="w-3.5 h-3.5" />
+                </button>
+                {menuOpenId === entry.id && (
+                  <div className="absolute right-0 top-7 bg-popover border border-border rounded-lg shadow-xl min-w-[130px] overflow-hidden z-30">
+                    <button
+                      onClick={e => { e.stopPropagation(); openEdit(entry); setMenuOpenId(null); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] hover:bg-primary/10 hover:text-primary transition-colors"
+                    >
+                      <Edit2 className="w-3 h-3" /> Edit Entity
+                    </button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setDeleteId(entry.id); setMenuOpenId(null); }}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-red-400 hover:bg-red-400/10 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" /> Remove
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* Header */}
-              <div className="bg-gradient-to-r from-primary/8 to-transparent border-b border-card-border px-4 py-3 flex items-center justify-between pr-8">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Hash className="w-3 h-3 text-primary/60 flex-shrink-0" />
-                  <span className="font-mono font-bold text-primary text-xs tracking-[0.15em] truncate">{entry.entitySerial || `AYZNA${entry.id}`}</span>
-                </div>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                  <button onClick={() => openEdit(entry)} className="text-muted-foreground/40 hover:text-primary transition-colors p-1 rounded hover:bg-primary/10">
-                    <Edit2 className="w-3 h-3" />
-                  </button>
-                  <button onClick={() => setDeleteId(entry.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors p-1 rounded hover:bg-red-400/10">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+              <div className="bg-gradient-to-r from-primary/8 to-transparent border-b border-card-border px-4 py-3 flex items-center gap-2 pr-10 pl-8">
+                <Hash className="w-3 h-3 text-primary/60 flex-shrink-0" />
+                <span className="font-mono font-bold text-primary text-xs tracking-[0.15em] truncate">{entry.entitySerial || `AYZNA${entry.id}`}</span>
               </div>
 
               {/* Body */}
               <div className="px-4 py-3 space-y-1">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="font-mono font-bold text-sm text-foreground">{entry.projectName}</span>
+                  <span className="font-mono font-bold text-sm text-foreground truncate">{entry.projectName}</span>
                   {entry.category && (
-                    <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border", CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Other)}>
+                    <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border flex-shrink-0", CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Other)}>
                       {entry.category}
                     </Badge>
                   )}
@@ -658,6 +705,9 @@ function EntityTab() {
                   { label: "2fa", value: entry.telegram2fa },
                 ]} />
                 {entry.notes && <p className="text-[9px] font-mono text-muted-foreground/40 truncate border-t border-border/20 pt-1.5 mt-1.5">{entry.notes}</p>}
+                <div className="pt-1 flex items-center justify-end">
+                  <span className="text-[8px] font-mono text-primary/30 uppercase tracking-widest">Click to view all credentials →</span>
+                </div>
               </div>
             </div>
           ))}
@@ -720,6 +770,162 @@ function EntityTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── View Entity Dialog ── */}
+      {viewEntry && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4"
+          onClick={() => setViewEntry(null)}
+        >
+          <div
+            className="bg-card border border-card-border rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden max-h-[92vh] flex flex-col"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Dialog header */}
+            <div className="px-5 pt-5 pb-4 border-b border-card-border flex-shrink-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Hash className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
+                    <span className="font-mono font-bold text-primary tracking-[0.15em] text-sm">
+                      {viewEntry.entitySerial || `AYZNA${viewEntry.id}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono font-bold text-foreground text-base">{viewEntry.projectName}</span>
+                    {viewEntry.category && (
+                      <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border", CATEGORY_COLORS[viewEntry.category] ?? CATEGORY_COLORS.Other)}>
+                        {viewEntry.category}
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/40 mt-2 flex items-center gap-1.5">
+                    <Eye className="w-2.5 h-2.5" /> Hover any field → eye icon shows password · copy icon copies value
+                  </p>
+                </div>
+                <button
+                  onClick={() => setViewEntry(null)}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded hover:bg-muted/30 flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable credential content */}
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              <PlatformSection title="Email" icon={Mail} color="text-emerald-400" fields={[
+                { label: "address", value: viewEntry.email },
+                { label: "password", value: viewEntry.emailPassword },
+                { label: "recovery", value: viewEntry.emailRecovery },
+                { label: "rcv pass", value: viewEntry.emailRecoveryPassword },
+              ]} />
+              <PlatformSection title="Twitter / X" icon={AtSign} color="text-sky-400" fields={[
+                { label: "handle", value: viewEntry.twitterUsername },
+                { label: "password", value: viewEntry.twitterPassword },
+                { label: "email", value: viewEntry.twitterEmail },
+                { label: "email pw", value: viewEntry.twitterEmailPassword },
+                { label: "2fa secret", value: viewEntry.twitter2fa },
+                { label: "followers", value: viewEntry.twitterFollowers },
+                { label: "rcv email", value: viewEntry.twitterEmailRecovery },
+                { label: "rcv pw", value: viewEntry.twitterEmailRecoveryPassword },
+              ]} />
+              <PlatformSection title="Discord" icon={Hash} color="text-indigo-400" fields={[
+                { label: "username", value: viewEntry.discordUsername },
+                { label: "password", value: viewEntry.discordPassword },
+                { label: "email", value: viewEntry.discordEmail },
+                { label: "email pw", value: viewEntry.discordEmailPassword },
+                { label: "2fa secret", value: viewEntry.discord2fa },
+                { label: "rcv email", value: viewEntry.discordEmailRecovery },
+                { label: "rcv pw", value: viewEntry.discordEmailRecoveryPassword },
+              ]} />
+              <PlatformSection title="Telegram" icon={Phone} color="text-blue-400" fields={[
+                { label: "username", value: viewEntry.telegramUsername },
+                { label: "phone", value: viewEntry.telegramPhone },
+                { label: "password", value: viewEntry.telegramPassword },
+                { label: "2fa secret", value: viewEntry.telegram2fa },
+                { label: "linked email", value: viewEntry.telegramLinkedEmail },
+                { label: "linked pw", value: viewEntry.telegramLinkedEmailPassword },
+              ]} />
+
+              {/* Wallet addresses */}
+              {viewEntry.walletAddresses && (Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).length > 0 && (
+                <div className="space-y-0.5 py-2 border-t border-border/30">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Wallet className="w-3 h-3 text-cyan-400" />
+                    <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-cyan-400">Wallets</span>
+                  </div>
+                  {(Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).map((addr: string, i: number) => (
+                    <CredField key={i} label={`wallet ${i + 1}`} value={addr} />
+                  ))}
+                </div>
+              )}
+
+              {/* Backup codes */}
+              {viewEntry.backupCodes && (Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).length > 0 && (
+                <div className="space-y-0.5 py-2 border-t border-border/30">
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <Shield className="w-3 h-3 text-violet-400" />
+                    <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-violet-400">Backup Codes</span>
+                  </div>
+                  {(Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).map((code: string, i: number) => (
+                    <CredField key={i} label={`code ${i + 1}`} value={code} />
+                  ))}
+                </div>
+              )}
+
+              {/* Other accounts */}
+              {viewEntry.otherAccounts && (() => {
+                try {
+                  const others = JSON.parse(viewEntry.otherAccounts);
+                  return Array.isArray(others) && others.length > 0 ? (
+                    <div className="space-y-0.5 py-2 border-t border-border/30">
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Smartphone className="w-3 h-3 text-orange-400" />
+                        <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-orange-400">Other Accounts</span>
+                      </div>
+                      {others.map((acc: any, i: number) => (
+                        <div key={i} className="ml-2 pb-2 mb-2 border-b border-border/20 last:border-0 last:mb-0 last:pb-0">
+                          <p className="font-mono text-[9px] text-primary/60 uppercase tracking-wider mb-1">{acc.platform}</p>
+                          {acc.username && <CredField label="user" value={acc.username} />}
+                          {acc.password && <CredField label="pass" value={acc.password} />}
+                          {acc.email && <CredField label="email" value={acc.email} />}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null;
+                } catch { return null; }
+              })()}
+
+              {/* Notes */}
+              {viewEntry.notes && (
+                <div className="border-t border-border/30 pt-3 mt-1">
+                  <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-1.5">Notes</p>
+                  <p className="font-mono text-xs text-muted-foreground leading-relaxed bg-muted/20 rounded-lg px-3 py-2 border border-border/30">
+                    {viewEntry.notes}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer: Edit + Remove */}
+            <div className="px-5 py-3 border-t border-card-border flex items-center justify-between gap-2 flex-shrink-0 bg-muted/5">
+              <button
+                onClick={() => { openEdit(viewEntry); setViewEntry(null); }}
+                className="flex items-center gap-2 font-mono text-xs border border-primary/30 text-primary hover:bg-primary/10 rounded-lg px-4 py-2 transition-all"
+              >
+                <Edit2 className="w-3.5 h-3.5" /> Edit Entity
+              </button>
+              <button
+                onClick={() => { setDeleteId(viewEntry.id); setViewEntry(null); }}
+                className="flex items-center gap-2 font-mono text-xs border border-red-400/30 text-red-400 hover:bg-red-400/10 rounded-lg px-4 py-2 transition-all"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
