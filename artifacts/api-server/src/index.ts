@@ -354,6 +354,20 @@ const MIGRATIONS = [
   "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing Wallet', 'Entity has no wallet address linked', 'entity', '{\"check\":\"missing_wallet\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
   "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Inactive 30 Days', 'Entity has not been active for 30+ days', 'entity', '{\"check\":\"inactive_days\",\"threshold\":30}', 'critical', true) ON CONFLICT (name) DO NOTHING",
   "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing Email', 'Entity has no email configured', 'entity', '{\"check\":\"missing_email\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
+  // ── Phase 7: referrals ──────────────────────────────────────────────────
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INTEGER",
+  "CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_idx ON users(referral_code) WHERE referral_code IS NOT NULL",
+  `CREATE TABLE IF NOT EXISTS referrals (
+    id SERIAL PRIMARY KEY,
+    referrer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    referred_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code_used TEXT NOT NULL,
+    reward_amount REAL NOT NULL DEFAULT 10,
+    reward_paid BOOLEAN NOT NULL DEFAULT FALSE,
+    paid_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {
