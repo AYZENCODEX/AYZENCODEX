@@ -63,7 +63,7 @@ outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "cd artifacts/ayzen-mobile && EXPO_PUBLIC_API_URL=https://$REPLIT_DEV_DOMAIN:8000 pnpm run dev -- --clear"
+args = "cd artifacts/ayzen-mobile && EXPO_PUBLIC_API_URL=https://$REPLIT_DEV_DOMAIN:8000 pnpm run dev -- --tunnel"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"

@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "1rN0BRVVrdr0r99a-Qj_I"
+uri = "file://attached_assets/ayzen-qr.png"
+type = "image"
+title = "AYZEN Mobile — Scan with Expo Go"
