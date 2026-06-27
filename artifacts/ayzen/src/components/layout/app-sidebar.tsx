@@ -103,6 +103,7 @@ const USER_NAV: NavGroup[] = [
       { href: "/vault?tab=wallet", label: "Wallet",     icon: Wallet,      pluginSlug: "vault" },
       { href: "/vault?tab=local",  label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
       { href: "/vault?tab=2fa",    label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
+      { href: "/vault?tab=mail",   label: "Mail Hub",   icon: Mail,        pluginSlug: "vault" },
     ],
   },
   {

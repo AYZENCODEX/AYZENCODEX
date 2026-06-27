@@ -69,11 +69,12 @@ router.get("/health-rules", requireAdmin, async (_req, res): Promise<void> => {
 
 // ── POST /health-rules — create health rule (admin only) ─────────────────────
 router.post("/health-rules", requireAdmin, async (req, res): Promise<void> => {
-  const { ruleKey, thresholdValue, severity, enabled = true } = req.body;
-  if (!ruleKey || !severity) { res.status(400).json({ error: "ruleKey and severity are required" }); return; }
+  const { name, description = "", ruleType = "entity", condition = "{}", severity = "warning", isActive = true } = req.body;
+  if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  const condStr = typeof condition === "string" ? condition : JSON.stringify(condition);
   const result = await db.execute(sql.raw(
-    `INSERT INTO health_rules (rule_key, threshold_value, severity, enabled)
-     VALUES ('${ruleKey.replace(/'/g, "''")}', ${thresholdValue ? `'${String(thresholdValue).replace(/'/g, "''")}'` : "NULL"}, '${severity.replace(/'/g, "''")}', ${Boolean(enabled)})
+    `INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active)
+     VALUES ('${name.replace(/'/g, "''")}', '${String(description).replace(/'/g, "''")}', '${ruleType.replace(/'/g, "''")}', '${condStr.replace(/'/g, "''")}', '${severity.replace(/'/g, "''")}', ${Boolean(isActive)})
      RETURNING *`
   ));
   res.status(201).json(result.rows[0]);
@@ -82,11 +83,16 @@ router.post("/health-rules", requireAdmin, async (req, res): Promise<void> => {
 // ── PATCH /health-rules/:id — update health rule ──────────────────────────────
 router.patch("/health-rules/:id", requireAdmin, async (req, res): Promise<void> => {
   const id = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const { thresholdValue, severity, enabled } = req.body;
+  const { name, description, severity, isActive, condition } = req.body;
   const sets: string[] = [];
-  if (thresholdValue !== undefined) sets.push(`threshold_value = ${thresholdValue ? `'${String(thresholdValue).replace(/'/g, "''")}'` : "NULL"}`);
+  if (name !== undefined) sets.push(`name = '${name.replace(/'/g, "''")}'`);
+  if (description !== undefined) sets.push(`description = '${String(description).replace(/'/g, "''")}'`);
   if (severity !== undefined) sets.push(`severity = '${severity.replace(/'/g, "''")}'`);
-  if (enabled !== undefined) sets.push(`enabled = ${Boolean(enabled)}`);
+  if (isActive !== undefined) sets.push(`is_active = ${Boolean(isActive)}`);
+  if (condition !== undefined) {
+    const c = typeof condition === "string" ? condition : JSON.stringify(condition);
+    sets.push(`condition = '${c.replace(/'/g, "''")}'`);
+  }
   if (!sets.length) { res.status(400).json({ error: "Nothing to update" }); return; }
   const result = await db.execute(sql.raw(`UPDATE health_rules SET ${sets.join(", ")} WHERE id = ${id} RETURNING *`));
   if (!result.rows.length) { res.status(404).json({ error: "Not found" }); return; }

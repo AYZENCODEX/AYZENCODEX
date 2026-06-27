@@ -13,7 +13,7 @@ import {
   Copy, Check, Mail, Hash, Lock, Shield,
   Phone, AtSign, X, Smartphone,
   QrCode, Search, Download, Upload, Wallet, AlertTriangle, Star,
-  Loader2, Edit2, MoreVertical,
+  Loader2, Edit2, MoreVertical, LayoutDashboard, List,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,21 +21,13 @@ import { cn } from "@/lib/utils";
 import LocalAccounts from "@/components/local-accounts";
 import { QRCodeSVG } from "qrcode.react";
 
-const UserWallets = lazy(() => import("@/pages/user/wallets"));
-const Authenticator = lazy(() => import("@/pages/user/authenticator"));
+const VaultLocalDashboard = lazy(() => import("@/pages/user/vault-local-dashboard"));
+const VaultEntityDashboard = lazy(() => import("@/pages/user/vault-entity-dashboard"));
+const VaultTwoFa = lazy(() => import("@/pages/user/vault-2fa"));
+const VaultMail = lazy(() => import("@/pages/user/vault-mail"));
+const VaultWalletSeed = lazy(() => import("@/pages/user/vault-wallet-seed"));
 
 const CATEGORIES = ["DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Social", "Other"];
-
-const CATEGORY_COLORS: Record<string, string> = {
-  DeFi: "text-cyan-400 border-cyan-400/20 bg-cyan-400/5",
-  NFT: "text-purple-400 border-purple-400/20 bg-purple-400/5",
-  GameFi: "text-emerald-400 border-emerald-400/20 bg-emerald-400/5",
-  Layer2: "text-blue-400 border-blue-400/20 bg-blue-400/5",
-  Testnet: "text-orange-400 border-orange-400/20 bg-orange-400/5",
-  CEX: "text-amber-400 border-amber-400/20 bg-amber-400/5",
-  Social: "text-pink-400 border-pink-400/20 bg-pink-400/5",
-  Other: "text-muted-foreground border-border bg-muted/20",
-};
 
 function LoadingTab() {
   return (
@@ -81,39 +73,6 @@ function CredField({ label, value }: { label: string; value: string | null | und
         <button onClick={copy} className={cn("transition-colors", copied ? "text-emerald-400" : "text-muted-foreground/40 hover:text-primary")}>
           {copied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
         </button>
-      </div>
-    </div>
-  );
-}
-
-function TwoFaCard({ entity, label, value }: { entity: string; label: string; value: string }) {
-  const [shown, setShown] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <div className="bg-card border border-card-border rounded-xl p-4 hover:border-primary/30 transition-all group">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">{entity}</div>
-          <div className="font-mono text-xs font-bold text-primary mt-0.5 flex items-center gap-1.5">
-            <QrCode className="w-3 h-3" /> {label}
-          </div>
-        </div>
-        <div className="flex gap-1.5">
-          <button onClick={() => setShown(s => !s)} className="text-muted-foreground/40 hover:text-primary transition-colors p-1.5 rounded-md hover:bg-primary/10">
-            {shown ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-          </button>
-          <button onClick={copy} className={cn("p-1.5 rounded-md transition-all", copied ? "text-emerald-400 bg-emerald-400/10" : "text-muted-foreground/40 hover:text-primary hover:bg-primary/10")}>
-            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
-        </div>
-      </div>
-      <div className="font-mono text-sm bg-muted/20 rounded-lg px-3 py-2 border border-border/30 text-center tracking-widest">
-        {shown ? value : "•".repeat(Math.min(value.length, 16))}
       </div>
     </div>
   );
@@ -185,8 +144,8 @@ function newOther(): OtherAccount {
   return { id: Math.random().toString(36).slice(2), platform: "", username: "", password: "", email: "", notes: "" };
 }
 
-// ── Entity Tab ─────────────────────────────────────────────────────────────────
-function EntityTab() {
+// ── Entity Manager (full CRUD) ─────────────────────────────────────────────────
+function EntityManager() {
   const { data, isLoading } = useListVaultEntries();
   const createMutation = useCreateVaultEntry();
   const deleteMutation = useDeleteVaultEntry();
@@ -210,8 +169,6 @@ function EntityTab() {
   const importRef = useRef<HTMLInputElement>(null);
 
   const allEntries: EntryAny[] = (data as EntryAny[] | undefined) ?? [];
-  const total2fa = allEntries.reduce((s, e) => s + (e.twitter2fa ? 1 : 0) + (e.discord2fa ? 1 : 0) + (e.telegram2fa ? 1 : 0), 0);
-  const missing2fa = allEntries.filter(e => !e.twitter2fa && !e.discord2fa && !e.telegram2fa).length;
 
   const filteredEntities = (() => {
     let entries = [...allEntries];
@@ -358,515 +315,255 @@ function EntityTab() {
     }
     setSaving(true);
     try {
-      const token = localStorage.getItem("ayzen_token") ?? "";
-      const res = await fetch(`/api/vault/${editId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(buildPayload()),
-      });
-      if (res.ok) {
-        toast({ title: "Entity updated" });
-        queryClient.invalidateQueries();
-        setOpen(false);
-        resetForm();
-        setEditId(null);
-      } else {
-        const d = await res.json();
-        toast({ variant: "destructive", title: d.error ?? "Failed to update entity" });
-      }
-    } catch {
-      toast({ variant: "destructive", title: "Connection error" });
-    }
-    setSaving(false);
+      await customFetch(`/vault/${editId}`, { method: "PATCH", body: JSON.stringify(buildPayload()) });
+      toast({ title: "Entity updated" });
+      queryClient.invalidateQueries();
+      setOpen(false);
+      resetForm();
+      setEditId(null);
+    } catch { toast({ variant: "destructive", title: "Failed to update entity" }); }
+    finally { setSaving(false); }
   };
 
-  const handleDelete = (id: number) => {
-    deleteMutation.mutate({ id }, {
-      onSuccess: () => { toast({ title: "Entity removed" }); queryClient.invalidateQueries(); setDeleteId(null); }
-    });
+  const FORM_TABS = [
+    { id: "main", label: "Main" },
+    { id: "twitter", label: "Twitter" },
+    { id: "discord", label: "Discord" },
+    { id: "telegram", label: "Telegram" },
+    { id: "wallet", label: "Wallet" },
+    { id: "other", label: "Other" },
+  ];
+
+  const CATEGORY_COLORS: Record<string, string> = {
+    DeFi: "text-cyan-400 border-cyan-400/20 bg-cyan-400/5",
+    NFT: "text-purple-400 border-purple-400/20 bg-purple-400/5",
+    GameFi: "text-emerald-400 border-emerald-400/20 bg-emerald-400/5",
+    Layer2: "text-blue-400 border-blue-400/20 bg-blue-400/5",
+    Testnet: "text-orange-400 border-orange-400/20 bg-orange-400/5",
+    CEX: "text-amber-400 border-amber-400/20 bg-amber-400/5",
+    Social: "text-pink-400 border-pink-400/20 bg-pink-400/5",
+    Other: "text-muted-foreground border-border bg-muted/20",
   };
-
-  const isEditing = editId !== null;
-
-  const EntityFormContent = (
-    <>
-      {/* Form tabs */}
-      <div className="flex gap-1 p-1 bg-muted/30 rounded-lg flex-wrap">
-        {[
-          { id: "main", label: "Main" }, { id: "twitter", label: "Twitter" },
-          { id: "discord", label: "Discord" }, { id: "telegram", label: "Telegram" },
-          { id: "other", label: "Other" }, { id: "wallet", label: "Wallet" },
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setFormTab(t.id)}
-            className={cn(
-              "flex-1 py-1 rounded-md font-mono text-[9px] uppercase tracking-wider transition-all",
-              formTab === t.id ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/50 hover:text-muted-foreground"
-            )}
-          >{t.label}</button>
-        ))}
-      </div>
-
-      <div className="space-y-3 py-1">
-        {formTab === "main" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Category *</Label>
-                <Select value={form.category} onValueChange={v => setForm(p => ({ ...p, category: v }))}>
-                  <SelectTrigger className="h-8 font-mono text-xs bg-input">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIES.map(c => <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Entity Name *</Label>
-                <Input value={form.projectName} onChange={f("projectName")} className="h-8 font-mono text-xs bg-input" placeholder="Project / protocol name" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Email</Label>
-                <Input value={form.email} onChange={f("email")} className="h-8 font-mono text-xs bg-input" placeholder="main@email.com" />
-              </div>
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label>
-                <Input type="password" value={form.emailPassword} onChange={f("emailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label>
-                <Input value={form.emailRecovery} onChange={f("emailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" />
-              </div>
-              <div className="space-y-1">
-                <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Pass</Label>
-                <Input type="password" value={form.emailRecoveryPassword} onChange={f("emailRecoveryPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Backup Codes</Label>
-              <Textarea value={form.backupCodes} onChange={f("backupCodes")} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Paste backup codes (one per line)" />
-            </div>
-            <div className="space-y-1">
-              <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Notes</Label>
-              <Textarea value={form.notes} onChange={f("notes")} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Any notes..." />
-            </div>
-          </div>
-        )}
-
-        {formTab === "twitter" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.twitterUsername} onChange={f("twitterUsername")} className="h-8 font-mono text-xs bg-input" placeholder="@handle" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.twitterPassword} onChange={f("twitterPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Linked Email</Label><Input value={form.twitterEmail} onChange={f("twitterEmail")} className="h-8 font-mono text-xs bg-input" placeholder="twitter@email.com" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.twitterEmailPassword} onChange={f("twitterEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Followers</Label><Input value={form.twitterFollowers} onChange={f("twitterFollowers")} className="h-8 font-mono text-xs bg-input" placeholder="e.g. 1200" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.twitter2fa} onChange={f("twitter2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label><Input value={form.twitterEmailRecovery} onChange={f("twitterEmailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Recovery Pass</Label><Input type="password" value={form.twitterEmailRecoveryPassword} onChange={f("twitterEmailRecoveryPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-          </div>
-        )}
-
-        {formTab === "discord" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.discordUsername} onChange={f("discordUsername")} className="h-8 font-mono text-xs bg-input" placeholder="User#1234" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.discordPassword} onChange={f("discordPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Email</Label><Input value={form.discordEmail} onChange={f("discordEmail")} className="h-8 font-mono text-xs bg-input" placeholder="discord@email.com" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.discordEmailPassword} onChange={f("discordEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.discord2fa} onChange={f("discord2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Recovery Email</Label><Input value={form.discordEmailRecovery} onChange={f("discordEmailRecovery")} className="h-8 font-mono text-xs bg-input" placeholder="recovery@email.com" /></div>
-            </div>
-          </div>
-        )}
-
-        {formTab === "telegram" && (
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Username</Label><Input value={form.telegramUsername} onChange={f("telegramUsername")} className="h-8 font-mono text-xs bg-input" placeholder="@username" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Password</Label><Input type="password" value={form.telegramPassword} onChange={f("telegramPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Phone</Label><Input value={form.telegramPhone} onChange={f("telegramPhone")} className="h-8 font-mono text-xs bg-input" placeholder="+1234567890" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">2FA Secret</Label><Input value={form.telegram2fa} onChange={f("telegram2fa")} className="h-8 font-mono text-xs bg-input" placeholder="TOTP secret key" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase">Linked Email</Label><Input value={form.telegramLinkedEmail} onChange={f("telegramLinkedEmail")} className="h-8 font-mono text-xs bg-input" placeholder="linked@email.com" /></div>
-              <div className="space-y-1"><Label className="font-mono text-[10px] text-muted-foreground/60 uppercase flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Pass</Label><Input type="password" value={form.telegramLinkedEmailPassword} onChange={f("telegramLinkedEmailPassword")} className="h-8 font-mono text-xs bg-input" placeholder="••••••••" /></div>
-            </div>
-          </div>
-        )}
-
-        {formTab === "other" && (
-          <div className="space-y-3">
-            {otherAccounts.map(a => (
-              <OtherAccountForm key={a.id} account={a} onChange={u => updateOther(a.id, u)} onRemove={() => removeOther(a.id)} />
-            ))}
-            <Button variant="outline" size="sm" className="w-full h-8 font-mono text-[10px] border-dashed border-border/60 gap-1.5 text-muted-foreground" onClick={addOther}>
-              <Plus className="w-3 h-3" /> Add Account
-            </Button>
-          </div>
-        )}
-
-        {formTab === "wallet" && (
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="font-mono text-[10px] text-muted-foreground/60 uppercase tracking-wider">Wallet Addresses</Label>
-              <Textarea value={form.walletAddresses} onChange={f("walletAddresses")} className="font-mono text-xs bg-input min-h-[100px] resize-none" placeholder="Paste wallet addresses (one per line)" />
-            </div>
-          </div>
-        )}
-      </div>
-    </>
-  );
 
   return (
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-0 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40" />
-          <Input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search entities..."
-            className="pl-8 h-8 font-mono text-xs bg-input"
-          />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/40" />
+          <Input value={search} onChange={e => setSearch(e.target.value)} className="pl-8 font-mono text-xs h-8 bg-input" placeholder="Search entities..." />
         </div>
         <Select value={filterCat} onValueChange={setFilterCat}>
-          <SelectTrigger className="h-8 w-[120px] font-mono text-xs bg-input">
+          <SelectTrigger className="w-32 font-mono text-xs h-8 bg-input">
             <SelectValue placeholder="Category" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            <SelectItem value="all" className="font-mono text-xs">All categories</SelectItem>
+            {CATEGORIES.map(c => <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={sortBy} onValueChange={v => setSortBy(v as any)}>
-          <SelectTrigger className="h-8 w-[100px] font-mono text-xs bg-input">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="date">By Date</SelectItem>
-            <SelectItem value="name">By Name</SelectItem>
-            <SelectItem value="category">By Category</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="flex items-center gap-1.5 ml-auto">
-          <input ref={importRef} type="file" accept=".json" className="hidden" onChange={importVault} />
-          <Button size="sm" variant="outline" className="h-8 font-mono text-[10px] gap-1.5 border-border/40 text-muted-foreground" onClick={() => importRef.current?.click()}>
-            <Upload className="w-3 h-3" /> Import
-          </Button>
-          <Button size="sm" variant="outline" className="h-8 font-mono text-[10px] gap-1.5 border-border/40 text-muted-foreground" onClick={exportVault}>
+        <div className="flex items-center gap-1 ml-auto">
+          <input type="file" ref={importRef} className="hidden" accept=".json" onChange={importVault} />
+          <Button size="sm" variant="outline" onClick={exportVault} className="font-mono text-xs gap-1.5 h-8">
             <Download className="w-3 h-3" /> Export
           </Button>
-          <Button size="sm" className="h-8 font-mono text-[10px] uppercase tracking-wider gap-1.5" onClick={() => { resetForm(); setEditId(null); setOpen(true); }}>
-            <Plus className="h-3.5 w-3.5" /> New Entity
+          <Button size="sm" variant="outline" onClick={() => importRef.current?.click()} className="font-mono text-xs gap-1.5 h-8">
+            <Upload className="w-3 h-3" /> Import
+          </Button>
+          <Button size="sm" onClick={() => { resetForm(); setEditId(null); setOpen(true); }} className="font-mono text-xs gap-1.5 h-8">
+            <Plus className="w-3.5 h-3.5" /> New Entity
           </Button>
         </div>
       </div>
 
-      {/* Stats row */}
+      {/* Stats */}
       {allEntries.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {[
-            { label: "Entities", value: allEntries.length, color: "text-primary" },
-            { label: "2FA Codes", value: total2fa, color: "text-amber-400" },
-            { label: "Categories", value: new Set(allEntries.map(e => e.category)).size, color: "text-violet-400" },
-            { label: "Security", value: missing2fa > 0 ? `${missing2fa} gaps` : "100%", color: missing2fa > 0 ? "text-amber-400" : "text-emerald-400" },
-          ].map(s => (
-            <div key={s.label} className="bg-card border border-card-border rounded-xl px-4 py-3">
-              <div className={cn("font-mono font-bold text-lg leading-none", s.color)}>{s.value}</div>
-              <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mt-1">{s.label}</div>
-            </div>
-          ))}
+        <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground/50">
+          <span>{allEntries.length} entities</span>
+          <span>·</span>
+          <span>{allEntries.filter(e => e.twitter2fa || e.discord2fa || e.telegram2fa).length} with 2FA</span>
+          <span>·</span>
+          <span>{allEntries.filter(e => e.hasSeedPhrase).length} with seed</span>
         </div>
       )}
 
-      {/* Health warning */}
-      {missing2fa > 0 && allEntries.length > 0 && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-400/8 border border-amber-400/20">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-          <p className="font-mono text-[10px] text-amber-400">{missing2fa} entit{missing2fa === 1 ? "y" : "ies"} missing 2FA protection</p>
-        </div>
-      )}
-
-      {/* Entity list */}
+      {/* Entity grid */}
       {isLoading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[0,1,2,3].map(i => <div key={i} className="h-48 bg-card border border-card-border rounded-xl animate-pulse" />)}
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-6 h-6 text-primary animate-spin" />
         </div>
       ) : filteredEntities.length === 0 ? (
-        <div className="py-20 flex flex-col items-center gap-4 border border-dashed border-primary/15 rounded-2xl bg-primary/2">
-          <div className="w-16 h-16 rounded-2xl border border-primary/20 flex items-center justify-center bg-primary/5">
-            <Shield className="w-7 h-7 text-primary/30" />
+        <div className="text-center py-20 space-y-3">
+          <div className="w-14 h-14 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center mx-auto">
+            <Shield className="w-6 h-6 text-primary/40" />
           </div>
-          <div className="text-center">
-            <div className="font-mono font-bold text-foreground/60 mb-1">No entities yet</div>
-            <div className="text-[10px] font-mono text-muted-foreground/40">Create your first vault entity to secure your credentials</div>
-          </div>
-          <Button size="sm" className="gap-2 font-mono text-xs" onClick={() => { resetForm(); setEditId(null); setOpen(true); }}>
-            <Plus className="w-3.5 h-3.5" /> Create First Entity
-          </Button>
+          <p className="font-mono text-sm text-muted-foreground/60">
+            {search || filterCat !== "all" ? "No entities match your search" : "No entities yet — add your first"}
+          </p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredEntities.map((entry: EntryAny) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filteredEntities.map(entry => (
             <div
               key={entry.id}
-              className="bg-card border border-card-border hover:border-primary/40 transition-all rounded-xl group relative cursor-pointer"
-              onClick={() => { setMenuOpenId(null); setViewEntry(entry); }}
+              className={cn(
+                "bg-card border rounded-xl p-4 hover:border-primary/30 transition-all cursor-pointer group relative",
+                pinned.includes(entry.id) ? "border-primary/30" : "border-card-border"
+              )}
+              onClick={() => setViewEntry(entry)}
             >
-              {/* Pin */}
-              <button
-                onClick={e => { e.stopPropagation(); togglePin(entry.id); }}
-                className={cn("absolute top-2 left-2 p-1 rounded transition-all z-10 opacity-0 group-hover:opacity-100", pinned.includes(entry.id) ? "text-amber-400 opacity-100" : "text-muted-foreground/30 hover:text-amber-400")}
-              >
-                <Star className="w-3 h-3" fill={pinned.includes(entry.id) ? "currentColor" : "none"} />
-              </button>
+              {/* Category + pin */}
+              <div className="flex items-center justify-between mb-3">
+                <Badge variant="outline" className={cn("font-mono text-[9px] uppercase tracking-wider px-1.5", CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS["Other"])}>
+                  {entry.category}
+                </Badge>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={e => { e.stopPropagation(); togglePin(entry.id); }}
+                    className={cn("p-1 rounded transition-all", pinned.includes(entry.id) ? "text-amber-400" : "text-muted-foreground/40 hover:text-amber-400")}
+                  >
+                    <Star className="w-3 h-3" fill={pinned.includes(entry.id) ? "currentColor" : "none"} />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); openEdit(entry); }}
+                    className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); setDeleteId(entry.id); }}
+                    className="p-1 rounded text-muted-foreground/40 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
 
-              {/* 3-dot menu button (always right side) */}
-              <div className="absolute top-2 right-2 z-20">
-                <button
-                  onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === entry.id ? null : entry.id); }}
-                  className="p-1.5 rounded-md text-muted-foreground/40 hover:text-foreground hover:bg-muted/40 transition-all"
-                >
-                  <MoreVertical className="w-3.5 h-3.5" />
-                </button>
-                {menuOpenId === entry.id && (
-                  <>
-                  <div className="fixed inset-0 z-[25]" onClick={e => { e.stopPropagation(); setMenuOpenId(null); }} />
-                  <div className="absolute right-0 top-7 bg-popover border border-border rounded-lg shadow-xl min-w-[130px] overflow-hidden z-30">
-                    <button
-                      onClick={e => { e.stopPropagation(); openEdit(entry); setMenuOpenId(null); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] hover:bg-primary/10 hover:text-primary transition-colors"
-                    >
-                      <Edit2 className="w-3 h-3" /> Edit Entity
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); setDeleteId(entry.id); setMenuOpenId(null); }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-left font-mono text-[11px] text-red-400 hover:bg-red-400/10 transition-colors"
-                    >
-                      <Trash2 className="w-3 h-3" /> Remove
-                    </button>
-                  </div>
-                  </>
+              <p className="font-mono text-sm font-bold text-foreground truncate mb-1">{entry.projectName}</p>
+              <p className="font-mono text-[10px] text-muted-foreground/50 mb-3">{entry.entitySerial}</p>
+
+              {/* Feature chips */}
+              <div className="flex flex-wrap gap-1">
+                {entry.email && <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-cyan-400/10 text-cyan-400 border border-cyan-400/20">EMAIL</span>}
+                {entry.twitterUsername && <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-sky-400/10 text-sky-400 border border-sky-400/20">TW</span>}
+                {entry.discordUsername && <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-indigo-400/10 text-indigo-400 border border-indigo-400/20">DC</span>}
+                {entry.telegramUsername && <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-blue-400/10 text-blue-400 border border-blue-400/20">TG</span>}
+                {(entry.twitter2fa || entry.discord2fa || entry.telegram2fa) && <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-emerald-400/10 text-emerald-400 border border-emerald-400/20">2FA</span>}
+                {entry.hasSeedPhrase && <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-violet-400/10 text-violet-400 border border-violet-400/20">SEED</span>}
+                {Array.isArray(entry.walletAddresses) && entry.walletAddresses.length > 0 && (
+                  <span className="font-mono text-[8px] px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20">WALLET</span>
                 )}
-              </div>
-
-              {/* Header */}
-              <div className="bg-gradient-to-r from-primary/8 to-transparent border-b border-card-border px-4 py-3 flex items-center gap-2 pr-10 pl-8">
-                <Hash className="w-3 h-3 text-primary/60 flex-shrink-0" />
-                <span className="font-mono font-bold text-primary text-xs tracking-[0.15em] truncate">{entry.entitySerial || `AYZNA${entry.id}`}</span>
-              </div>
-
-              {/* Body */}
-              <div className="px-4 py-3 space-y-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="font-mono font-bold text-sm text-foreground truncate">{entry.projectName}</span>
-                  {entry.category && (
-                    <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border flex-shrink-0", CATEGORY_COLORS[entry.category] ?? CATEGORY_COLORS.Other)}>
-                      {entry.category}
-                    </Badge>
-                  )}
-                </div>
-                <PlatformSection title="Email" icon={Mail} color="text-emerald-400" fields={[
-                  { label: "address", value: entry.email },
-                  { label: "pass", value: entry.emailPassword },
-                  { label: "recovery", value: entry.emailRecovery },
-                ]} />
-                <PlatformSection title="Twitter" icon={AtSign} color="text-sky-400" fields={[
-                  { label: "handle", value: entry.twitterUsername },
-                  { label: "pass", value: entry.twitterPassword },
-                  { label: "2fa", value: entry.twitter2fa },
-                ]} />
-                <PlatformSection title="Discord" icon={Hash} color="text-indigo-400" fields={[
-                  { label: "user", value: entry.discordUsername },
-                  { label: "pass", value: entry.discordPassword },
-                  { label: "2fa", value: entry.discord2fa },
-                ]} />
-                <PlatformSection title="Telegram" icon={Phone} color="text-blue-400" fields={[
-                  { label: "user", value: entry.telegramUsername },
-                  { label: "phone", value: entry.telegramPhone },
-                  { label: "2fa", value: entry.telegram2fa },
-                ]} />
-                {entry.notes && <p className="text-[9px] font-mono text-muted-foreground/40 truncate border-t border-border/20 pt-1.5 mt-1.5">{entry.notes}</p>}
-                <div className="pt-1 flex items-center justify-end">
-                  <span className="text-[8px] font-mono text-primary/30 uppercase tracking-widest">Click to view all credentials →</span>
-                </div>
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* QR Modal */}
-      {qrAddress && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={() => setQrAddress(null)}>
-          <div className="bg-card border border-card-border rounded-xl p-5 flex flex-col items-center gap-4 w-[280px] shadow-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between w-full">
-              <span className="font-mono text-xs uppercase tracking-widest text-primary">Wallet QR</span>
-              <button onClick={() => setQrAddress(null)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="bg-white p-3 rounded-lg">
-              <QRCodeSVG value={qrAddress} size={180} bgColor="#ffffff" fgColor="#0a0a0a" />
-            </div>
-            <p className="font-mono text-[10px] text-muted-foreground/70 text-center break-all px-1">{qrAddress}</p>
-          </div>
-        </div>
-      )}
-
-      {/* Create / Edit dialog */}
-      <Dialog open={open} onOpenChange={o => { if (!o) { setOpen(false); resetForm(); setEditId(null); } }}>
-        <DialogContent className="bg-card border-card-border max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="font-mono uppercase tracking-wider text-primary flex items-center gap-2">
-              {isEditing ? <Edit2 className="w-4 h-4" /> : <Shield className="w-4 h-4" />}
-              {isEditing ? "Edit Vault Entity" : "New Vault Entity"}
-            </DialogTitle>
-          </DialogHeader>
-          {EntityFormContent}
-          <DialogFooter className="gap-2 pt-2">
-            <Button variant="outline" onClick={() => { setOpen(false); resetForm(); setEditId(null); }} className="font-mono text-xs">Cancel</Button>
-            <Button
-              onClick={isEditing ? handleUpdate : handleCreate}
-              disabled={createMutation.isPending || saving}
-              className="font-mono text-xs uppercase tracking-wider"
-            >
-              {(createMutation.isPending || saving) ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : (isEditing ? "Save Changes" : "Secure Entity")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete confirmation */}
-      <Dialog open={deleteId !== null} onOpenChange={o => !o && setDeleteId(null)}>
-        <DialogContent className="bg-card border-card-border max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="font-mono text-red-400 flex items-center gap-2">
-              <Trash2 className="w-4 h-4" /> Delete Entity?
-            </DialogTitle>
-          </DialogHeader>
-          <p className="text-sm font-mono text-muted-foreground">This will permanently delete all credentials stored in this entity. This cannot be undone.</p>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setDeleteId(null)} className="font-mono text-xs">Cancel</Button>
-            <Button variant="destructive" onClick={() => deleteId && handleDelete(deleteId)} disabled={deleteMutation.isPending} className="font-mono text-xs">
-              {deleteMutation.isPending ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* ── View Entity Dialog ── */}
-      <Dialog open={viewEntry !== null} onOpenChange={o => !o && setViewEntry(null)}>
-        <DialogContent className="bg-card border-card-border max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+      {/* View dialog */}
+      <Dialog open={!!viewEntry} onOpenChange={() => setViewEntry(null)}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-hidden flex flex-col p-0">
           {viewEntry && (
             <>
-              {/* Header */}
-              <DialogHeader className="px-5 pt-5 pb-4 border-b border-card-border flex-shrink-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <Hash className="w-3.5 h-3.5 text-primary/60 flex-shrink-0" />
-                  <span className="font-mono font-bold text-primary tracking-[0.15em] text-sm">
-                    {viewEntry.entitySerial || `AYZNA${viewEntry.id}`}
-                  </span>
+              <DialogHeader className="px-5 pt-5 pb-3 flex-shrink-0 border-b border-card-border">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-4.5 h-4.5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <DialogTitle className="font-mono text-sm font-bold text-foreground truncate">{viewEntry.projectName}</DialogTitle>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className={cn("font-mono text-[9px] px-1.5", CATEGORY_COLORS[viewEntry.category] ?? CATEGORY_COLORS["Other"])}>
+                        {viewEntry.category}
+                      </Badge>
+                      <span className="font-mono text-[9px] text-muted-foreground/50">{viewEntry.entitySerial}</span>
+                    </div>
+                  </div>
                 </div>
-                <DialogTitle className="flex items-center gap-2 flex-wrap font-mono font-bold text-foreground text-base">
-                  {viewEntry.projectName}
-                  {viewEntry.category && (
-                    <Badge className={cn("text-[9px] font-mono px-1.5 py-0 border", CATEGORY_COLORS[viewEntry.category] ?? CATEGORY_COLORS.Other)}>
-                      {viewEntry.category}
-                    </Badge>
-                  )}
-                </DialogTitle>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/40 mt-1 flex items-center gap-1.5">
-                  <Eye className="w-2.5 h-2.5" /> Hover any field → eye icon reveals value
-                </p>
               </DialogHeader>
 
-              {/* Scrollable credential content */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0">
-                <PlatformSection title="Email" icon={Mail} color="text-emerald-400" fields={[
-                  { label: "address", value: viewEntry.email },
-                  { label: "password", value: viewEntry.emailPassword },
-                  { label: "recovery", value: viewEntry.emailRecovery },
-                  { label: "rcv pass", value: viewEntry.emailRecoveryPassword },
+              <div className="flex-1 overflow-y-auto px-5 py-3 space-y-0">
+                <PlatformSection title="Main" color="text-cyan-400" icon={Mail} fields={[
+                  { label: "email", value: viewEntry.email },
+                  { label: "pass", value: viewEntry.emailPassword },
+                  { label: "recover", value: viewEntry.emailRecovery },
+                  { label: "rec.pw", value: viewEntry.emailRecoveryPassword },
                 ]} />
-                <PlatformSection title="Twitter / X" icon={AtSign} color="text-sky-400" fields={[
-                  { label: "handle", value: viewEntry.twitterUsername },
-                  { label: "password", value: viewEntry.twitterPassword },
+                <PlatformSection title="Twitter" color="text-sky-400" icon={AtSign} fields={[
+                  { label: "user", value: viewEntry.twitterUsername },
+                  { label: "pass", value: viewEntry.twitterPassword },
                   { label: "email", value: viewEntry.twitterEmail },
-                  { label: "email pw", value: viewEntry.twitterEmailPassword },
-                  { label: "2fa secret", value: viewEntry.twitter2fa },
-                  { label: "followers", value: viewEntry.twitterFollowers },
-                  { label: "rcv email", value: viewEntry.twitterEmailRecovery },
-                  { label: "rcv pw", value: viewEntry.twitterEmailRecoveryPassword },
+                  { label: "e.pass", value: viewEntry.twitterEmailPassword },
+                  { label: "2fa", value: viewEntry.twitter2fa },
+                  { label: "follow", value: viewEntry.twitterFollowers },
                 ]} />
-                <PlatformSection title="Discord" icon={Hash} color="text-indigo-400" fields={[
-                  { label: "username", value: viewEntry.discordUsername },
-                  { label: "password", value: viewEntry.discordPassword },
+                <PlatformSection title="Discord" color="text-indigo-400" icon={Hash} fields={[
+                  { label: "user", value: viewEntry.discordUsername },
+                  { label: "pass", value: viewEntry.discordPassword },
                   { label: "email", value: viewEntry.discordEmail },
-                  { label: "email pw", value: viewEntry.discordEmailPassword },
-                  { label: "2fa secret", value: viewEntry.discord2fa },
-                  { label: "rcv email", value: viewEntry.discordEmailRecovery },
-                  { label: "rcv pw", value: viewEntry.discordEmailRecoveryPassword },
+                  { label: "e.pass", value: viewEntry.discordEmailPassword },
+                  { label: "2fa", value: viewEntry.discord2fa },
                 ]} />
-                <PlatformSection title="Telegram" icon={Phone} color="text-blue-400" fields={[
-                  { label: "username", value: viewEntry.telegramUsername },
+                <PlatformSection title="Telegram" color="text-blue-400" icon={Phone} fields={[
+                  { label: "user", value: viewEntry.telegramUsername },
                   { label: "phone", value: viewEntry.telegramPhone },
-                  { label: "password", value: viewEntry.telegramPassword },
-                  { label: "2fa secret", value: viewEntry.telegram2fa },
-                  { label: "linked email", value: viewEntry.telegramLinkedEmail },
-                  { label: "linked pw", value: viewEntry.telegramLinkedEmailPassword },
+                  { label: "pass", value: viewEntry.telegramPassword },
+                  { label: "2fa", value: viewEntry.telegram2fa },
+                  { label: "email", value: viewEntry.telegramLinkedEmail },
+                  { label: "e.pass", value: viewEntry.telegramLinkedEmailPassword },
                 ]} />
 
                 {/* Wallet addresses */}
-                {viewEntry.walletAddresses && (Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).length > 0 && (
-                  <div className="space-y-0.5 py-2 border-t border-border/30">
+                {Array.isArray(viewEntry.walletAddresses) && viewEntry.walletAddresses.length > 0 && (
+                  <div className="space-y-1 py-2 border-t border-border/30">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <Wallet className="w-3 h-3 text-cyan-400" />
-                      <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-cyan-400">Wallets</span>
+                      <Wallet className="w-3 h-3 text-amber-400" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-amber-400">Wallets</span>
                     </div>
-                    {(Array.isArray(viewEntry.walletAddresses) ? viewEntry.walletAddresses : []).map((addr: string, i: number) => (
-                      <CredField key={i} label={`wallet ${i + 1}`} value={addr} />
+                    {viewEntry.walletAddresses.map((addr: string, i: number) => (
+                      <div key={i} className="flex items-center gap-2 py-0.5">
+                        <span className="font-mono text-[11px] truncate text-foreground/80 flex-1">{addr}</span>
+                        <CopyBtn value={addr} />
+                        <button onClick={() => setQrAddress(addr)} className="text-muted-foreground/40 hover:text-primary p-1 transition-colors">
+                          <QrCode className="w-3 h-3" />
+                        </button>
+                      </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Seed phrase status */}
+                {viewEntry.hasSeedPhrase && (
+                  <div className="py-2 border-t border-border/30">
+                    <div className="flex items-center gap-1.5 py-1 px-2.5 bg-violet-400/5 border border-violet-400/20 rounded-lg">
+                      <Shield className="w-3 h-3 text-violet-400" />
+                      <span className="font-mono text-[10px] text-violet-400">Seed phrase encrypted & stored — view in Wallet tab</span>
+                    </div>
                   </div>
                 )}
 
                 {/* Backup codes */}
-                {viewEntry.backupCodes && (Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).length > 0 && (
-                  <div className="space-y-0.5 py-2 border-t border-border/30">
+                {Array.isArray(viewEntry.backupCodes) && viewEntry.backupCodes.length > 0 && (
+                  <div className="py-2 border-t border-border/30">
                     <div className="flex items-center gap-1.5 mb-1.5">
-                      <Shield className="w-3 h-3 text-violet-400" />
-                      <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-violet-400">Backup Codes</span>
+                      <Lock className="w-3 h-3 text-orange-400" />
+                      <span className="text-[9px] font-mono uppercase tracking-widest font-bold text-orange-400">Backup Codes</span>
                     </div>
-                    {(Array.isArray(viewEntry.backupCodes) ? viewEntry.backupCodes : []).map((code: string, i: number) => (
-                      <CredField key={i} label={`code ${i + 1}`} value={code} />
-                    ))}
+                    <div className="grid grid-cols-2 gap-1">
+                      {viewEntry.backupCodes.map((code: string, i: number) => (
+                        <div key={i} className="flex items-center justify-between bg-muted/20 rounded px-2 py-0.5 border border-border/30">
+                          <span className="font-mono text-[10px] text-foreground/70">{code}</span>
+                          <CopyBtn value={code} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
                 {/* Other accounts */}
-                {viewEntry.otherAccounts && (() => {
+                {(() => {
                   try {
-                    const others = JSON.parse(viewEntry.otherAccounts);
-                    return Array.isArray(others) && others.length > 0 ? (
+                    const others = viewEntry.otherAccounts ? JSON.parse(viewEntry.otherAccounts) : [];
+                    return others.length > 0 ? (
                       <div className="space-y-0.5 py-2 border-t border-border/30">
                         <div className="flex items-center gap-1.5 mb-2">
                           <Smartphone className="w-3 h-3 text-orange-400" />
@@ -885,7 +582,6 @@ function EntityTab() {
                   } catch { return null; }
                 })()}
 
-                {/* Notes */}
                 {viewEntry.notes && (
                   <div className="border-t border-border/30 pt-3 mt-1">
                     <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-1.5">Notes</p>
@@ -896,22 +592,11 @@ function EntityTab() {
                 )}
               </div>
 
-              {/* Footer */}
               <DialogFooter className="px-5 py-3 border-t border-card-border flex-shrink-0 bg-muted/5 flex items-center justify-between gap-2 sm:justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => { openEdit(viewEntry); setViewEntry(null); }}
-                  className="font-mono text-xs gap-1.5"
-                >
+                <Button variant="outline" size="sm" onClick={() => { openEdit(viewEntry); setViewEntry(null); }} className="font-mono text-xs gap-1.5">
                   <Edit2 className="w-3.5 h-3.5" /> Edit Entity
                 </Button>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => { setDeleteId(viewEntry.id); setViewEntry(null); }}
-                  className="font-mono text-xs gap-1.5"
-                >
+                <Button variant="destructive" size="sm" onClick={() => { setDeleteId(viewEntry.id); setViewEntry(null); }} className="font-mono text-xs gap-1.5">
                   <Trash2 className="w-3.5 h-3.5" /> Remove
                 </Button>
               </DialogFooter>
@@ -919,49 +604,287 @@ function EntityTab() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* QR Dialog */}
+      <Dialog open={!!qrAddress} onOpenChange={() => setQrAddress(null)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm">Wallet QR Code</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center gap-3 py-3">
+            {qrAddress && <QRCodeSVG value={qrAddress} size={180} bgColor="transparent" fgColor="#22d3ee" />}
+            <p className="font-mono text-[10px] text-muted-foreground/60 break-all text-center">{qrAddress}</p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <Dialog open={deleteId !== null} onOpenChange={() => setDeleteId(null)}>
+        <DialogContent className="max-w-xs">
+          <DialogHeader>
+            <DialogTitle className="font-mono text-sm text-red-400 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" /> Delete Entity?
+            </DialogTitle>
+          </DialogHeader>
+          <p className="font-mono text-xs text-muted-foreground py-2">All credentials will be permanently deleted. This cannot be undone.</p>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setDeleteId(null)} className="font-mono text-xs">Cancel</Button>
+            <Button variant="destructive" size="sm" onClick={() => {
+              if (deleteId) {
+                deleteMutation.mutate({ id: deleteId } as any, {
+                  onSuccess: () => { toast({ title: "Entity deleted" }); queryClient.invalidateQueries(); setDeleteId(null); },
+                  onError: () => toast({ variant: "destructive", title: "Failed to delete" }),
+                });
+              }
+            }} className="font-mono text-xs">Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add / Edit dialog */}
+      <Dialog open={open} onOpenChange={v => { if (!v) { setOpen(false); resetForm(); setEditId(null); } }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-hidden flex flex-col p-0">
+          <DialogHeader className="px-5 pt-5 pb-3 flex-shrink-0 border-b border-card-border">
+            <DialogTitle className="font-mono text-sm">{editId ? "Edit Entity" : "Add Entity"}</DialogTitle>
+          </DialogHeader>
+
+          {/* Form tabs */}
+          <div className="px-5 pt-3 flex gap-1 flex-shrink-0 overflow-x-auto">
+            {FORM_TABS.map(t => (
+              <button
+                key={t.id}
+                onClick={() => setFormTab(t.id)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md font-mono text-[10px] uppercase tracking-wider flex-shrink-0 transition-all",
+                  formTab === t.id ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/50 hover:text-muted-foreground"
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+            {formTab === "main" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Category *</Label>
+                    <Select value={form.category} onValueChange={v => setForm(p => ({ ...p, category: v }))}>
+                      <SelectTrigger className="font-mono text-xs h-8 bg-input"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c} className="font-mono text-xs">{c}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Entity Name *</Label>
+                    <Input value={form.projectName} onChange={f("projectName")} className="font-mono text-xs h-8 bg-input" placeholder="Protocol / Project name" />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Main Email</Label>
+                  <Input value={form.email} onChange={f("email")} className="font-mono text-xs h-8 bg-input" placeholder="account@email.com" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60 flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> Email Password</Label>
+                  <Input type="password" value={form.emailPassword} onChange={f("emailPassword")} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Recovery Email</Label>
+                  <Input value={form.emailRecovery} onChange={f("emailRecovery")} className="font-mono text-xs h-8 bg-input" placeholder="recovery@email.com" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Notes</Label>
+                  <Textarea value={form.notes} onChange={f("notes")} className="font-mono text-xs bg-input resize-none h-16" placeholder="Airdrop notes, important info..." />
+                </div>
+              </>
+            )}
+            {formTab === "twitter" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Username</Label><Input value={form.twitterUsername} onChange={f("twitterUsername")} className="font-mono text-xs h-8 bg-input" placeholder="@handle" /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Password</Label><Input type="password" value={form.twitterPassword} onChange={f("twitterPassword")} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Linked Email</Label><Input value={form.twitterEmail} onChange={f("twitterEmail")} className="font-mono text-xs h-8 bg-input" placeholder="tw@email.com" /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Email Password</Label><Input type="password" value={form.twitterEmailPassword} onChange={f("twitterEmailPassword")} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">2FA Secret</Label><Input value={form.twitter2fa} onChange={f("twitter2fa")} className="font-mono text-xs h-8 bg-input" placeholder="TOTP secret..." /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Followers</Label><Input value={form.twitterFollowers} onChange={f("twitterFollowers")} className="font-mono text-xs h-8 bg-input" placeholder="e.g. 1200" /></div>
+                </div>
+              </>
+            )}
+            {formTab === "discord" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Username</Label><Input value={form.discordUsername} onChange={f("discordUsername")} className="font-mono text-xs h-8 bg-input" placeholder="user#1234" /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Password</Label><Input type="password" value={form.discordPassword} onChange={f("discordPassword")} className="font-mono text-xs h-8 bg-input" placeholder="••••••••" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Linked Email</Label><Input value={form.discordEmail} onChange={f("discordEmail")} className="font-mono text-xs h-8 bg-input" placeholder="dc@email.com" /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">2FA Secret</Label><Input value={form.discord2fa} onChange={f("discord2fa")} className="font-mono text-xs h-8 bg-input" placeholder="TOTP secret..." /></div>
+                </div>
+              </>
+            )}
+            {formTab === "telegram" && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Username</Label><Input value={form.telegramUsername} onChange={f("telegramUsername")} className="font-mono text-xs h-8 bg-input" placeholder="@username" /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Phone</Label><Input value={form.telegramPhone} onChange={f("telegramPhone")} className="font-mono text-xs h-8 bg-input" placeholder="+1234567890" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">2FA Secret</Label><Input value={form.telegram2fa} onChange={f("telegram2fa")} className="font-mono text-xs h-8 bg-input" placeholder="TOTP secret..." /></div>
+                  <div className="space-y-1"><Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Linked Email</Label><Input value={form.telegramLinkedEmail} onChange={f("telegramLinkedEmail")} className="font-mono text-xs h-8 bg-input" placeholder="tg@email.com" /></div>
+                </div>
+              </>
+            )}
+            {formTab === "other" && (
+              <div className="space-y-3">
+                {otherAccounts.map(a => (
+                  <OtherAccountForm key={a.id} account={a} onChange={u => updateOther(a.id, u)} onRemove={() => removeOther(a.id)} />
+                ))}
+                <Button variant="outline" size="sm" onClick={addOther} className="font-mono text-xs gap-1.5 w-full">
+                  <Plus className="w-3.5 h-3.5" /> Add Platform
+                </Button>
+              </div>
+            )}
+            {formTab === "wallet" && (
+              <>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Wallet Addresses (one per line)</Label>
+                  <Textarea value={form.walletAddresses} onChange={f("walletAddresses")} className="font-mono text-xs bg-input resize-none h-24" placeholder="0x1234...&#10;0xabcd..." />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Seed Phrase / Private Key</Label>
+                  <Textarea value={""} disabled placeholder="Manage seed phrases in the Wallet section →" className="font-mono text-xs bg-input resize-none h-12 opacity-60" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="font-mono text-[10px] uppercase text-muted-foreground/60">Backup Codes (one per line)</Label>
+                  <Textarea value={form.backupCodes} onChange={f("backupCodes")} className="font-mono text-xs bg-input resize-none h-20" placeholder="backup-code-1&#10;backup-code-2" />
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter className="px-5 py-3 border-t border-card-border flex-shrink-0">
+            <Button variant="outline" size="sm" onClick={() => { setOpen(false); resetForm(); setEditId(null); }} className="font-mono text-xs">Cancel</Button>
+            <Button size="sm" onClick={editId ? handleUpdate : handleCreate} disabled={createMutation.isPending || saving} className="font-mono text-xs gap-1.5">
+              {(createMutation.isPending || saving) && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {editId ? "Save Changes" : "Secure Entity"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ── Entity Tab wrapper (Dashboard + List) ───────────────────────────────────────
+function EntityTab() {
+  const [view, setView] = useState<"dashboard" | "list">("dashboard");
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setView("dashboard")}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-xs transition-all", view === "dashboard" ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground")}
+        >
+          <LayoutDashboard className="w-3 h-3" /> Dashboard
+        </button>
+        <button
+          onClick={() => setView("list")}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-xs transition-all", view === "list" ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground")}
+        >
+          <List className="w-3 h-3" /> Manage
+        </button>
+      </div>
+      {view === "dashboard" ? (
+        <Suspense fallback={<LoadingTab />}>
+          <VaultEntityDashboard />
+        </Suspense>
+      ) : (
+        <EntityManager />
+      )}
+    </div>
+  );
+}
+
+// ── Local Tab wrapper (Dashboard + Account) ─────────────────────────────────────
+function LocalTab() {
+  const [view, setView] = useState<"dashboard" | "account">("dashboard");
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setView("dashboard")}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-xs transition-all", view === "dashboard" ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground")}
+        >
+          <LayoutDashboard className="w-3 h-3" /> Dashboard
+        </button>
+        <button
+          onClick={() => setView("account")}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-xs transition-all", view === "account" ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground")}
+        >
+          <Smartphone className="w-3 h-3" /> Account
+        </button>
+      </div>
+      {view === "dashboard" ? (
+        <Suspense fallback={<LoadingTab />}>
+          <VaultLocalDashboard />
+        </Suspense>
+      ) : (
+        <LocalAccounts />
+      )}
     </div>
   );
 }
 
 // ── Main Vault Page ────────────────────────────────────────────────────────────
-type VaultTab = "entity" | "wallet" | "local" | "2fa";
+type VaultTab = "entity" | "wallet" | "local" | "2fa" | "mail";
+
+const TAB_META: Record<VaultTab, { label: string; desc: string }> = {
+  entity: { label: "Entity Vault",   desc: "Manage credentials and track entity health completeness" },
+  wallet: { label: "Wallet & Seeds", desc: "Seed phrases encrypted per entity + real-time MetaMask connect" },
+  local:  { label: "Local Accounts", desc: "Dashboard analytics and account management for local platforms" },
+  "2fa":  { label: "2FA Codes",      desc: "Live TOTP codes from local accounts, entities, and manual entries" },
+  mail:   { label: "Mail Hub",       desc: "All emails from entities and local accounts in one place" },
+};
 
 export default function UserVault() {
   const search = useSearch();
   const tab = (new URLSearchParams(search).get("tab") as VaultTab) || "entity";
+  const meta = TAB_META[tab] ?? TAB_META["entity"];
 
   return (
     <div className="space-y-5 page-enter">
-      {/* Page header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
               <KeyRound className="w-4 h-4 text-primary" />
             </div>
-            DAO Vault
+            {meta.label}
           </h1>
-          <p className="text-muted-foreground font-mono text-xs mt-1 pl-0.5">
-            {tab === "entity" && "Secure command center for all your accounts & credentials"}
-            {tab === "wallet" && "Manage and track your blockchain wallets"}
-            {tab === "local" && "Local platform accounts manager"}
-            {tab === "2fa" && "Two-factor authentication codes"}
-          </p>
+          <p className="text-muted-foreground font-mono text-xs mt-1 pl-0.5">{meta.desc}</p>
         </div>
       </div>
 
-      {/* Tab content */}
       <div className="min-h-0">
         {tab === "entity" && <EntityTab />}
-        {tab === "2fa" && (
-          <Suspense fallback={<LoadingTab />}>
-            <Authenticator />
-          </Suspense>
-        )}
-        {tab === "local" && <LocalAccounts />}
+        {tab === "local"  && <LocalTab />}
         {tab === "wallet" && (
           <Suspense fallback={<LoadingTab />}>
-            <UserWallets />
+            <VaultWalletSeed />
+          </Suspense>
+        )}
+        {tab === "2fa" && (
+          <Suspense fallback={<LoadingTab />}>
+            <VaultTwoFa />
+          </Suspense>
+        )}
+        {tab === "mail" && (
+          <Suspense fallback={<LoadingTab />}>
+            <VaultMail />
           </Suspense>
         )}
       </div>
