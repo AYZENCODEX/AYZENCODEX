@@ -354,6 +354,16 @@ const MIGRATIONS = [
   "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing Wallet', 'Entity has no wallet address linked', 'entity', '{\"check\":\"missing_wallet\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
   "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Inactive 30 Days', 'Entity has not been active for 30+ days', 'entity', '{\"check\":\"inactive_days\",\"threshold\":30}', 'critical', true) ON CONFLICT (name) DO NOTHING",
   "INSERT INTO health_rules (name, description, rule_type, condition, severity, is_active) VALUES ('Missing Email', 'Entity has no email configured', 'entity', '{\"check\":\"missing_email\"}', 'warning', true) ON CONFLICT (name) DO NOTHING",
+   // ── Phase 9: built-in wallet tokens ──────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS builtin_wallet_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL DEFAULT 'USDT',
+    name TEXT NOT NULL DEFAULT 'Tether USD',
+    amount REAL NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE UNIQUE INDEX IF NOT EXISTS builtin_wallet_tokens_user_symbol ON builtin_wallet_tokens(user_id, symbol)",
   // ── Phase 7: referrals ──────────────────────────────────────────────────
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by INTEGER",

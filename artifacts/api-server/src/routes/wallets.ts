@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db, walletsTable, usersTable } from "@workspace/db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { broadcastEvent } from "./events";
+import { getUserFromToken, getTokenFromReq } from "../lib/auth-utils";
 import crypto from "crypto";
 
 const PHRASE_KEY = (process.env["PHRASE_ENCRYPTION_KEY"] ?? "ayzen_phrase_key_32bytes_default!").slice(0, 32).padEnd(32, "0");
@@ -229,6 +230,68 @@ router.post("/wallets/:id/send", async (req, res): Promise<void> => {
   // For now we log the intent and return a pending status.
   broadcastEvent("wallet_send", { userId: authUser.id, walletId: id, to, amount, token: token ?? wallet.chain });
   res.json({ success: true, status: "pending", txHash: null, message: "Transaction queued. Connect wallet provider to broadcast." });
+});
+
+// GET /wallets/tokens — get AZN + USDT balances for current user
+router.get("/wallets/tokens", async (req, res): Promise<void> => {
+  const tokenStr = getTokenFromReq(req);
+  const authUser = tokenStr ? await getUserFromToken(tokenStr) : null;
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = authUser.userId;
+  try {
+    const creditsResult = await db.execute(
+      sql`SELECT azn_balance, balance FROM credits WHERE user_id = ${userId}`
+    );
+    const credits = (creditsResult.rows[0] as Record<string, unknown>) ?? {};
+    const usdtResult = await db.execute(
+      sql`SELECT COALESCE(SUM(amount), 0) as usdt FROM builtin_wallet_tokens WHERE user_id = ${userId} AND symbol = 'USDT'`
+    );
+    const usdt = parseFloat(String((usdtResult.rows[0] as Record<string, unknown>)?.usdt ?? 0));
+    res.json({
+      azn: parseFloat(String(credits["azn_balance"] ?? 0)),
+      credits: parseInt(String(credits["balance"] ?? 0), 10),
+      usdt,
+    });
+  } catch { res.json({ azn: 0, credits: 0, usdt: 0 }); }
+});
+
+// POST /wallets/builtin/create — create a built-in AYZEN watch-only wallet address
+router.post("/wallets/builtin/create", async (req, res): Promise<void> => {
+  const tokenStr = getTokenFromReq(req);
+  const authUser = tokenStr ? await getUserFromToken(tokenStr) : null;
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = authUser.userId;
+
+  // Check if user already has a built-in wallet (use parameterized query via drizzle)
+  const existing = await db.select({ id: walletsTable.id }).from(walletsTable)
+    .where(eq(walletsTable.userId, userId))
+    .limit(1);
+  const hasBuiltin = existing.length > 0 &&
+    (await db.execute(sql`SELECT id FROM wallets WHERE user_id = ${userId} AND label LIKE ${'AYZEN Built-in%'} LIMIT 1`)).rows.length > 0;
+  if (hasBuiltin) {
+    res.status(409).json({ error: "Built-in wallet already exists" }); return;
+  }
+
+  // Generate a random 20-byte ETH-format address (watch-only — no private key stored)
+  const bytes = crypto.randomBytes(20);
+  const address = "0x" + bytes.toString("hex");
+
+  const count = await db.select({ id: walletsTable.id }).from(walletsTable).where(eq(walletsTable.userId, userId));
+  const isPrimary = count.length === 0;
+
+  const [wallet] = await db.insert(walletsTable).values({
+    userId,
+    address: address.toLowerCase(),
+    chain: "ETH",
+    label: "AYZEN Built-in Wallet",
+    notes: "Watch-only address managed by AYZEN. AZN/USDT balances are tracked internally.",
+    chainId: 1,
+    isPrimary,
+  }).returning();
+
+  await db.update(usersTable).set({ walletCount: count.length + 1 }).where(eq(usersTable.id, userId));
+  broadcastEvent("wallets_updated", { action: "added", userId, walletId: wallet.id });
+  res.status(201).json({ ...formatWallet(wallet), isBuiltin: true, watchOnly: true });
 });
 
 // GET /wallets/stats — aggregated stats for current user

@@ -413,6 +413,8 @@ export default function UserWallets() {
   const [phraseWallet, setPhraseWallet] = useState<WalletEntry | null>(null);
   const [sendWallet, setSendWallet] = useState<WalletEntry | null>(null);
   const [liveIndicator, setLiveIndicator] = useState(false);
+  const [tokens, setTokens] = useState({ azn: 0, credits: 0, usdt: 0 });
+  const [creatingBuiltin, setCreatingBuiltin] = useState(false);
 
   const [form, setForm] = useState({ address: "", chain: "ETH", label: "", notes: "", phrase: "", showPhraseField: false });
   const [adding, setAdding] = useState(false);
@@ -431,7 +433,36 @@ export default function UserWallets() {
     setLoading(false);
   }, [token]);
 
-  useEffect(() => { fetchWallets(); }, [fetchWallets]);
+  const fetchTokens = useCallback(async () => {
+    if (!token) return;
+    try {
+      const r = await fetch(`${BASE}/api/wallets/tokens`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setTokens(await r.json());
+    } catch { }
+  }, [token]);
+
+  useEffect(() => {
+    fetchWallets();
+    fetchTokens();
+    // Auto-refresh every 30s
+    const interval = setInterval(() => { fetchWallets(); fetchTokens(); }, 30000);
+    return () => clearInterval(interval);
+  }, [fetchWallets, fetchTokens]);
+
+  const handleCreateBuiltin = async () => {
+    setCreatingBuiltin(true);
+    try {
+      const r = await fetch(`${BASE}/api/wallets/builtin/create`, { method: "POST", headers });
+      const d = await r.json();
+      if (r.ok) {
+        toast({ title: "🎉 AYZEN Built-in Wallet created!", description: "Your personal software wallet is ready." });
+        await fetchWallets();
+      } else {
+        toast({ variant: "destructive", title: d.error ?? "Failed to create wallet" });
+      }
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setCreatingBuiltin(false);
+  };
 
   // Real-time SSE updates
   useEffect(() => {
@@ -543,10 +574,36 @@ export default function UserWallets() {
             {totalUsd > 0 && <> · <span className="text-primary">${totalUsd.toFixed(2)} USD</span></>}
           </p>
         </div>
-        <Button onClick={() => setShowAdd(s => !s)} className="font-mono text-xs gap-2">
-          <Plus className="w-4 h-4" />
-          Add Wallet
-        </Button>
+        <div className="flex items-center gap-2">
+          {!wallets.some(w => w.label?.includes("AYZEN Built-in")) && (
+            <Button variant="outline" onClick={handleCreateBuiltin} disabled={creatingBuiltin} className="font-mono text-xs gap-2 border-primary/30 text-primary hover:bg-primary/10">
+              {creatingBuiltin ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+              Built-in Wallet
+            </Button>
+          )}
+          <Button onClick={() => setShowAdd(s => !s)} className="font-mono text-xs gap-2">
+            <Plus className="w-4 h-4" />
+            Add Wallet
+          </Button>
+        </div>
+      </div>
+
+      {/* AYZEN Token Balance Banner */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "AZN Balance", value: tokens.azn.toFixed(2), suffix: "AZN", color: "text-cyan-400", bg: "bg-cyan-500/5", border: "border-cyan-500/20", icon: "⚡" },
+          { label: "USDT Balance", value: tokens.usdt.toFixed(2), suffix: "USDT", color: "text-emerald-400", bg: "bg-emerald-500/5", border: "border-emerald-500/20", icon: "💵" },
+          { label: "Credits", value: tokens.credits.toString(), suffix: "CR", color: "text-violet-400", bg: "bg-violet-500/5", border: "border-violet-500/20", icon: "🎯" },
+        ].map(t => (
+          <div key={t.label} className={`${t.bg} border ${t.border} rounded-xl p-4 flex flex-col gap-1`}>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">{t.icon}</span>
+              <span className="font-mono text-[10px] text-muted-foreground">{t.label}</span>
+            </div>
+            <div className={`font-mono text-xl font-bold ${t.color}`}>{t.value}</div>
+            <div className="font-mono text-[10px] text-muted-foreground/50">{t.suffix} · Auto-refreshes every 30s</div>
+          </div>
+        ))}
       </div>
 
       {/* Stats row */}

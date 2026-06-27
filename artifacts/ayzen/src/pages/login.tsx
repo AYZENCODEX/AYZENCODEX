@@ -113,6 +113,7 @@ export default function Login() {
   const [tempSigninData, setTempSigninData] = useState<{ token: string; user: any } | null>(null);
   const [signinOtpSending, setSigninOtpSending] = useState(false);
   const [signinOtpLoading, setSigninOtpLoading] = useState(false);
+  const [keepSignedIn, setKeepSignedIn] = useState(false);
 
   useEffect(() => {
     if (signupCountdown <= 0) return;
@@ -185,7 +186,7 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
     try {
-      const result = await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth!, googleProvider);
       const idToken = await result.user.getIdToken();
       const data = await firebaseSyncToBackend(idToken);
       if (!data) throw new Error("Could not sync account with server");
@@ -286,10 +287,10 @@ export default function Login() {
       if (res.ok && result.valid) {
         // Firebase optional sync
         try {
-          const cred = await signInWithEmailAndPassword(auth, email, password);
+          const cred = await signInWithEmailAndPassword(auth!, email, password);
           if (cred.user) { const idToken = await cred.user.getIdToken(); await firebaseSyncToBackend(idToken); }
         } catch { }
-        setAuthContext(tempSigninData.user, tempSigninData.token);
+        setAuthContext(tempSigninData.user, tempSigninData.token, keepSignedIn);
         setSuccessMsg(`Welcome back, ${tempSigninData.user.username}!`);
         setShowSuccess(true);
         setTimeout(() => {
@@ -685,6 +686,20 @@ export default function Login() {
               </div>
             )}
 
+            {tab === "signin" && (
+              <div className="flex items-center gap-2.5 py-1">
+                <button
+                  type="button"
+                  onClick={() => setKeepSignedIn(p => !p)}
+                  className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-colors ${keepSignedIn ? "bg-primary border-primary" : "border-border bg-input"}`}
+                >
+                  {keepSignedIn && <Check className="w-2.5 h-2.5 text-primary-foreground" strokeWidth={3} />}
+                </button>
+                <label className="font-mono text-[10px] text-muted-foreground cursor-pointer select-none" onClick={() => setKeepSignedIn(p => !p)}>
+                  Keep me signed in
+                </label>
+              </div>
+            )}
             <Button
               type="submit"
               className="w-full h-11 font-mono font-bold uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90"
