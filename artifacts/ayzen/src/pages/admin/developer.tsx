@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useGetTelemetryFunctions, useGetTelemetryErrors } from "@workspace/api-client-react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -792,12 +791,26 @@ function FunctionRegistryTab({ token: _token }: { token: string }) {
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
+const DEV_SIDEBAR = [
+  { id: "ai",        label: "AI Assistant",  icon: Bot },
+  { id: "console",   label: "Live Console",  icon: Terminal },
+  { id: "models",    label: "AI Models",     icon: Cpu },
+  { id: "telemetry", label: "Telemetry",     icon: Activity },
+  { id: "ping",      label: "Ping Test",     icon: RefreshCw },
+  { id: "functions", label: "Functions",     icon: Server },
+  { id: "errors",    label: "Error Log",     icon: XCircle },
+] as const;
+
+type DevSection = typeof DEV_SIDEBAR[number]["id"];
+
 export default function AdminDeveloper() {
-  const { data: functions, isLoading: fnLoading } = useGetTelemetryFunctions();
   const { data: errors, isLoading: errLoading } = useGetTelemetryErrors({ limit: 50 });
   const [models, setModels] = useState<GroqModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [activeModel, setActiveModel] = useState("llama-3.3-70b-versatile");
+  const [section, setSection] = useState<DevSection>("ai");
+  const [testResults, setTestResults] = useState<Record<string, string>>({});
+  const [testLoading, setTestLoading] = useState<Record<string, boolean>>({});
   const token = localStorage.getItem("ayzen_token") ?? "";
 
   useEffect(() => {
@@ -810,18 +823,25 @@ export default function AdminDeveloper() {
 
   const testModel = async (modelId: string) => {
     setActiveModel(modelId);
-    const res = await fetch(`${BASE}/api/ai/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: "ping" }] }),
-    });
-    const data = await res.json();
-    const reply = String(data.choices?.[0]?.message?.content ?? data.error ?? "No response");
-    alert(`Model: ${modelId}\n\nResponse: ${reply.slice(0, 300)}`);
+    setTestLoading(prev => ({ ...prev, [modelId]: true }));
+    try {
+      const res = await fetch(`${BASE}/api/ai/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ model: modelId, messages: [{ role: "user", content: "Reply with exactly: PONG" }] }),
+      });
+      const data = await res.json();
+      const reply = String(data.choices?.[0]?.message?.content ?? data.error ?? "No response");
+      setTestResults(prev => ({ ...prev, [modelId]: reply.slice(0, 250) }));
+    } catch (e: any) {
+      setTestResults(prev => ({ ...prev, [modelId]: `Error: ${e?.message}` }));
+    } finally {
+      setTestLoading(prev => ({ ...prev, [modelId]: false }));
+    }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
         <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
           <Terminal className="h-6 w-6 text-primary" /> Developer Console
@@ -829,172 +849,171 @@ export default function AdminDeveloper() {
         <p className="text-muted-foreground font-mono text-sm">AI assistant, live logs, telemetry, and model registry</p>
       </div>
 
-      <Tabs defaultValue="ai" className="w-full">
-        <TabsList className="bg-card border border-card-border w-full justify-start rounded-md h-12 p-1 flex-wrap">
-          <TabsTrigger value="ai" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <Bot className="w-3 h-3 mr-1" /> AI Assistant
-          </TabsTrigger>
-          <TabsTrigger value="console" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <Terminal className="w-3 h-3 mr-1" /> Live Console
-          </TabsTrigger>
-          <TabsTrigger value="models" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <Cpu className="w-3 h-3 mr-1" /> AI Models
-          </TabsTrigger>
-          <TabsTrigger value="telemetry" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <Activity className="w-3 h-3 mr-1" /> Telemetry
-          </TabsTrigger>
-          <TabsTrigger value="ping" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
-            <RefreshCw className="w-3 h-3 mr-1" /> Ping Test
-          </TabsTrigger>
-          <TabsTrigger value="fn_telemetry" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Functions</TabsTrigger>
-          <TabsTrigger value="errors" className="font-mono uppercase text-xs data-[state=active]:bg-primary/20 data-[state=active]:text-primary">Error Log</TabsTrigger>
-        </TabsList>
+      <div className="flex border border-card-border rounded-xl overflow-hidden min-h-[640px] bg-card">
+        {/* ── Left Sidebar ─────────────────────────────────────────────── */}
+        <nav className="w-48 shrink-0 border-r border-card-border bg-card/60 flex flex-col py-2">
+          {DEV_SIDEBAR.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setSection(item.id)}
+              className={cn(
+                "flex items-center gap-2.5 px-4 py-3 text-xs font-mono font-medium transition-all text-left border-r-2",
+                section === item.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30"
+              )}
+            >
+              <item.icon className="w-4 h-4 shrink-0" />
+              {item.label}
+            </button>
+          ))}
+        </nav>
 
-        {/* ── AI Assistant ──────────────────────────────────────────────────── */}
-        <TabsContent value="ai" className="mt-4">
-          <AiChatTab token={token} />
-        </TabsContent>
+        {/* ── Content Area ─────────────────────────────────────────────── */}
+        <div className="flex-1 overflow-auto p-5 min-w-0">
 
-        {/* ── Live Console ──────────────────────────────────────────────────── */}
-        <TabsContent value="console" className="mt-4">
-          <LiveConsoleTab token={token} />
-        </TabsContent>
+          {section === "ai" && <AiChatTab token={token} />}
 
-        {/* ── AI Models ─────────────────────────────────────────────────────── */}
-        <TabsContent value="models" className="mt-4 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {[
-              { label: "Total Models", value: models.length, icon: Cpu, color: "text-primary" },
-              { label: "Free Tier", value: models.filter(m => m.free).length, icon: CheckCircle, color: "text-emerald-400" },
-              { label: "Reasoning", value: models.filter(m => m.tier === "reasoning").length, icon: Zap, color: "text-violet-400" },
-              { label: "Max Context", value: models.length ? `${(Math.max(...models.map(m => m.context)) / 1000).toFixed(0)}K` : "—", icon: Clock, color: "text-amber-400" },
-            ].map(s => (
-              <div key={s.label} className="glass-card border rounded-xl p-4 animate-fade-up">
-                <div className={cn("flex items-center gap-1.5 mb-2", s.color)}>
-                  <s.icon className="w-3.5 h-3.5" />
-                  <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">{s.label}</span>
-                </div>
-                <p className={cn("text-2xl font-mono font-bold", s.color)}>{s.value}</p>
-              </div>
-            ))}
-          </div>
+          {section === "console" && <LiveConsoleTab token={token} />}
 
-          <div className="border border-card-border rounded-xl bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b border-card-border bg-card/50 flex items-center justify-between">
-              <div>
-                <p className="font-mono text-sm font-bold text-foreground">Groq Free Tier Models</p>
-                <p className="text-[11px] font-mono text-muted-foreground mt-0.5">All models below are available on the Groq free tier — no billing required</p>
-              </div>
-              <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-400/10 border border-emerald-400/20 rounded-lg">
-                <CheckCircle className="w-3 h-3 text-emerald-400" />
-                <span className="text-[10px] font-mono text-emerald-400">All FREE</span>
-              </div>
-            </div>
-            {modelsLoading ? (
-              <div className="p-6 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
-            ) : (
+          {section === "telemetry" && <TelemetryLiveTab token={token} />}
+
+          {section === "ping" && <PingTab token={token} />}
+
+          {section === "functions" && <FunctionRegistryTab token={token} />}
+
+          {section === "errors" && (
+            <div className="border border-card-border rounded-md bg-card/50">
               <Table>
                 <TableHeader>
                   <TableRow className="border-card-border hover:bg-transparent">
-                    <TableHead className="font-mono uppercase text-[10px]">Model</TableHead>
-                    <TableHead className="font-mono uppercase text-[10px]">Tier</TableHead>
-                    <TableHead className="font-mono uppercase text-[10px]">Speed</TableHead>
-                    <TableHead className="font-mono uppercase text-[10px] text-right">Context</TableHead>
-                    <TableHead className="font-mono uppercase text-[10px]">Status</TableHead>
-                    <TableHead className="font-mono uppercase text-[10px] text-right">Test</TableHead>
+                    <TableHead className="font-mono uppercase text-xs">Level</TableHead>
+                    <TableHead className="font-mono uppercase text-xs">Message</TableHead>
+                    <TableHead className="font-mono uppercase text-xs">Endpoint</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {models.map((m) => (
-                    <TableRow key={m.id} className={cn("border-card-border hover:bg-muted/30 transition-colors", activeModel === m.id && "bg-primary/5")}>
-                      <TableCell>
-                        <div>
-                          <p className="font-mono text-sm font-bold text-foreground">{m.name}</p>
-                          <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">{m.id}</p>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className={cn("px-2 py-0.5 rounded border text-[10px] font-mono uppercase", TIER_STYLES[m.tier] ?? TIER_STYLES.stable)}>{m.tier}</span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Zap className={cn("w-3 h-3", SPEED_STYLES[m.speed] ?? "text-muted-foreground")} />
-                          <span className={cn("font-mono text-[11px]", SPEED_STYLES[m.speed] ?? "text-muted-foreground")}>{m.speed}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm text-muted-foreground">{(m.context / 1000).toFixed(0)}K</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="font-mono text-[10px] text-emerald-400">Available</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <button onClick={() => testModel(m.id)} className="px-2.5 py-1 border border-primary/30 text-primary rounded text-[10px] font-mono hover:bg-primary/10 transition-colors hover-shimmer">Test →</button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {errLoading ? (
+                    <TableRow><TableCell colSpan={3} className="text-center py-4"><Skeleton className="h-4 w-32 mx-auto" /></TableCell></TableRow>
+                  ) : !errors || errors.length === 0 ? (
+                    <TableRow><TableCell colSpan={3} className="text-center py-8 font-mono text-muted-foreground text-sm">System clear — no errors logged.</TableCell></TableRow>
+                  ) : (
+                    errors.map((err) => (
+                      <TableRow key={err.id} className="border-card-border">
+                        <TableCell><Badge variant="destructive" className="font-mono text-[10px] uppercase rounded-sm">{err.level}</Badge></TableCell>
+                        <TableCell className="font-mono text-xs">{err.message}</TableCell>
+                        <TableCell className="font-mono text-xs text-muted-foreground">{err.endpoint}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
-            )}
-          </div>
-
-          <div className="glass-card border rounded-xl p-4">
-            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2">Integration Notes</p>
-            <div className="space-y-1.5 text-xs font-mono text-muted-foreground">
-              <p>• Set <span className="text-primary">GROQ_API_KEY</span> in Replit Secrets to activate Groq — free at <span className="text-primary">console.groq.com</span></p>
-              <p>• Without GROQ_API_KEY, the system falls back to <span className="text-secondary">OpenRouter</span> (set <span className="text-secondary">OPENROUTER_API_KEY</span>)</p>
-              <p>• Admin users get platform-level context; regular users see their own vault & task data</p>
-              <p>• Rate limits: free tier allows ~30 req/min for most models, 6000 tokens/min</p>
             </div>
-          </div>
-        </TabsContent>
+          )}
 
-        {/* ── Live Telemetry ────────────────────────────────────────────────── */}
-        <TabsContent value="telemetry" className="mt-4">
-          <TelemetryLiveTab token={token} />
-        </TabsContent>
+          {section === "models" && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Models", value: models.length, icon: Cpu, color: "text-primary" },
+                  { label: "Free Tier", value: models.filter(m => m.free).length, icon: CheckCircle, color: "text-emerald-400" },
+                  { label: "Reasoning", value: models.filter(m => m.tier === "reasoning").length, icon: Zap, color: "text-violet-400" },
+                  { label: "Max Context", value: models.length ? `${(Math.max(...models.map(m => m.context)) / 1000).toFixed(0)}K` : "—", icon: Clock, color: "text-amber-400" },
+                ].map(s => (
+                  <div key={s.label} className="glass-card border rounded-xl p-4">
+                    <div className={cn("flex items-center gap-1.5 mb-2", s.color)}>
+                      <s.icon className="w-3.5 h-3.5" />
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">{s.label}</span>
+                    </div>
+                    <p className={cn("text-2xl font-mono font-bold", s.color)}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
 
-        {/* ── Ping Test ─────────────────────────────────────────────────────── */}
-        <TabsContent value="ping" className="mt-4">
-          <PingTab token={token} />
-        </TabsContent>
-
-        {/* ── Function Registry (accurate real routes) ──────────────────── */}
-        <TabsContent value="fn_telemetry" className="mt-4">
-          <FunctionRegistryTab token={token} />
-        </TabsContent>
-
-        {/* ── Error Log ─────────────────────────────────────────────────────── */}
-        <TabsContent value="errors" className="mt-4">
-          <div className="border border-card-border rounded-md bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-card-border hover:bg-transparent">
-                  <TableHead className="font-mono uppercase text-xs">Level</TableHead>
-                  <TableHead className="font-mono uppercase text-xs">Message</TableHead>
-                  <TableHead className="font-mono uppercase text-xs">Endpoint</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {errLoading ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-4"><Skeleton className="h-4 w-32 mx-auto" /></TableCell></TableRow>
-                ) : !errors || errors.length === 0 ? (
-                  <TableRow><TableCell colSpan={3} className="text-center py-8 font-mono text-muted-foreground">System clear. No errors logged.</TableCell></TableRow>
+              <div className="border border-card-border rounded-xl bg-card overflow-hidden">
+                <div className="px-4 py-3 border-b border-card-border bg-card/50 flex items-center justify-between">
+                  <div>
+                    <p className="font-mono text-sm font-bold text-foreground">AI Model Registry</p>
+                    <p className="text-[11px] font-mono text-muted-foreground mt-0.5">Test each model inline — results appear below the row</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-400/10 border border-emerald-400/20 rounded-lg">
+                    <CheckCircle className="w-3 h-3 text-emerald-400" />
+                    <span className="text-[10px] font-mono text-emerald-400">All FREE</span>
+                  </div>
+                </div>
+                {modelsLoading ? (
+                  <div className="p-6 space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
                 ) : (
-                  errors.map((err) => (
-                    <TableRow key={err.id} className="border-card-border">
-                      <TableCell><Badge variant="destructive" className="font-mono text-[10px] uppercase rounded-sm">{err.level}</Badge></TableCell>
-                      <TableCell className="font-mono text-xs">{err.message}</TableCell>
-                      <TableCell className="font-mono text-xs text-muted-foreground">{err.endpoint}</TableCell>
-                    </TableRow>
-                  ))
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-card-border hover:bg-transparent">
+                        <TableHead className="font-mono uppercase text-[10px]">Model</TableHead>
+                        <TableHead className="font-mono uppercase text-[10px]">Tier</TableHead>
+                        <TableHead className="font-mono uppercase text-[10px]">Speed</TableHead>
+                        <TableHead className="font-mono uppercase text-[10px] text-right">Context</TableHead>
+                        <TableHead className="font-mono uppercase text-[10px] text-right">Test</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {models.map((m) => (
+                        <>
+                          <TableRow key={m.id} className={cn("border-card-border hover:bg-muted/30 transition-colors", activeModel === m.id && "bg-primary/5")}>
+                            <TableCell>
+                              <p className="font-mono text-sm font-bold text-foreground">{m.name}</p>
+                              <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">{m.id}</p>
+                            </TableCell>
+                            <TableCell>
+                              <span className={cn("px-2 py-0.5 rounded border text-[10px] font-mono uppercase", TIER_STYLES[m.tier] ?? TIER_STYLES.stable)}>{m.tier}</span>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Zap className={cn("w-3 h-3", SPEED_STYLES[m.speed] ?? "text-muted-foreground")} />
+                                <span className={cn("font-mono text-[11px]", SPEED_STYLES[m.speed] ?? "text-muted-foreground")}>{m.speed}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-sm text-muted-foreground">{(m.context / 1000).toFixed(0)}K</TableCell>
+                            <TableCell className="text-right">
+                              <button
+                                onClick={() => testModel(m.id)}
+                                disabled={testLoading[m.id]}
+                                className="px-2.5 py-1 border border-primary/30 text-primary rounded text-[10px] font-mono hover:bg-primary/10 transition-colors disabled:opacity-50 flex items-center gap-1 ml-auto"
+                              >
+                                {testLoading[m.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                                Test
+                              </button>
+                            </TableCell>
+                          </TableRow>
+                          {testResults[m.id] && (
+                            <TableRow className="border-card-border bg-emerald-400/5">
+                              <TableCell colSpan={5} className="py-2 px-4">
+                                <div className="flex items-start gap-2">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+                                  <p className="font-mono text-xs text-emerald-300 break-all">{testResults[m.id]}</p>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
-              </TableBody>
-            </Table>
-          </div>
-        </TabsContent>
-      </Tabs>
+              </div>
+
+              <div className="glass-card border rounded-xl p-4">
+                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-2">Integration Notes</p>
+                <div className="space-y-1.5 text-xs font-mono text-muted-foreground">
+                  <p>• Set <span className="text-primary">GROQ_API_KEY</span> in Secrets to activate Groq (free at <span className="text-primary">console.groq.com</span>)</p>
+                  <p>• Fallback: <span className="text-secondary">OPENROUTER_API_KEY</span> → OpenRouter free tier</p>
+                  <p>• Fallback: Replit AI Integration (gpt-5-mini) — auto-provisioned</p>
+                  <p>• Admin gets platform-wide context; users get their own vault &amp; task data</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
     </div>
   );
 }

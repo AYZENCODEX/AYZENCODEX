@@ -145,9 +145,11 @@ function getAuth(req: any): { userId: number; role: string } {
 router.post("/ai/chat", async (req, res): Promise<void> => {
   const groqKey = process.env.GROQ_API_KEY;
   const openRouterKey = process.env.OPENROUTER_API_KEY;
+  const openAiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY;
+  const openAiBase = process.env.AI_INTEGRATIONS_OPENAI_BASE_URL;
 
-  if (!groqKey && !openRouterKey) {
-    res.status(503).json({ error: "AI not configured. Add GROQ_API_KEY or OPENROUTER_API_KEY in Replit Secrets." });
+  if (!groqKey && !openRouterKey && !openAiKey) {
+    res.status(503).json({ error: "AI not configured. Add GROQ_API_KEY in Replit Secrets." });
     return;
   }
 
@@ -192,13 +194,27 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
       res.json({ ...data, _model: selectedModel });
       return;
     }
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://ayzen.tech" },
-      body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: allMessages, max_tokens: 1024 }),
-    });
-    const data = await response.json() as Record<string, unknown>;
-    res.json({ ...data, _model: "llama-3.3-70b (OpenRouter)" });
+    if (openRouterKey) {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://ayzen.tech" },
+        body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: allMessages, max_tokens: 1024 }),
+      });
+      const data = await response.json() as Record<string, unknown>;
+      res.json({ ...data, _model: "llama-3.3-70b (OpenRouter)" });
+      return;
+    }
+    if (openAiKey && openAiBase) {
+      const response = await fetch(`${openAiBase}/chat/completions`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openAiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ model: "gpt-5-mini", messages: allMessages, max_completion_tokens: 1024 }),
+      });
+      const data = await response.json() as Record<string, unknown>;
+      res.json({ ...data, _model: "gpt-5-mini (Replit AI)" });
+      return;
+    }
+    res.status(503).json({ error: "No AI provider available." });
   } catch (err: any) {
     res.status(502).json({ error: `AI provider error: ${err?.message ?? "Unknown error"}` });
   }

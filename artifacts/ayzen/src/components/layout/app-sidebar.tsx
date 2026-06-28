@@ -47,6 +47,7 @@ const ADMIN_NAV: NavGroup[] = [
   {
     label: "Community", icon: Radio,
     items: [
+      { href: "/admin/teams", label: "Teams", icon: Users },
       { href: "/admin/broadcast", label: "Broadcast", icon: Radio, pluginSlug: "broadcast" },
       { href: "/admin/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },

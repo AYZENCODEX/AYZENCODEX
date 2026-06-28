@@ -378,6 +378,60 @@ const MIGRATIONS = [
     paid_at TIMESTAMP,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
+  "ALTER TABLE teams ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'",
+  "ALTER TABLE teams ADD COLUMN IF NOT EXISTS description TEXT",
+  "ALTER TABLE team_members ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'",
+  `CREATE TABLE IF NOT EXISTS team_missions (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    target_value INTEGER DEFAULT 100,
+    current_value INTEGER DEFAULT 0,
+    reward_amount NUMERIC(12,2) DEFAULT 0,
+    deadline TIMESTAMP,
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS reward_links (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    url TEXT NOT NULL,
+    reward_amount NUMERIC(12,2) DEFAULT 0,
+    is_published BOOLEAN NOT NULL DEFAULT false,
+    view_duration_seconds INTEGER DEFAULT 10,
+    max_completions INTEGER DEFAULT 0,
+    created_by INTEGER REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS link_completions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    link_id INTEGER NOT NULL REFERENCES reward_links(id) ON DELETE CASCADE,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, link_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS ad_tasks (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    ad_url TEXT NOT NULL,
+    ad_image_url TEXT,
+    reward_amount NUMERIC(12,2) DEFAULT 0,
+    view_duration_seconds INTEGER DEFAULT 15,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`,
+  `CREATE TABLE IF NOT EXISTS ad_completions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ad_task_id INTEGER NOT NULL REFERENCES ad_tasks(id) ON DELETE CASCADE,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, ad_task_id)
+  )`,
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

@@ -40,6 +40,8 @@ import entitiesRouter from "./entities";
 import twoFactorRouter from "./two-factor";
 import bulkRouter from "./bulk";
 import networksRouter from "./networks";
+import rewardLinksRouter from "./reward-links";
+import adTasksRouter from "./ad-tasks";
 
 const router: IRouter = Router();
 
@@ -84,5 +86,7 @@ router.use(entitiesRouter);
 router.use(twoFactorRouter);
 router.use(bulkRouter);
 router.use(networksRouter);
+router.use(rewardLinksRouter);
+router.use(adTasksRouter);
 
 export default router;

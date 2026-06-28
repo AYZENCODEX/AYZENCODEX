@@ -464,24 +464,44 @@ export default function UserWallets() {
     setCreatingBuiltin(false);
   };
 
-  // Real-time SSE updates
+  // Real-time SSE — auto-reconnect with exponential backoff
   useEffect(() => {
     if (!token) return;
-    const url = `${BASE}/api/events?token=${encodeURIComponent(token)}`;
-    const es = new EventSource(url);
-    sseRef.current = es;
+    let mounted = true;
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    es.addEventListener("wallets_updated", () => {
-      setLiveIndicator(true);
-      setTimeout(() => setLiveIndicator(false), 2000);
-      fetchWallets();
-    });
+    const connect = () => {
+      if (!mounted) return;
+      const url = `${BASE}/api/events?token=${encodeURIComponent(token)}`;
+      const es = new EventSource(url);
+      sseRef.current = es;
 
-    es.onerror = () => {
-      es.close();
+      es.onopen = () => { retryCount = 0; };
+
+      es.addEventListener("wallets_updated", () => {
+        setLiveIndicator(true);
+        setTimeout(() => setLiveIndicator(false), 2000);
+        fetchWallets();
+      });
+
+      es.onerror = () => {
+        es.close();
+        sseRef.current = null;
+        if (mounted) {
+          const delay = Math.min(1000 * 2 ** Math.min(retryCount++, 5), 30000);
+          retryTimer = setTimeout(connect, delay);
+        }
+      };
     };
 
-    return () => { es.close(); };
+    connect();
+
+    return () => {
+      mounted = false;
+      sseRef.current?.close();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [token, fetchWallets]);
 
   const copyAddr = (id: number, addr: string) => {

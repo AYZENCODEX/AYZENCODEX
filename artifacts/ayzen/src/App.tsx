@@ -42,6 +42,7 @@ const AdminActivity      = lazy(() => import("@/pages/admin/activity"));
 const AdminCategories   = lazy(() => import("@/pages/admin/categories"));
 const AdminNetworks     = lazy(() => import("@/pages/admin/tools/networks"));
 const AdminHealthRules  = lazy(() => import("@/pages/admin/health-rules"));
+const AdminTeams        = lazy(() => import("@/pages/admin/teams"));
 
 const UserHome          = lazy(() => import("@/pages/user/home"));
 const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
@@ -129,6 +130,7 @@ function Router() {
       <Route path="/admin/categories">{() => <ProtectedRoute component={AdminCategories} adminOnly />}</Route>
       <Route path="/admin/tools/networks">{() => <ProtectedRoute component={AdminNetworks} adminOnly />}</Route>
       <Route path="/admin/health-rules">{() => <ProtectedRoute component={AdminHealthRules} adminOnly />}</Route>
+      <Route path="/admin/teams">{() => <ProtectedRoute component={AdminTeams} adminOnly />}</Route>
 
       {/* User Routes */}
       <Route path="/home">{() => <ProtectedRoute component={UserHome} />}</Route>

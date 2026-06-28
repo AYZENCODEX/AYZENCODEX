@@ -19,19 +19,36 @@ router.get("/teams", requireAuth, async (req, res): Promise<void> => {
   res.json(result.rows);
 });
 
-// ── POST /teams — create team ─────────────────────────────────────────────────
+// ── POST /teams — request a team (pending until admin approves) ───────────────
 router.post("/teams", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
   const { name, description } = req.body;
   if (!name) { res.status(400).json({ error: "name is required" }); return; }
+  const descVal = description ? `'${description.replace(/'/g, "''")}'` : "NULL";
   const result = await db.execute(sql.raw(
-    `INSERT INTO teams (name, owner_id) VALUES ('${name.replace(/'/g, "''")}', ${userId}) RETURNING *`
+    `INSERT INTO teams (name, description, owner_id, status) VALUES ('${name.replace(/'/g, "''")}', ${descVal}, ${userId}, 'pending') RETURNING *`
   ));
   const team = result.rows[0] as any;
   await db.execute(sql.raw(
-    `INSERT INTO team_members (team_id, user_id, role) VALUES (${team.id}, ${userId}, 'leader')`
+    `INSERT INTO team_members (team_id, user_id, role, status) VALUES (${team.id}, ${userId}, 'leader', 'active')`
   ));
   res.status(201).json(team);
+});
+
+// ── GET /teams/my-invites — pending invites for current user (MUST be before /:id) ──
+router.get("/teams/my-invites", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const result = await db.execute(sql.raw(
+    `SELECT tm.id, tm.team_id, tm.role, tm.created_at as invited_at,
+       t.name as team_name, t.description as team_description,
+       u.username as invited_by_username
+     FROM team_members tm
+     JOIN teams t ON t.id = tm.team_id
+     LEFT JOIN users u ON u.id = t.owner_id
+     WHERE tm.user_id = ${userId} AND tm.status = 'pending'
+     ORDER BY tm.created_at DESC`
+  ));
+  res.json(result.rows);
 });
 
 // ── GET /teams/:id — get team detail ─────────────────────────────────────────
@@ -228,13 +245,142 @@ router.post("/teams/:id/messages", requireAuth, async (req, res): Promise<void> 
   const { message } = req.body;
   if (!message?.trim()) { res.status(400).json({ error: "message is required" }); return; }
   const memberCheck = await db.execute(sql.raw(
-    `SELECT 1 FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId}`
+    `SELECT 1 FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`
   ));
   if (!memberCheck.rows.length) { res.status(403).json({ error: "Not a team member" }); return; }
   const result = await db.execute(sql.raw(
     `INSERT INTO team_messages (team_id, user_id, message) VALUES (${teamId}, ${userId}, '${message.replace(/'/g, "''")}') RETURNING *`
   ));
   res.status(201).json(result.rows[0]);
+});
+
+// ── GET /teams/:id/vault — team members' vault entries ────────────────────────
+router.get("/teams/:id/vault", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const memberCheck = await db.execute(sql.raw(
+    `SELECT 1 FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`
+  ));
+  if (!memberCheck.rows.length) { res.status(403).json({ error: "Not a team member" }); return; }
+  const result = await db.execute(sql.raw(
+    `SELECT ve.id, ve.project_name, ve.category, ve.email, ve.twitter_username, ve.discord_username,
+       ve.telegram_username, ve.entity_serial, ve.created_at, ve.user_id,
+       u.username, u.avatar_url
+     FROM vault_entries ve
+     JOIN users u ON u.id = ve.user_id
+     JOIN team_members tm ON tm.team_id = ${teamId} AND tm.user_id = ve.user_id AND tm.status = 'active'
+     ORDER BY ve.created_at DESC LIMIT 100`
+  ));
+  res.json(result.rows);
+});
+
+// ── GET /teams/:id/missions ───────────────────────────────────────────────────
+router.get("/teams/:id/missions", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const memberCheck = await db.execute(sql.raw(
+    `SELECT 1 FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`
+  ));
+  if (!memberCheck.rows.length) { res.status(403).json({ error: "Not a team member" }); return; }
+  const result = await db.execute(sql.raw(
+    `SELECT m.*, u.username as created_by_username FROM team_missions m
+     LEFT JOIN users u ON u.id = m.created_by
+     WHERE m.team_id = ${teamId} ORDER BY m.created_at DESC`
+  ));
+  res.json(result.rows);
+});
+
+// ── POST /teams/:id/missions — create mission (leader only) ──────────────────
+router.post("/teams/:id/missions", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const memberCheck = await db.execute(sql.raw(
+    `SELECT role FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`
+  ));
+  if (!memberCheck.rows.length) { res.status(403).json({ error: "Not a team member" }); return; }
+  const { title, description, target_value, reward_amount, deadline } = req.body;
+  if (!title?.trim()) { res.status(400).json({ error: "title is required" }); return; }
+  const deadlineVal = deadline ? `'${deadline}'` : "NULL";
+  const result = await db.execute(sql.raw(
+    `INSERT INTO team_missions (team_id, title, description, target_value, reward_amount, deadline, created_by)
+     VALUES (${teamId}, '${title.replace(/'/g, "''")}', ${description ? `'${description.replace(/'/g, "''")}'` : "NULL"},
+       ${parseInt(target_value ?? "100", 10)}, ${parseFloat(reward_amount ?? "0")}, ${deadlineVal}, ${userId})
+     RETURNING *`
+  ));
+  res.status(201).json(result.rows[0]);
+});
+
+// ── PATCH /teams/:id/missions/:missionId — update mission ────────────────────
+router.patch("/teams/:id/missions/:missionId", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const missionId = parseInt(Array.isArray(req.params.missionId) ? req.params.missionId[0] : req.params.missionId, 10);
+  const memberCheck = await db.execute(sql.raw(
+    `SELECT role FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`
+  ));
+  if (!memberCheck.rows.length) { res.status(403).json({ error: "Not a team member" }); return; }
+  const { title, description, status, target_value, current_value, reward_amount, deadline } = req.body;
+  const sets: string[] = [];
+  if (title !== undefined) sets.push(`title = '${title.replace(/'/g, "''")}'`);
+  if (description !== undefined) sets.push(`description = '${description.replace(/'/g, "''")}'`);
+  if (status !== undefined) sets.push(`status = '${status}'`);
+  if (target_value !== undefined) sets.push(`target_value = ${parseInt(target_value, 10)}`);
+  if (current_value !== undefined) sets.push(`current_value = ${parseInt(current_value, 10)}`);
+  if (reward_amount !== undefined) sets.push(`reward_amount = ${parseFloat(reward_amount)}`);
+  if (deadline !== undefined) sets.push(`deadline = '${deadline}'`);
+  if (!sets.length) { res.status(400).json({ error: "Nothing to update" }); return; }
+  sets.push("updated_at = CURRENT_TIMESTAMP");
+  const result = await db.execute(sql.raw(
+    `UPDATE team_missions SET ${sets.join(", ")} WHERE id = ${missionId} AND team_id = ${teamId} RETURNING *`
+  ));
+  res.json(result.rows[0]);
+});
+
+// ── PATCH /teams/:id/invites/respond — accept or reject invite ────────────────
+router.patch("/teams/:id/invites/respond", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const { action } = req.body;
+  if (!["accept", "reject"].includes(action)) { res.status(400).json({ error: "action must be accept or reject" }); return; }
+  if (action === "reject") {
+    await db.execute(sql.raw(`DELETE FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'pending'`));
+    res.json({ ok: true, action: "rejected" });
+    return;
+  }
+  await db.execute(sql.raw(
+    `UPDATE team_members SET status = 'active' WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'pending'`
+  ));
+  res.json({ ok: true, action: "accepted" });
+});
+
+// ── Admin: GET /admin/teams — all teams with status ───────────────────────────
+router.get("/admin/teams", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
+  const { status } = req.query as Record<string, string>;
+  let q = `SELECT t.*, u.username as owner_username,
+    (SELECT COUNT(*) FROM team_members WHERE team_id = t.id AND status = 'active') as member_count,
+    (SELECT COUNT(*) FROM team_messages WHERE team_id = t.id) as message_count
+   FROM teams t LEFT JOIN users u ON u.id = t.owner_id`;
+  if (status) q += ` WHERE t.status = '${status}'`;
+  q += " ORDER BY t.created_at DESC";
+  const result = await db.execute(sql.raw(q));
+  res.json(result.rows);
+});
+
+// ── Admin: PATCH /admin/teams/:id — approve/reject/update team ────────────────
+router.patch("/admin/teams/:id", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const { status, name, description } = req.body;
+  const sets: string[] = [];
+  if (status !== undefined) sets.push(`status = '${status}'`);
+  if (name !== undefined) sets.push(`name = '${name.replace(/'/g, "''")}'`);
+  if (description !== undefined) sets.push(`description = '${description.replace(/'/g, "''")}'`);
+  if (!sets.length) { res.status(400).json({ error: "Nothing to update" }); return; }
+  const result = await db.execute(sql.raw(
+    `UPDATE teams SET ${sets.join(", ")} WHERE id = ${teamId} RETURNING *`
+  ));
+  res.json(result.rows[0]);
 });
 
 export default router;
