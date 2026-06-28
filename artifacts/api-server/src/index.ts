@@ -432,6 +432,36 @@ const MIGRATIONS = [
     completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, ad_task_id)
   )`,
+  // ── Phase 10: AYZEN Wallet — token balances + internal transfers ──────────
+  "ALTER TABLE credits ADD COLUMN IF NOT EXISTS usdt_balance REAL NOT NULL DEFAULT 0",
+  "ALTER TABLE credits ADD COLUMN IF NOT EXISTS bdt_balance REAL NOT NULL DEFAULT 0",
+  "ALTER TABLE credits ADD COLUMN IF NOT EXISTS xp_balance REAL NOT NULL DEFAULT 0",
+  `CREATE TABLE IF NOT EXISTS wallet_transfers (
+    id SERIAL PRIMARY KEY,
+    from_user_id INTEGER NOT NULL REFERENCES users(id),
+    to_user_id INTEGER NOT NULL REFERENCES users(id),
+    currency TEXT NOT NULL DEFAULT 'AZN',
+    amount REAL NOT NULL,
+    note TEXT,
+    status TEXT NOT NULL DEFAULT 'completed',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_wallet_transfers_from ON wallet_transfers(from_user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_wallet_transfers_to ON wallet_transfers(to_user_id)",
+  // ── Phase 11: AYZEN built-in Mail ─────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS ayzen_mail (
+    id SERIAL PRIMARY KEY,
+    from_user_id INTEGER NOT NULL REFERENCES users(id),
+    to_user_id INTEGER NOT NULL REFERENCES users(id),
+    subject TEXT NOT NULL DEFAULT '(no subject)',
+    body TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_by_sender BOOLEAN NOT NULL DEFAULT FALSE,
+    deleted_by_receiver BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_ayzen_mail_to ON ayzen_mail(to_user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_ayzen_mail_from ON ayzen_mail(from_user_id)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

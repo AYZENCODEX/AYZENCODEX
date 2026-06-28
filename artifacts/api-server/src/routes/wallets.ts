@@ -294,6 +294,86 @@ router.post("/wallets/builtin/create", async (req, res): Promise<void> => {
   res.status(201).json({ ...formatWallet(wallet), isBuiltin: true, watchOnly: true });
 });
 
+// GET /wallets/ayzen-balance — all AYZEN token balances for current user
+router.get("/wallets/ayzen-balance", async (req, res): Promise<void> => {
+  const tokenStr = getTokenFromReq(req);
+  const authUser = tokenStr ? await getUserFromToken(tokenStr) : null;
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = authUser.userId;
+  try {
+    const cr = await db.execute(sql`SELECT azn_balance, balance, usdt_balance, bdt_balance, xp_balance FROM credits WHERE user_id = ${userId}`);
+    const row = (cr.rows[0] as Record<string, unknown>) ?? {};
+    res.json({
+      azn: parseFloat(String(row.azn_balance ?? 0)),
+      credits: parseInt(String(row.balance ?? 0), 10),
+      usdt: parseFloat(String(row.usdt_balance ?? 0)),
+      bdt: parseFloat(String(row.bdt_balance ?? 0)),
+      xp: parseFloat(String(row.xp_balance ?? 0)),
+    });
+  } catch { res.json({ azn: 0, credits: 0, usdt: 0, bdt: 0, xp: 0 }); }
+});
+
+// GET /wallets/transfers — transfer history for current user
+router.get("/wallets/transfers", async (req, res): Promise<void> => {
+  const tokenStr = getTokenFromReq(req);
+  const authUser = tokenStr ? await getUserFromToken(tokenStr) : null;
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const userId = authUser.userId;
+  try {
+    const result = await db.execute(sql`
+      SELECT wt.*, 
+        fu.username as from_username, fu.email as from_email,
+        tu.username as to_username, tu.email as to_email
+      FROM wallet_transfers wt
+      LEFT JOIN users fu ON fu.id = wt.from_user_id
+      LEFT JOIN users tu ON tu.id = wt.to_user_id
+      WHERE wt.from_user_id = ${userId} OR wt.to_user_id = ${userId}
+      ORDER BY wt.created_at DESC
+      LIMIT 50
+    `);
+    res.json(result.rows);
+  } catch { res.json([]); }
+});
+
+// POST /wallets/transfer — send tokens to another AYZEN user
+router.post("/wallets/transfer", async (req, res): Promise<void> => {
+  const tokenStr = getTokenFromReq(req);
+  const authUser = tokenStr ? await getUserFromToken(tokenStr) : null;
+  if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
+  const fromUserId = authUser.userId;
+  const { toUsername, currency, amount, note } = req.body;
+  if (!toUsername || !currency || !amount || amount <= 0) {
+    res.status(400).json({ error: "toUsername, currency, and amount > 0 are required" }); return;
+  }
+  const ALLOWED = ["AZN", "USDT", "BDT", "XP"];
+  if (!ALLOWED.includes(String(currency).toUpperCase())) {
+    res.status(400).json({ error: `Currency must be one of: ${ALLOWED.join(", ")}` }); return;
+  }
+  const cur = String(currency).toUpperCase();
+  const amt = parseFloat(String(amount));
+  // Find target user
+  const targetResult = await db.execute(sql`SELECT id, username, email FROM users WHERE username = ${toUsername} OR email = ${toUsername} LIMIT 1`);
+  if (targetResult.rows.length === 0) { res.status(404).json({ error: "User not found" }); return; }
+  const toUser = targetResult.rows[0] as any;
+  if (toUser.id === fromUserId) { res.status(400).json({ error: "Cannot transfer to yourself" }); return; }
+  // Column map
+  const colMap: Record<string, string> = { AZN: "azn_balance", USDT: "usdt_balance", BDT: "bdt_balance", XP: "xp_balance" };
+  const col = colMap[cur];
+  // Check sender balance
+  const senderRow = await db.execute(sql`SELECT ${sql.raw(col)} as bal FROM credits WHERE user_id = ${fromUserId}`);
+  const senderBal = parseFloat(String((senderRow.rows[0] as any)?.bal ?? 0));
+  if (senderBal < amt) { res.status(400).json({ error: `Insufficient ${cur} balance (have ${senderBal.toFixed(4)})` }); return; }
+  // Deduct from sender
+  await db.execute(sql.raw(`INSERT INTO credits (user_id, ${col}) VALUES (${fromUserId}, 0) ON CONFLICT (user_id) DO NOTHING`));
+  await db.execute(sql.raw(`UPDATE credits SET ${col} = ${col} - ${amt} WHERE user_id = ${fromUserId}`));
+  // Add to receiver
+  await db.execute(sql.raw(`INSERT INTO credits (user_id, ${col}) VALUES (${toUser.id}, 0) ON CONFLICT (user_id) DO NOTHING`));
+  await db.execute(sql.raw(`UPDATE credits SET ${col} = ${col} + ${amt} WHERE user_id = ${toUser.id}`));
+  // Record transfer
+  await db.execute(sql`INSERT INTO wallet_transfers (from_user_id, to_user_id, currency, amount, note) VALUES (${fromUserId}, ${toUser.id}, ${cur}, ${amt}, ${note ?? null})`);
+  res.json({ success: true, currency: cur, amount: amt, to: toUser.username ?? toUser.email });
+});
+
 // GET /wallets/stats — aggregated stats for current user
 router.get("/wallets/stats", async (req, res): Promise<void> => {
   const authUser = getAuthUser(req);
