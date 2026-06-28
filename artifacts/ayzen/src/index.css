@@ -549,3 +549,43 @@ code, pre {
   transform: translateY(-2px);
   box-shadow: 0 8px 24px hsl(174 100% 42% / 0.08);
 }
+
+/* ── New popup / entrance animations ──────────────────────────────────────── */
+@keyframes popIn {
+  0%   { opacity: 0; transform: scale(0.88) translateY(6px); }
+  60%  { opacity: 1; transform: scale(1.03) translateY(-2px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes bounceIn {
+  0%   { opacity: 0; transform: scale(0.6); }
+  55%  { opacity: 1; transform: scale(1.1); }
+  75%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+/* animate-pop-in: spring scale-up used on cards, rows, banners */
+.animate-pop-in      { animation: popIn      0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+/* animate-slide-in-left: inner sidebar entrance (reuses existing slideInLeft keyframe) */
+.animate-slide-in-left{ animation: slideInLeft 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* animate-slide-down: accordion / expand reveal */
+.animate-slide-down  { animation: slideDown  0.22s ease both; }
+/* animate-bounce-in: notification / badge entrance */
+.animate-bounce-in   { animation: bounceIn   0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+/* badge-pulse convenience alias */
+.badge-pulse         { animation: bounceIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* Dialog pop animation */
+[data-state="open"][role="dialog"],
+[data-state="open"][role="alertdialog"] {
+  animation: popIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Toast pop */
+[data-sonner-toast],
+[role="status"][data-state="open"] {
+  animation: popIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
