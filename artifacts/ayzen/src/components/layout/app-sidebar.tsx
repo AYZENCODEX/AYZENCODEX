@@ -9,7 +9,7 @@ import {
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
-  ArrowLeftRight, Zap, Globe, FlaskConical, Timer,
+  ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -128,9 +128,10 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Earn", icon: DollarSign,
     items: [
-      { href: "/earn",        label: "Earn Center",  icon: DollarSign,    },
-      { href: "/leaderboard", label: "Leaderboard",  icon: Trophy,   pluginSlug: "leaderboard" },
-      { href: "/referrals",   label: "Referrals",    icon: Share2,   pluginSlug: "referrals" },
+      { href: "/earn",                        label: "Earn Center",   icon: DollarSign    },
+      { href: "/leaderboard",                label: "Operators",     icon: Trophy,    pluginSlug: "leaderboard" },
+      { href: "/leaderboard?tab=entities",   label: "Entity Board",  icon: LayoutList, pluginSlug: "leaderboard" },
+      { href: "/referrals",                  label: "Referrals",     icon: Share2,    pluginSlug: "referrals" },
     ],
   },
   {
