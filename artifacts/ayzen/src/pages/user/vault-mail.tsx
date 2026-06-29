@@ -3,10 +3,15 @@ import { useListVaultEntries, customFetch } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import {
   Mail, Eye, EyeOff, Copy, Check, Shield,
-  Smartphone, AtSign, RefreshCw, Loader2, Twitter,
-  MessageSquare, Phone,
+  Smartphone, AtSign, Loader2, Twitter,
+  MessageSquare, Phone, Settings, Server, Send, Inbox,
+  Save, AlertCircle, CheckCircle2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 interface MailItem {
   id: string;
@@ -111,14 +116,194 @@ function MailCard({ item }: { item: MailItem }) {
   );
 }
 
+// ─── IMAP/SMTP Config Component ───────────────────────────────────────────────
+interface MailConfig {
+  imapHost: string; imapPort: string; imapUser: string; imapPassword: string; imapSsl: boolean;
+  smtpHost: string; smtpPort: string; smtpUser: string; smtpPassword: string; smtpTls: boolean;
+}
+
+function ImapSmtpConfig() {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState<"smtp" | "imap" | null>(null);
+  const [config, setConfig] = useState<MailConfig>({
+    imapHost: "", imapPort: "993", imapUser: "", imapPassword: "", imapSsl: true,
+    smtpHost: "", smtpPort: "587", smtpUser: "", smtpPassword: "", smtpTls: true,
+  });
+  const [testResult, setTestResult] = useState<{ smtp?: boolean; imap?: boolean }>({});
+
+  useEffect(() => {
+    customFetch<any>("/settings/mail-config").then((d: any) => {
+      if (d) setConfig(c => ({
+        ...c,
+        imapHost: d.imapHost ?? "", imapPort: String(d.imapPort ?? 993),
+        imapUser: d.imapUser ?? "", imapPassword: d.imapPassword ?? "",
+        smtpHost: d.smtpHost ?? "", smtpPort: String(d.smtpPort ?? 587),
+        smtpUser: d.smtpUser ?? "", smtpPassword: d.smtpPassword ?? "",
+      }));
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const set = (key: keyof MailConfig) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setConfig(c => ({ ...c, [key]: e.target.value }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await customFetch("/settings/mail-config", {
+        method: "POST",
+        body: JSON.stringify({
+          imapHost: config.imapHost, imapPort: Number(config.imapPort),
+          imapUser: config.imapUser, imapPassword: config.imapPassword,
+          smtpHost: config.smtpHost, smtpPort: Number(config.smtpPort),
+          smtpUser: config.smtpUser, smtpPassword: config.smtpPassword,
+        }),
+      });
+      toast({ title: "Mail config saved", description: "IMAP & SMTP settings updated." });
+    } catch {
+      toast({ variant: "destructive", title: "Failed to save", description: "Check your settings." });
+    } finally { setSaving(false); }
+  };
+
+  const testSMTP = async () => {
+    setTesting("smtp");
+    try {
+      const res = await customFetch<any>("/settings/mail-config/test-smtp", { method: "POST" });
+      setTestResult(r => ({ ...r, smtp: res?.ok === true }));
+      toast({ title: res?.ok ? "SMTP connected ✓" : "SMTP failed", variant: res?.ok ? "default" : "destructive" });
+    } catch {
+      setTestResult(r => ({ ...r, smtp: false }));
+      toast({ variant: "destructive", title: "SMTP test failed" });
+    } finally { setTesting(null); }
+  };
+
+  if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      {/* IMAP Config */}
+      <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
+          <Inbox className="w-4 h-4 text-violet-400" />
+          <div>
+            <p className="font-mono text-sm font-bold text-foreground">IMAP — Incoming Mail</p>
+            <p className="font-mono text-[10px] text-muted-foreground/50">Configure your mail server for reading emails</p>
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2 space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">IMAP Host</Label>
+              <Input value={config.imapHost} onChange={set("imapHost")} placeholder="imap.gmail.com" className="font-mono text-xs h-8 bg-input" />
+            </div>
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">Port</Label>
+              <Input value={config.imapPort} onChange={set("imapPort")} placeholder="993" type="number" className="font-mono text-xs h-8 bg-input" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">Username / Email</Label>
+              <Input value={config.imapUser} onChange={set("imapUser")} placeholder="you@gmail.com" className="font-mono text-xs h-8 bg-input" />
+            </div>
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">Password / App Password</Label>
+              <Input value={config.imapPassword} onChange={set("imapPassword")} type="password" placeholder="••••••••" className="font-mono text-xs h-8 bg-input" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-muted/10 rounded-lg border border-border/20">
+            <Server className="w-3.5 h-3.5 text-muted-foreground/40" />
+            <p className="font-mono text-[10px] text-muted-foreground/50">Common ports: 993 (SSL) · 143 (STARTTLS). Use App Passwords for Gmail/Outlook.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* SMTP Config */}
+      <div className="rounded-xl border border-card-border bg-card overflow-hidden">
+        <div className="px-4 py-3 border-b border-border/30 flex items-center gap-2">
+          <Send className="w-4 h-4 text-emerald-400" />
+          <div>
+            <p className="font-mono text-sm font-bold text-foreground">SMTP — Outgoing Mail</p>
+            <p className="font-mono text-[10px] text-muted-foreground/50">Configure your mail server for sending emails</p>
+          </div>
+          <div className="ml-auto">
+            {testResult.smtp === true && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+            {testResult.smtp === false && <AlertCircle className="w-4 h-4 text-red-400" />}
+          </div>
+        </div>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2 space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">SMTP Host</Label>
+              <Input value={config.smtpHost} onChange={set("smtpHost")} placeholder="smtp.gmail.com" className="font-mono text-xs h-8 bg-input" />
+            </div>
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">Port</Label>
+              <Input value={config.smtpPort} onChange={set("smtpPort")} placeholder="587" type="number" className="font-mono text-xs h-8 bg-input" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">Username / Email</Label>
+              <Input value={config.smtpUser} onChange={set("smtpUser")} placeholder="you@gmail.com" className="font-mono text-xs h-8 bg-input" />
+            </div>
+            <div className="space-y-1">
+              <Label className="font-mono text-[10px] uppercase text-muted-foreground">Password / App Password</Label>
+              <Input value={config.smtpPassword} onChange={set("smtpPassword")} type="password" placeholder="••••••••" className="font-mono text-xs h-8 bg-input" />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 p-2 bg-muted/10 rounded-lg border border-border/20">
+            <Server className="w-3.5 h-3.5 text-muted-foreground/40" />
+            <p className="font-mono text-[10px] text-muted-foreground/50">Common ports: 465 (SSL) · 587 (STARTTLS) · 25 (plain). Use App Passwords for Gmail.</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={testSMTP} disabled={testing !== null || !config.smtpHost} className="font-mono text-xs gap-2 h-8">
+            {testing === "smtp" ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+            Test SMTP Connection
+          </Button>
+        </div>
+      </div>
+
+      {/* Common providers */}
+      <div className="rounded-xl border border-dashed border-border/40 p-4 space-y-3">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50">Quick-fill common providers</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { label: "Gmail", imap: "imap.gmail.com", smtp: "smtp.gmail.com", iport: "993", sport: "587" },
+            { label: "Outlook", imap: "outlook.office365.com", smtp: "smtp.office365.com", iport: "993", sport: "587" },
+            { label: "Yahoo", imap: "imap.mail.yahoo.com", smtp: "smtp.mail.yahoo.com", iport: "993", sport: "587" },
+            { label: "ProtonMail", imap: "127.0.0.1", smtp: "127.0.0.1", iport: "1143", sport: "1025" },
+            { label: "iCloud", imap: "imap.mail.me.com", smtp: "smtp.mail.me.com", iport: "993", sport: "587" },
+          ].map(p => (
+            <button
+              key={p.label}
+              onClick={() => setConfig(c => ({ ...c, imapHost: p.imap, smtpHost: p.smtp, imapPort: p.iport, smtpPort: p.sport }))}
+              className="px-3 py-1.5 rounded-lg border border-border/50 font-mono text-[10px] hover:border-primary/40 hover:text-primary transition-all text-muted-foreground/60"
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <Button onClick={save} disabled={saving} className="font-mono text-xs uppercase gap-2">
+        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+        Save Mail Configuration
+      </Button>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function VaultMail() {
   const { data: vaultData, isLoading: vaultLoading } = useListVaultEntries();
   const [localAccounts, setLocalAccounts] = useState<any[]>([]);
   const [localLoading, setLocalLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "entity" | "local">("all");
+  const [view, setView] = useState<"hub" | "config">("hub");
 
   useEffect(() => {
-    customFetch<any>("/local-accounts").then(d => {
+    customFetch<any>("/local-accounts").then((d: any) => {
       setLocalAccounts(Array.isArray(d) ? d : (d?.accounts ?? []));
     }).catch(() => {}).finally(() => setLocalLoading(false));
   }, []);
@@ -185,75 +370,96 @@ export default function VaultMail() {
 
   const allItems = [...entityItems, ...localItems];
   const filtered = filter === "all" ? allItems : allItems.filter(i => i.source === filter);
-
   const loading = vaultLoading || localLoading;
 
   return (
     <div className="space-y-4">
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        {[
-          { label: "Total Emails", value: allItems.length, icon: Mail, color: "text-primary" },
-          { label: "From Entities", value: entityItems.length, icon: Shield, color: "text-violet-400" },
-          { label: "From Local", value: localItems.length, icon: Smartphone, color: "text-cyan-400" },
-        ].map(s => (
-          <div key={s.label} className="bg-card border border-card-border rounded-xl p-3 flex items-center gap-3">
-            <s.icon className={cn("w-4 h-4 flex-shrink-0", s.color)} />
-            <div>
-              <p className={cn("font-mono text-base font-bold", s.color)}>{s.value}</p>
-              <p className="font-mono text-[9px] text-muted-foreground/50">{s.label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filter */}
-      <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 w-fit">
-        {(["all", "entity", "local"] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={cn(
-              "px-3 py-1.5 rounded-md font-mono text-xs transition-all capitalize",
-              filter === f ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground"
-            )}
-          >
-            {f}
+      {/* View toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-mono font-bold text-sm flex items-center gap-2"><Mail className="w-4 h-4 text-primary" /> Mail Hub</h2>
+          <p className="font-mono text-[10px] text-muted-foreground/50 mt-0.5">Aggregated emails from all vault sources</p>
+        </div>
+        <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1">
+          <button onClick={() => setView("hub")} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[10px] transition-all", view === "hub" ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground")}>
+            <AtSign className="w-3 h-3" /> Hub
           </button>
-        ))}
+          <button onClick={() => setView("config")} className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[10px] transition-all", view === "config" ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground")}>
+            <Settings className="w-3 h-3" /> IMAP/SMTP
+          </button>
+        </div>
       </div>
 
-      {loading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="w-5 h-5 animate-spin text-primary" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="text-center py-16 space-y-2">
-          <AtSign className="w-8 h-8 text-muted-foreground/30 mx-auto" />
-          <p className="font-mono text-xs text-muted-foreground/50">No emails configured</p>
-          <p className="font-mono text-[10px] text-muted-foreground/30">
-            Add emails to your entities or local accounts and they'll appear here
-          </p>
-        </div>
+      {view === "config" ? (
+        <ImapSmtpConfig />
       ) : (
-        <div className="space-y-2">
-          {entityItems.length > 0 && (filter === "all" || filter === "entity") && (
-            <div className="space-y-1.5">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 px-1">
-                Entity Emails ({entityItems.length})
+        <>
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { label: "Total Emails", value: allItems.length, icon: Mail, color: "text-primary" },
+              { label: "From Entities", value: entityItems.length, icon: Shield, color: "text-violet-400" },
+              { label: "From Local", value: localItems.length, icon: Smartphone, color: "text-cyan-400" },
+            ].map(s => (
+              <div key={s.label} className="bg-card border border-card-border rounded-xl p-3 flex items-center gap-3">
+                <s.icon className={cn("w-4 h-4 flex-shrink-0", s.color)} />
+                <div>
+                  <p className={cn("font-mono text-base font-bold", s.color)}>{s.value}</p>
+                  <p className="font-mono text-[9px] text-muted-foreground/50">{s.label}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Filter */}
+          <div className="flex items-center gap-1 bg-muted/20 rounded-lg p-1 w-fit">
+            {(["all", "entity", "local"] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={cn(
+                  "px-3 py-1.5 rounded-md font-mono text-xs transition-all capitalize",
+                  filter === f ? "bg-card text-primary shadow-sm font-bold" : "text-muted-foreground/60 hover:text-muted-foreground"
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="w-5 h-5 animate-spin text-primary" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-16 space-y-2">
+              <AtSign className="w-8 h-8 text-muted-foreground/30 mx-auto" />
+              <p className="font-mono text-xs text-muted-foreground/50">No emails configured</p>
+              <p className="font-mono text-[10px] text-muted-foreground/30">
+                Add emails to your entities or local accounts and they'll appear here
               </p>
-              {entityItems.map(item => <MailCard key={item.id} item={item} />)}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {entityItems.length > 0 && (filter === "all" || filter === "entity") && (
+                <div className="space-y-1.5">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 px-1">
+                    Entity Emails ({entityItems.length})
+                  </p>
+                  {entityItems.map(item => <MailCard key={item.id} item={item} />)}
+                </div>
+              )}
+              {localItems.length > 0 && (filter === "all" || filter === "local") && (
+                <div className="space-y-1.5 mt-4">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 px-1">
+                    Local Account Emails ({localItems.length})
+                  </p>
+                  {localItems.map(item => <MailCard key={item.id} item={item} />)}
+                </div>
+              )}
             </div>
           )}
-          {localItems.length > 0 && (filter === "all" || filter === "local") && (
-            <div className="space-y-1.5 mt-4">
-              <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 px-1">
-                Local Account Emails ({localItems.length})
-              </p>
-              {localItems.map(item => <MailCard key={item.id} item={item} />)}
-            </div>
-          )}
-        </div>
+        </>
       )}
     </div>
   );

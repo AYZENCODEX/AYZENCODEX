@@ -48,6 +48,9 @@ export default function AdminTasks() {
 
   const resetForm = () => { setForm({ name: "", description: "", projectId: "", taskLink: "", rewardAmount: "", xpAmount: "", taskType: "One-time", verificationType: "manual" }); setSteps([]); };
 
+  // Auto-load pending submissions on mount
+  useEffect(() => { loadSubmissions("pending"); }, []);
+
   // Load projects for dropdown
   useEffect(() => {
     const token = localStorage.getItem("ayzen_token") ?? "";
@@ -261,12 +264,28 @@ export default function AdminTasks() {
       {/* Submissions Tab */}
       {tab === "submissions" && (
         <div className="space-y-4">
-          <div className="flex gap-2 flex-wrap">
-            {["pending", "approved", "rejected"].map(s => (
-              <button key={s} onClick={() => handleFilterChange(s)}
-                className={`px-3 py-1.5 rounded-md font-mono text-[10px] uppercase tracking-widest border transition-colors ${statusFilter === s ? statusColor[s] : "border-border text-muted-foreground hover:border-primary/30"}`}
-              >{s}</button>
-            ))}
+          <div className="flex items-center gap-2 flex-wrap justify-between">
+            <div className="flex gap-2 flex-wrap">
+              {["pending", "approved", "rejected"].map(s => (
+                <button key={s} onClick={() => handleFilterChange(s)}
+                  className={`px-3 py-1.5 rounded-md font-mono text-[10px] uppercase tracking-widest border transition-colors ${statusFilter === s ? statusColor[s] : "border-border text-muted-foreground hover:border-primary/30"}`}
+                >
+                  {s}
+                  {s === "pending" && submissions.filter(x => x.status === "pending").length > 0 && statusFilter !== "pending" && (
+                    <span className="ml-1.5 bg-yellow-400 text-black rounded-full px-1.5 text-[9px] font-bold">{submissions.filter(x => x.status === "pending").length}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+            {statusFilter === "pending" && submissions.filter(s => s.status === "pending").length > 1 && (
+              <Button size="sm" variant="outline" className="font-mono text-[10px] uppercase gap-1.5 h-7 border-emerald-400/30 text-emerald-400 hover:bg-emerald-400/10"
+                onClick={async () => {
+                  const pending = submissions.filter(s => s.status === "pending");
+                  for (const sub of pending) { await handleApprove(sub); }
+                }}>
+                <Check className="w-3 h-3" /> Approve All ({submissions.filter(s => s.status === "pending").length})
+              </Button>
+            )}
           </div>
 
           <div className="border border-card-border rounded-xl bg-card overflow-hidden">

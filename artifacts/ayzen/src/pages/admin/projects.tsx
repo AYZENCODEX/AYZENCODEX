@@ -69,8 +69,11 @@ const PillSelect = ({ options, value, onChange }: { options: string[]; value: st
   </div>
 );
 
+const ALL_CATS = ["All", "DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Exchange", "Instant Web3", "TGE", "Social", "Other"];
+
 export default function AdminProjects() {
   const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("All");
   const [showCreate, setShowCreate] = useState(false);
   const [createTab, setCreateTab] = useState<CreateTab>("basic");
   const [form, setForm] = useState<CreateForm>(EMPTY_FORM);
@@ -252,7 +255,7 @@ export default function AdminProjects() {
                   <div className="space-y-1.5">
                     <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Category</Label>
                     <PillSelect
-                      options={["DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Social", "Other"]}
+                      options={["DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Exchange", "Instant Web3", "TGE", "Social", "Other"]}
                       value={form.category}
                       onChange={v => setForm(p => ({ ...p, category: v }))}
                     />
@@ -391,18 +394,41 @@ export default function AdminProjects() {
         </div>
       )}
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search by protocol name..."
-            className="pl-9 font-mono bg-card border-card-border"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
+      <div className="space-y-3">
+        <div className="flex items-center gap-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by protocol name..."
+              className="pl-9 font-mono bg-card border-card-border"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          {catFilter !== "All" && (
+            <button onClick={() => setCatFilter("All")} className="flex items-center gap-1 text-xs font-mono text-muted-foreground/50 hover:text-primary transition-colors">
+              <X className="w-3 h-3" /> Clear filter
+            </button>
+          )}
+        </div>
+        {/* Category filter pills */}
+        <div className="flex flex-wrap gap-1.5 pb-1">
+          {ALL_CATS.map(cat => (
+            <button key={cat} onClick={() => setCatFilter(cat)}
+              className={cn("px-2.5 py-1 rounded-lg font-mono text-[10px] border transition-all",
+                catFilter === cat
+                  ? "border-primary/50 bg-primary/10 text-primary font-bold"
+                  : "border-border/30 text-muted-foreground/50 hover:border-primary/20 hover:text-muted-foreground")}>
+              {cat}
+            </button>
+          ))}
         </div>
       </div>
 
+      {(() => {
+        const allProjects = data?.projects ?? [];
+        const projects = catFilter === "All" ? allProjects : allProjects.filter((p: any) => p.category === catFilter);
+        return (
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {isLoading ? (
           Array.from({ length: 6 }).map((_, i) => (
@@ -412,13 +438,13 @@ export default function AdminProjects() {
               <CardFooter><Skeleton className="h-8 w-full" /></CardFooter>
             </Card>
           ))
-        ) : data?.projects.length === 0 ? (
+        ) : projects.length === 0 ? (
           <div className="col-span-full py-12 text-center font-mono text-muted-foreground bg-card border border-card-border rounded-md">
             No active protocols in the database.{" "}
             <button onClick={() => setShowCreate(true)} className="text-primary hover:underline">Initialize one now.</button>
           </div>
         ) : (
-          data?.projects.map((project) => (
+          projects.map((project: any) => (
             <Card key={project.id} className="bg-card border-card-border shadow-none flex flex-col group hover:border-primary/50 transition-colors">
               <CardHeader className="pb-2">
                 <div className="flex justify-between items-start">
@@ -463,6 +489,8 @@ export default function AdminProjects() {
           ))
         )}
       </div>
+        );
+      })()}
     </div>
   );
 }

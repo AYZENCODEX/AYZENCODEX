@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { NotificationBell } from "@/components/notification-bell";
+import { GlobalSearch } from "@/components/global-search";
+import { useAuth } from "@/hooks/use-auth";
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -13,6 +15,8 @@ interface AppLayoutProps {
 export function AppLayout({ children }: AppLayoutProps) {
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="flex h-screen bg-background overflow-hidden selection:bg-primary/30">
@@ -39,12 +43,14 @@ export function AppLayout({ children }: AppLayoutProps) {
               <Menu className="w-5 h-5" />
             </Button>
             <span className="font-mono font-bold tracking-tighter text-primary text-lg flex-1">AYZEN</span>
+            <GlobalSearch isAdmin={isAdmin} />
             <NotificationBell />
           </div>
         )}
 
         {!isMobile && (
-          <div className="relative z-10 flex items-center justify-end px-6 py-2 border-b border-border/40 bg-background/40 backdrop-blur-sm sticky top-0">
+          <div className="relative z-10 flex items-center justify-between px-6 py-2 border-b border-border/40 bg-background/40 backdrop-blur-sm sticky top-0">
+            <GlobalSearch isAdmin={isAdmin} />
             <NotificationBell />
           </div>
         )}

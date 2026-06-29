@@ -86,17 +86,20 @@ const TIER_COLORS: Record<string, string> = {
   "4": "border-red-400/30 text-red-400",
 };
 
-const PROJECT_CATEGORIES = ["All", "DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Social", "Other"];
+const PROJECT_CATEGORIES = ["All", "DeFi", "NFT", "GameFi", "Layer2", "Testnet", "CEX", "Exchange", "Instant Web3", "TGE", "Social", "Other"];
 
 const CATEGORY_COLORS: Record<string, string> = {
-  DeFi:    "text-cyan-400 border-cyan-400/20",
-  NFT:     "text-purple-400 border-purple-400/20",
-  GameFi:  "text-emerald-400 border-emerald-400/20",
-  Layer2:  "text-blue-400 border-blue-400/20",
-  Testnet: "text-orange-400 border-orange-400/20",
-  CEX:     "text-amber-400 border-amber-400/20",
-  Social:  "text-pink-400 border-pink-400/20",
-  Other:   "text-muted-foreground border-border",
+  DeFi:          "text-cyan-400 border-cyan-400/20",
+  NFT:           "text-purple-400 border-purple-400/20",
+  GameFi:        "text-emerald-400 border-emerald-400/20",
+  Layer2:        "text-blue-400 border-blue-400/20",
+  Testnet:       "text-orange-400 border-orange-400/20",
+  CEX:           "text-amber-400 border-amber-400/20",
+  Exchange:      "text-yellow-400 border-yellow-400/20",
+  "Instant Web3":"text-violet-400 border-violet-400/20",
+  TGE:           "text-rose-400 border-rose-400/20",
+  Social:        "text-pink-400 border-pink-400/20",
+  Other:         "text-muted-foreground border-border",
 };
 
 function useBookmarks() {
@@ -127,19 +130,19 @@ export default function UserProjects() {
   const allProjects = data?.projects ?? [];
 
   const filteredProjects = (() => {
-    let list = selectedCategory === "All"
+    let list: any[] = selectedCategory === "All"
       ? allProjects
-      : allProjects.filter(p => ((p as any).category ?? "Other") === selectedCategory);
-    if (showBookmarked) list = list.filter(p => bookmarks.has(p.id));
-    const starred = list.filter(p => bookmarks.has(p.id));
-    const rest = list.filter(p => !bookmarks.has(p.id));
+      : allProjects.filter((p: any) => ((p as any).category ?? "Other") === selectedCategory);
+    if (showBookmarked) list = list.filter((p: any) => bookmarks.has(p.id));
+    const starred = list.filter((p: any) => bookmarks.has(p.id));
+    const rest = list.filter((p: any) => !bookmarks.has(p.id));
     return [...starred, ...rest];
   })();
 
   const categoryCounts = PROJECT_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = cat === "All"
       ? allProjects.length
-      : allProjects.filter(p => ((p as any).category ?? "Other") === cat).length;
+      : allProjects.filter((p: any) => ((p as any).category ?? "Other") === cat).length;
     return acc;
   }, {});
 

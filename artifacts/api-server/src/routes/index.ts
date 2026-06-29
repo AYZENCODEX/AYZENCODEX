@@ -42,6 +42,7 @@ import bulkRouter from "./bulk";
 import networksRouter from "./networks";
 import rewardLinksRouter from "./reward-links";
 import adTasksRouter from "./ad-tasks";
+import searchRouter from "./search";
 
 const router: IRouter = Router();
 
@@ -88,5 +89,6 @@ router.use(bulkRouter);
 router.use(networksRouter);
 router.use(rewardLinksRouter);
 router.use(adTasksRouter);
+router.use(searchRouter);
 
 export default router;

@@ -1,6 +1,6 @@
 import { useGetPlatformStats, useGetPlatformActivity } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, Activity, Target, Zap, TrendingUp, UserPlus, Clock, DollarSign, Share2, MessageSquare, ChevronRight } from "lucide-react";
+import { Users, Activity, Target, Zap, TrendingUp, UserPlus, Clock, DollarSign, Share2, MessageSquare, ChevronRight, ClipboardList, Check, X } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from "recharts";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
@@ -22,6 +22,7 @@ export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } = useGetPlatformStats();
   const { data: activity, isLoading: activityLoading } = useGetPlatformActivity();
   const [recentUsers, setRecentUsers] = useState<RecentUser[]>([]);
+  const [pendingSubs, setPendingSubs] = useState<any[]>([]);
 
   const token = localStorage.getItem("ayzen_token") ?? "";
 
@@ -29,6 +30,9 @@ export default function AdminDashboard() {
     fetch("/api/users?limit=5&page=1", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(d => setRecentUsers(Array.isArray(d.users) ? d.users.slice(0, 5) : []));
+    fetch("/api/tasks/submissions?status=pending", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setPendingSubs(Array.isArray(d) ? d.slice(0, 5) : []));
   }, []);
 
   const statCards = [
@@ -127,8 +131,34 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Right column - Quick actions + Recent users */}
+        {/* Right column - Quick actions + Pending subs + Recent users */}
         <div className="space-y-4">
+          {/* Pending submissions */}
+          {pendingSubs.length > 0 && (
+            <div className="border border-yellow-400/20 rounded-xl bg-yellow-400/3 overflow-hidden">
+              <div className="px-4 py-3 border-b border-yellow-400/20 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList className="w-3.5 h-3.5 text-yellow-400" />
+                  <p className="font-mono text-sm font-bold text-yellow-400">Pending Submissions</p>
+                  <span className="bg-yellow-400 text-black rounded-full px-1.5 text-[9px] font-bold">{pendingSubs.length}</span>
+                </div>
+                <Link href="/admin/tasks"><span className="text-[10px] font-mono text-yellow-400 hover:underline cursor-pointer">Review →</span></Link>
+              </div>
+              <div className="divide-y divide-yellow-400/10">
+                {pendingSubs.map((s: any) => (
+                  <div key={s.id} className="px-4 py-2 flex items-center gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-mono text-xs font-medium truncate">{s.username ?? `User #${s.userId}`}</p>
+                      <p className="font-mono text-[9px] text-muted-foreground/50 truncate">{s.taskName ?? `Task #${s.taskId}`}</p>
+                    </div>
+                    <span className="font-mono text-[9px] text-muted-foreground/40 shrink-0">
+                      {format(new Date(s.submittedAt), "MMM d HH:mm")}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {/* Quick actions */}
           <div className="border border-card-border rounded-xl bg-card overflow-hidden">
             <div className="px-4 py-3 border-b border-card-border">

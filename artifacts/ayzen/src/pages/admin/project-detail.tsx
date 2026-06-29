@@ -565,27 +565,73 @@ export default function AdminProjectDetail() {
               <CardContent className="p-8 text-center font-mono text-muted-foreground/50">No operators enrolled yet.</CardContent>
             </Card>
           ) : (
-            <Card className="bg-card border-card-border shadow-none overflow-hidden">
-              <div className="divide-y divide-card-border">
-                {members.map((m: any) => (
-                  <div key={m.userId} className="flex items-center gap-4 px-4 py-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                      <Users className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-mono text-sm font-bold">{m.username}</div>
-                      <div className="font-mono text-[9px] text-muted-foreground/40">
-                        Joined {m.joinedAt ? format(new Date(m.joinedAt), "MMM d, yyyy") : "—"}
+            <>
+              {/* ROI Summary Bar */}
+              {(() => {
+                const totalTasks = members.reduce((s: number, m: any) => s + (m.tasksCompleted || 0), 0);
+                const maxTasks = Math.max(...members.map((m: any) => m.tasksCompleted || 0), 1);
+                const totalRoi = members.reduce((s: number, m: any) => s + (m.roi || 0), 0);
+                return (
+                  <div className="grid grid-cols-3 gap-3 mb-3">
+                    {[
+                      { label: "Total Operators", value: members.length, color: "text-primary" },
+                      { label: "Total Executions", value: totalTasks, color: "text-emerald-400" },
+                      { label: "ROI Distributed", value: `$${totalRoi.toLocaleString()}`, color: "text-yellow-400" },
+                    ].map(s => (
+                      <div key={s.label} className="bg-card border border-card-border rounded-lg p-3">
+                        <div className={cn("font-mono text-lg font-bold", s.color)}>{s.value}</div>
+                        <div className="font-mono text-[9px] text-muted-foreground/50">{s.label}</div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-xs font-bold text-primary">{m.tasksCompleted} tasks</div>
-                      <div className="font-mono text-[9px] text-muted-foreground/40">{Math.round(m.progress || 0)}% done</div>
-                    </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </Card>
+                );
+              })()}
+              <Card className="bg-card border-card-border shadow-none overflow-hidden">
+                <div className="divide-y divide-card-border">
+                  {members.map((m: any) => {
+                    const maxTasks = Math.max(...members.map((x: any) => x.tasksCompleted || 0), 1);
+                    const pct = Math.round(((m.tasksCompleted || 0) / maxTasks) * 100);
+                    const progressPct = Math.round(m.progress || 0);
+                    return (
+                      <div key={m.userId} className="px-4 py-3 space-y-2">
+                        <div className="flex items-center gap-4">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0 font-bold font-mono text-xs text-primary">
+                            {(m.username || "?")[0].toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-mono text-sm font-bold">{m.username}</div>
+                            <div className="font-mono text-[9px] text-muted-foreground/40">
+                              Joined {m.joinedAt ? format(new Date(m.joinedAt), "MMM d, yyyy") : "—"}
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="font-mono text-xs font-bold text-primary">{m.tasksCompleted} tasks</div>
+                            <div className="font-mono text-[9px] text-muted-foreground/40">{progressPct}% done</div>
+                          </div>
+                        </div>
+                        {/* ROI bar */}
+                        <div className="space-y-0.5">
+                          <div className="flex justify-between text-[9px] font-mono text-muted-foreground/40">
+                            <span>Task completion</span>
+                            <span>{pct}% of top performer</span>
+                          </div>
+                          <div className="h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-primary/60 to-primary rounded-full transition-all" style={{ width: `${pct}%` }} />
+                          </div>
+                          <div className="flex justify-between text-[9px] font-mono text-muted-foreground/40">
+                            <span>Project progress</span>
+                            <span>{progressPct}%</span>
+                          </div>
+                          <div className="h-1 bg-muted/20 rounded-full overflow-hidden">
+                            <div className="h-full bg-gradient-to-r from-emerald-500/50 to-emerald-400 rounded-full transition-all" style={{ width: `${progressPct}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Card>
+            </>
           )}
         </div>
       )}
@@ -632,6 +678,20 @@ export default function AdminProjectDetail() {
               <CardTitle className="font-mono text-xs uppercase text-primary/60">Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              <div className="space-y-1 mb-3">
+                <Label className="font-mono text-[10px] uppercase text-muted-foreground">Category</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {["DeFi","NFT","GameFi","Layer2","Testnet","CEX","Exchange","Instant Web3","TGE","Social","Other"].map(cat => (
+                    <button key={cat} onClick={() => setSettingsForm((p: any) => ({ ...p, category: cat }))}
+                      className={cn("px-2.5 py-1 rounded-lg font-mono text-[10px] border transition-all",
+                        (settingsForm.category ?? "Other") === cat
+                          ? "border-primary/50 bg-primary/10 text-primary font-bold"
+                          : "border-card-border text-muted-foreground/60 hover:border-primary/20")}>
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <Label className="font-mono text-[10px] uppercase text-muted-foreground">Tier</Label>
