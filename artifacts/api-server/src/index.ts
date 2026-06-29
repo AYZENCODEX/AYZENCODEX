@@ -467,6 +467,27 @@ const MIGRATIONS = [
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS exchange_sub_type TEXT DEFAULT 'candydrop'",
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS account_category TEXT DEFAULT 'both'",
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS exchange_custom_categories TEXT",
+  // ── Phase 13: Email accounts (per-email IMAP/SMTP vault) ──────────────────
+  `CREATE TABLE IF NOT EXISTS email_accounts (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    label       TEXT NOT NULL,
+    email_address TEXT NOT NULL,
+    protocol    TEXT NOT NULL DEFAULT 'IMAP',
+    imap_host   TEXT,
+    imap_port   INTEGER DEFAULT 993,
+    smtp_host   TEXT,
+    smtp_port   INTEGER DEFAULT 587,
+    username    TEXT,
+    password    TEXT,
+    use_ssl     BOOLEAN NOT NULL DEFAULT TRUE,
+    is_default  BOOLEAN NOT NULL DEFAULT FALSE,
+    notes       TEXT,
+    tags        TEXT,
+    created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_email_accounts_user ON email_accounts(user_id)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {
