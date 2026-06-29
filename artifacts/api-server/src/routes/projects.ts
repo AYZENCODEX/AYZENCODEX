@@ -96,6 +96,60 @@ router.get("/projects/entity/:vaultEntryId/overview", requireAuth, async (req, r
   }
 });
 
+// GET /projects/entity-leaderboard — all entities ranked by ROI (MUST be before /:id)
+router.get("/projects/entity-leaderboard", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const rows = await db.execute(sql.raw(
+      `SELECT
+         ve.id as vault_entry_id,
+         ve.entity_serial,
+         ve.project_name as entity_name,
+         ve.category,
+         (SELECT COUNT(DISTINCT pe.project_id)::int
+          FROM project_enrollments pe WHERE pe.vault_entry_id = ve.id AND pe.user_id = ${userId}
+         ) as total_projects,
+         COALESCE((
+           SELECT COUNT(*)::int FROM task_submissions ts
+           JOIN tasks t ON t.id = ts.task_id
+           JOIN project_enrollments pe ON pe.project_id = t.project_id AND pe.vault_entry_id = ve.id
+           WHERE ts.user_id = ${userId} AND ts.status IN ('approved','completed')
+         ), 0) as total_completions,
+         COALESCE((
+           SELECT SUM(ts.profit) FROM task_submissions ts
+           JOIN tasks t ON t.id = ts.task_id
+           JOIN project_enrollments pe ON pe.project_id = t.project_id AND pe.vault_entry_id = ve.id
+           WHERE ts.user_id = ${userId} AND ts.status IN ('approved','completed')
+         ), 0)::float as total_profit,
+         COALESCE((
+           SELECT SUM(ts.cost) FROM task_submissions ts
+           JOIN tasks t ON t.id = ts.task_id
+           JOIN project_enrollments pe ON pe.project_id = t.project_id AND pe.vault_entry_id = ve.id
+           WHERE ts.user_id = ${userId} AND ts.status IN ('approved','completed')
+         ), 0)::float as total_cost
+       FROM vault_entries ve
+       WHERE ve.user_id = ${userId}`
+    ));
+    const entities = (rows.rows as any[])
+      .map(r => ({
+        vaultEntryId:     Number(r.vault_entry_id),
+        entitySerial:     r.entity_serial as string | null,
+        entityName:       r.entity_name as string | null,
+        category:         r.category as string | null,
+        totalProjects:    Number(r.total_projects),
+        totalCompletions: Number(r.total_completions),
+        totalProfit:      Number(r.total_profit),
+        totalCost:        Number(r.total_cost),
+        totalRoi:         Number(r.total_profit) - Number(r.total_cost),
+      }))
+      .sort((a, b) => b.totalRoi - a.totalRoi)
+      .map((e, i) => ({ ...e, rank: i + 1 }));
+    res.json(entities);
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
 router.get("/projects", async (req, res): Promise<void> => {
   const { tier, search, page = "1", limit = "20", type, exchangeSubType, accountCategory } = req.query as Record<string, string>;
   const pageNum = parseInt(page, 10);

@@ -508,17 +508,25 @@ export default function UserProjectDetail() {
   const [entityOverviewTarget, setEntityOverviewTarget] = useState<EntityWithTasks | null>(null);
   const [entityOverview, setEntityOverview] = useState<any>(null);
   const [loadingEntityOverview, setLoadingEntityOverview] = useState(false);
+  const [entityLeaderboard, setEntityLeaderboard] = useState<any[] | null>(null);
 
   const openEntityOverview = async (entity: EntityWithTasks) => {
     setEntityOverviewTarget(entity);
     setEntityOverviewOpen(true);
     setEntityOverview(null);
+    setEntityLeaderboard(null);
     setLoadingEntityOverview(true);
     try {
-      const res = await fetch(`${BASE}/api/projects/entity/${entity.vaultEntryId}/overview`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) setEntityOverview(await res.json());
+      const [overviewRes, lbRes] = await Promise.all([
+        fetch(`${BASE}/api/projects/entity/${entity.vaultEntryId}/overview`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+        fetch(`${BASE}/api/projects/entity-leaderboard`, {
+          headers: { Authorization: `Bearer ${token}` },
+        }),
+      ]);
+      if (overviewRes.ok) setEntityOverview(await overviewRes.json());
+      if (lbRes.ok) setEntityLeaderboard(await lbRes.json());
     } catch {} finally { setLoadingEntityOverview(false); }
   };
 
@@ -1141,6 +1149,74 @@ export default function UserProjectDetail() {
                   {/* Activity heatmap */}
                   {entityOverview.activity && (
                     <ActivityHeatmap activity={entityOverview.activity} />
+                  )}
+
+                  {/* Entity Leaderboard */}
+                  {entityLeaderboard && entityLeaderboard.length > 0 && (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50">Entity Leaderboard</div>
+                        <div className="font-mono text-[9px] text-muted-foreground/40">{entityLeaderboard.length} entities</div>
+                      </div>
+                      <div className="space-y-1">
+                        {entityLeaderboard.map((e: any) => {
+                          const isCurrent = e.vaultEntryId === entityOverviewTarget?.vaultEntryId;
+                          const rank = e.rank as number;
+                          const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
+                          return (
+                            <div
+                              key={e.vaultEntryId}
+                              className={cn(
+                                "flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all",
+                                isCurrent
+                                  ? "border-primary/50 bg-primary/8 ring-1 ring-primary/20"
+                                  : "border-card-border bg-muted/5 hover:bg-muted/10"
+                              )}
+                            >
+                              {/* Rank */}
+                              <div className="flex-shrink-0 w-7 text-center">
+                                {medal
+                                  ? <span className="text-base leading-none">{medal}</span>
+                                  : <span className="font-mono text-[10px] text-muted-foreground/40">#{rank}</span>
+                                }
+                              </div>
+                              {/* Entity info */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-mono text-xs font-medium truncate">
+                                    {e.entitySerial ?? `Entity #${e.vaultEntryId}`}
+                                  </span>
+                                  {isCurrent && (
+                                    <span className="font-mono text-[8px] px-1 py-0.5 rounded bg-primary/15 text-primary border border-primary/20 flex-shrink-0">YOU</span>
+                                  )}
+                                </div>
+                                <div className="font-mono text-[9px] text-muted-foreground/40">
+                                  {e.totalProjects}p · {e.totalCompletions} tasks · {e.category ?? "–"}
+                                </div>
+                              </div>
+                              {/* ROI bar */}
+                              <div className="flex-shrink-0 text-right min-w-[52px]">
+                                <div className={cn(
+                                  "font-mono text-xs font-bold",
+                                  e.totalRoi > 0 ? "text-emerald-400" : e.totalRoi < 0 ? "text-red-400" : "text-muted-foreground/40"
+                                )}>
+                                  {e.totalRoi >= 0 ? "+" : ""}${e.totalRoi.toFixed(2)}
+                                </div>
+                                {/* Mini ROI bar relative to #1 entity */}
+                                {entityLeaderboard[0] && entityLeaderboard[0].totalRoi > 0 && (
+                                  <div className="h-0.5 bg-muted/20 rounded-full mt-0.5 overflow-hidden">
+                                    <div
+                                      className={cn("h-full rounded-full", e.totalRoi > 0 ? "bg-emerald-400/70" : "bg-red-400/50")}
+                                      style={{ width: `${Math.max(4, Math.min(100, (e.totalRoi / entityLeaderboard[0].totalRoi) * 100))}%` }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   )}
 
                   {/* Per-project breakdown */}
