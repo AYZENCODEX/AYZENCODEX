@@ -66,10 +66,29 @@ router.get("/projects/entity/:vaultEntryId/overview", requireAuth, async (req, r
     const totalRoi = projects.reduce((s, p) => s + p.roi, 0);
     const totalProfit = projects.reduce((s, p) => s + p.totalProfit, 0);
     const totalCost = projects.reduce((s, p) => s + p.totalCost, 0);
+    // Activity heatmap data — task completions by day (past 365 days)
+    const activityRows = await db.execute(sql.raw(
+      `SELECT DATE(ts.submitted_at)::text as day, COUNT(*)::int as count
+       FROM task_submissions ts
+       JOIN tasks t ON t.id = ts.task_id
+       JOIN project_enrollments pe ON pe.project_id = t.project_id
+       WHERE pe.vault_entry_id = ${vaultEntryId}
+         AND ts.user_id = ${userId}
+         AND ts.status IN ('approved', 'completed')
+         AND ts.submitted_at >= NOW() - INTERVAL '365 days'
+       GROUP BY DATE(ts.submitted_at)
+       ORDER BY day ASC`
+    ));
+    const activity = (activityRows.rows as any[]).map(r => ({
+      day: String(r.day),
+      count: Number(r.count),
+    }));
+
     res.json({
       entity: entity.rows[0] ?? null,
       vaultEntryId,
       projects,
+      activity,
       summary: { totalProjects: projects.length, totalRoi, totalProfit, totalCost },
     });
   } catch (err: any) {
