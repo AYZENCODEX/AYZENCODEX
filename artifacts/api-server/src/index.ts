@@ -462,6 +462,11 @@ const MIGRATIONS = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_ayzen_mail_to ON ayzen_mail(to_user_id)",
   "CREATE INDEX IF NOT EXISTS idx_ayzen_mail_from ON ayzen_mail(from_user_id)",
+  // ── Phase 12: Project types ───────────────────────────────────────────────
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS project_type TEXT DEFAULT 'protocol'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS exchange_sub_type TEXT DEFAULT 'candydrop'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS account_category TEXT DEFAULT 'both'",
+  "ALTER TABLE projects ADD COLUMN IF NOT EXISTS exchange_custom_categories TEXT",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

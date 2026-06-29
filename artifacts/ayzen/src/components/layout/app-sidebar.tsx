@@ -9,6 +9,7 @@ import {
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
+  ArrowLeftRight, Zap, Globe, FlaskConical, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -91,10 +92,20 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Protocols", icon: FolderGit2,
     items: [
-      { href: "/projects", label: "Projects", icon: FolderGit2,  pluginSlug: "projects" },
-      { href: "/tasks",    label: "Tasks",    icon: CheckSquare, pluginSlug: "tasks" },
-      { href: "/content",  label: "Content AI", icon: Bot },
-      { href: "/teams",    label: "Teams",   icon: Users },
+      { href: "/projects",                   label: "Protocol",  icon: FolderGit2,    pluginSlug: "projects" },
+      { href: "/projects?type=exchange",     label: "Exchange",  icon: ArrowLeftRight, pluginSlug: "projects" },
+      { href: "/projects?type=instant",      label: "Instant",   icon: Zap,           pluginSlug: "projects" },
+      { href: "/projects?type=web3",         label: "Web3",      icon: Globe,         pluginSlug: "projects" },
+      { href: "/projects?type=testnet",      label: "Testnet",   icon: FlaskConical,  pluginSlug: "projects" },
+      { href: "/projects?type=waitlist",     label: "Wait-list", icon: Timer,         pluginSlug: "projects" },
+      { href: "/tasks",                      label: "Task",      icon: CheckSquare,   pluginSlug: "tasks" },
+      { href: "/content",                    label: "Content",   icon: Bot },
+    ],
+  },
+  {
+    label: "Teams", icon: Users,
+    items: [
+      { href: "/teams", label: "My Team", icon: Users },
     ],
   },
   {
@@ -283,6 +294,12 @@ function NavGroupComp({ group, location, search, isEnabled, onNavigate }: {
     if (href.includes("?")) {
       const [path, qs] = href.split("?");
       return location === path && search === `?${qs}`;
+    }
+    // /projects without query: active only when no project type is selected
+    if (href === "/projects") {
+      const sp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      const t = sp.get("type");
+      return location === "/projects" && (!t || t === "protocol");
     }
     return location === href || location.startsWith(href + "/");
   };

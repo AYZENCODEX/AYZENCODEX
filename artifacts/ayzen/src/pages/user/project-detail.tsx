@@ -14,7 +14,7 @@ import {
   ArrowLeft, ExternalLink, UserPlus, Hash, CheckCircle2, Clock, Twitter,
   MessageCircle, Wallet, Trash2, ChevronRight, Zap, Link2, Plus,
   LayoutDashboard, ListTodo, Users, Settings, DollarSign, TrendingUp,
-  TrendingDown, AlertCircle, Shield, Copy, Check, Edit3, Globe, Star,
+  TrendingDown, AlertCircle, Shield, Copy, Check, Edit3, Globe, Star, X,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -401,6 +401,25 @@ export default function UserProjectDetail() {
   const [entityData, setEntityData] = useState<{ tasks: any[]; entities: EntityWithTasks[] } | null>(null);
   const [loadingEntityData, setLoadingEntityData] = useState(false);
 
+  // Entity cross-project overview dialog
+  const [entityOverviewOpen, setEntityOverviewOpen] = useState(false);
+  const [entityOverviewTarget, setEntityOverviewTarget] = useState<EntityWithTasks | null>(null);
+  const [entityOverview, setEntityOverview] = useState<any>(null);
+  const [loadingEntityOverview, setLoadingEntityOverview] = useState(false);
+
+  const openEntityOverview = async (entity: EntityWithTasks) => {
+    setEntityOverviewTarget(entity);
+    setEntityOverviewOpen(true);
+    setEntityOverview(null);
+    setLoadingEntityOverview(true);
+    try {
+      const res = await fetch(`${BASE}/api/projects/entity/${entity.vaultEntryId}/overview`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setEntityOverview(await res.json());
+    } catch {} finally { setLoadingEntityOverview(false); }
+  };
+
   // Settings form
   const [settingsForm, setSettingsForm] = useState<any>(null);
   const [savingSettings, setSavingSettings] = useState(false);
@@ -784,11 +803,18 @@ export default function UserProjectDetail() {
                             <div className="font-mono text-[9px] text-muted-foreground/50">{entity.entityName} · {entity.category}</div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 flex-wrap justify-end">
                           {totalCost > 0 && <div className="font-mono text-[10px] text-red-400">-${totalCost.toFixed(2)}</div>}
                           {totalProfit > 0 && <div className="font-mono text-[10px] text-emerald-400">+${totalProfit.toFixed(2)}</div>}
                           <div className="font-mono text-[10px] font-bold text-primary">{prog}%</div>
-                          <Progress value={prog} className="w-20 h-1.5" />
+                          <Progress value={prog} className="w-16 h-1.5" />
+                          <button
+                            onClick={() => openEntityOverview(entity)}
+                            className="font-mono text-[9px] px-2 py-0.5 rounded border border-primary/20 text-primary/60 hover:border-primary/50 hover:text-primary transition-all"
+                            title="View cross-project overview"
+                          >
+                            Overview
+                          </button>
                           <button onClick={() => handleUnenroll(entity.enrollmentId)} className="text-muted-foreground/30 hover:text-red-400 transition-colors">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -975,6 +1001,89 @@ export default function UserProjectDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ── Entity Cross-Project Overview Dialog ── */}
+      {entityOverviewOpen && entityOverviewTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setEntityOverviewOpen(false)}>
+          <div className="bg-card border border-card-border rounded-xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent" />
+            <div className="flex items-center justify-between px-4 py-3 border-b border-card-border shrink-0">
+              <div>
+                <div className="font-mono font-bold text-sm text-primary">{entityOverviewTarget.entitySerial ?? `Entity #${entityOverviewTarget.vaultEntryId}`}</div>
+                <div className="font-mono text-[9px] text-muted-foreground/50 uppercase tracking-widest">All-Project Overview</div>
+              </div>
+              <button onClick={() => setEntityOverviewOpen(false)} className="text-muted-foreground/50 hover:text-foreground p-1 rounded hover:bg-muted/20 transition-all">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 p-4 space-y-4">
+              {loadingEntityOverview ? (
+                <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-16 bg-muted/10 rounded-lg animate-pulse" />)}</div>
+              ) : entityOverview ? (
+                <>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { label: "Projects", value: entityOverview.summary.totalProjects, color: "text-primary" },
+                      { label: "Profit",   value: `+$${entityOverview.summary.totalProfit.toFixed(2)}`,  color: "text-emerald-400" },
+                      { label: "Cost",     value: `-$${entityOverview.summary.totalCost.toFixed(2)}`,    color: "text-red-400" },
+                      { label: "Net ROI",  value: `${entityOverview.summary.totalRoi >= 0 ? "+" : ""}$${entityOverview.summary.totalRoi.toFixed(2)}`, color: entityOverview.summary.totalRoi >= 0 ? "text-emerald-400" : "text-red-400" },
+                    ].map(card => (
+                      <div key={card.label} className="bg-muted/10 border border-card-border rounded-lg p-3 text-center">
+                        <div className={cn("font-mono text-lg font-bold", card.color)}>{card.value}</div>
+                        <div className="font-mono text-[9px] text-muted-foreground/50 uppercase tracking-widest">{card.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Per-project breakdown */}
+                  <div className="space-y-2">
+                    <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50">Project Breakdown</div>
+                    {entityOverview.projects.length === 0 ? (
+                      <div className="py-8 text-center font-mono text-sm text-muted-foreground/40">No projects enrolled yet</div>
+                    ) : (
+                      entityOverview.projects.map((proj: any) => (
+                        <div key={proj.projectId} className="bg-card/50 border border-card-border rounded-lg p-3 space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="font-mono text-xs font-bold">{proj.projectName}</div>
+                              <div className="font-mono text-[9px] text-muted-foreground/40 capitalize">{proj.projectType ?? "protocol"}</div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className={cn("font-mono text-xs font-bold", proj.roi >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                {proj.roi >= 0 ? "+" : ""}${proj.roi.toFixed(2)} ROI
+                              </div>
+                              <div className="font-mono text-[9px] text-muted-foreground/40">{proj.completedTasks}/{proj.totalTasks} tasks</div>
+                            </div>
+                          </div>
+                          {/* Progress bar */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <div className="flex gap-3">
+                                {proj.totalCost > 0 && <span className="font-mono text-[9px] text-red-400">-${proj.totalCost.toFixed(2)}</span>}
+                                {proj.totalProfit > 0 && <span className="font-mono text-[9px] text-emerald-400">+${proj.totalProfit.toFixed(2)}</span>}
+                              </div>
+                              <span className="font-mono text-[9px] text-primary">{proj.progress}%</span>
+                            </div>
+                            <div className="h-1.5 bg-muted/20 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-gradient-to-r from-primary/50 to-primary transition-all duration-700"
+                                style={{ width: `${proj.progress}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="py-8 text-center font-mono text-sm text-muted-foreground/40">Failed to load overview</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Delete Confirm ── */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>

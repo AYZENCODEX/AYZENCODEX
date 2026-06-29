@@ -20,15 +20,75 @@ function formatProject(p: typeof projectsTable.$inferSelect, taskCount = 0, comp
   return { ...p, createdAt: p.createdAt.toISOString(), taskCount, completedTaskCount, activeUserCount };
 }
 
+// GET /projects/entity/:vaultEntryId/overview — cross-project stats for one entity (MUST be before /:id)
+router.get("/projects/entity/:vaultEntryId/overview", requireAuth, async (req, res): Promise<void> => {
+  const vaultEntryId = parseInt(Array.isArray(req.params.vaultEntryId) ? req.params.vaultEntryId[0] : req.params.vaultEntryId, 10);
+  const userId = req.user!.userId;
+  try {
+    const rows = await db.execute(sql.raw(
+      `SELECT
+         p.id as project_id, p.name as project_name, p.project_type, p.category,
+         p.thumbnail_url,
+         (SELECT COUNT(*) FROM tasks WHERE project_id = p.id)::int as total_tasks,
+         (SELECT COUNT(*) FROM task_submissions ts2
+            JOIN tasks t2 ON t2.id = ts2.task_id
+            WHERE t2.project_id = p.id AND ts2.user_id = ${userId} AND ts2.status IN ('approved','completed'))::int as completed_tasks,
+         COALESCE((SELECT SUM(ts3.profit) FROM task_submissions ts3
+            JOIN tasks t3 ON t3.id = ts3.task_id
+            WHERE t3.project_id = p.id AND ts3.user_id = ${userId} AND ts3.status IN ('approved','completed')), 0) as total_profit,
+         COALESCE((SELECT SUM(ts4.cost) FROM task_submissions ts4
+            JOIN tasks t4 ON t4.id = ts4.task_id
+            WHERE t4.project_id = p.id AND ts4.user_id = ${userId} AND ts4.status IN ('approved','completed')), 0) as total_cost,
+         pe.enrolled_at
+       FROM project_enrollments pe
+       JOIN projects p ON p.id = pe.project_id
+       WHERE pe.vault_entry_id = ${vaultEntryId} AND pe.user_id = ${userId}
+       ORDER BY pe.enrolled_at DESC`
+    ));
+    const entity = await db.execute(sql.raw(
+      `SELECT entity_serial, project_name as entity_name, category, twitter_username, discord_username, email
+       FROM vault_entries WHERE id = ${vaultEntryId} AND user_id = ${userId}`
+    ));
+    const projects = (rows.rows as any[]).map(r => ({
+      projectId: Number(r.project_id),
+      projectName: r.project_name,
+      projectType: r.project_type ?? "protocol",
+      category: r.category,
+      thumbnailUrl: r.thumbnail_url,
+      totalTasks: Number(r.total_tasks),
+      completedTasks: Number(r.completed_tasks),
+      progress: Number(r.total_tasks) > 0 ? Math.round((Number(r.completed_tasks) / Number(r.total_tasks)) * 100) : 0,
+      totalProfit: Number(r.total_profit),
+      totalCost: Number(r.total_cost),
+      roi: Number(r.total_profit) - Number(r.total_cost),
+      enrolledAt: r.enrolled_at,
+    }));
+    const totalRoi = projects.reduce((s, p) => s + p.roi, 0);
+    const totalProfit = projects.reduce((s, p) => s + p.totalProfit, 0);
+    const totalCost = projects.reduce((s, p) => s + p.totalCost, 0);
+    res.json({
+      entity: entity.rows[0] ?? null,
+      vaultEntryId,
+      projects,
+      summary: { totalProjects: projects.length, totalRoi, totalProfit, totalCost },
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: "DB error", detail: err?.message });
+  }
+});
+
 router.get("/projects", async (req, res): Promise<void> => {
-  const { tier, search, page = "1", limit = "20" } = req.query as Record<string, string>;
+  const { tier, search, page = "1", limit = "20", type, exchangeSubType, accountCategory } = req.query as Record<string, string>;
   const pageNum = parseInt(page, 10);
-  const limitNum = Math.min(parseInt(limit, 10), 100);
+  const limitNum = Math.min(parseInt(limit, 10), 200);
   const offset = (pageNum - 1) * limitNum;
 
   const conditions = [];
   if (tier) conditions.push(eq(projectsTable.tier, tier));
   if (search) conditions.push(ilike(projectsTable.name, `%${search}%`));
+  if (type && type !== "all") conditions.push(sql.raw(`project_type = '${type.replace(/'/g,"''")}'`));
+  if (exchangeSubType) conditions.push(sql.raw(`exchange_sub_type = '${exchangeSubType.replace(/'/g,"''")}'`));
+  if (accountCategory && accountCategory !== "all") conditions.push(sql.raw(`(account_category = '${accountCategory.replace(/'/g,"''")}' OR account_category = 'both')`));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
 
   const projects = await db.select().from(projectsTable).where(where).limit(limitNum).offset(offset);
@@ -88,6 +148,10 @@ router.patch("/projects/:id", requireAdmin, async (req, res): Promise<void> => {
   if (req.body.deadline !== undefined) rawSets.push(`deadline = ${req.body.deadline ? `'${req.body.deadline}'` : "NULL"}`);
   if (req.body.startedAt !== undefined) rawSets.push(`started_at = ${req.body.startedAt ? `'${req.body.startedAt}'` : "NULL"}`);
   if (req.body.status !== undefined) rawSets.push(`status = '${String(req.body.status).replace(/'/g, "''")}'`);
+  if (req.body.projectType !== undefined) rawSets.push(`project_type = '${String(req.body.projectType).replace(/'/g, "''")}'`);
+  if (req.body.exchangeSubType !== undefined) rawSets.push(`exchange_sub_type = '${String(req.body.exchangeSubType).replace(/'/g, "''")}'`);
+  if (req.body.accountCategory !== undefined) rawSets.push(`account_category = '${String(req.body.accountCategory).replace(/'/g, "''")}'`);
+  if (req.body.exchangeCustomCategories !== undefined) rawSets.push(`exchange_custom_categories = ${req.body.exchangeCustomCategories ? `'${JSON.stringify(req.body.exchangeCustomCategories).replace(/'/g, "''")}'` : "NULL"}`);
 
   try {
     let project: any;

@@ -32,6 +32,20 @@ router.post("/teams", requireAuth, async (req, res): Promise<void> => {
   await db.execute(sql.raw(
     `INSERT INTO team_members (team_id, user_id, role, status) VALUES (${team.id}, ${userId}, 'leader', 'active')`
   ));
+  // Notify all admins about the new team request
+  try {
+    const admins = await db.execute(sql.raw(`SELECT id FROM users WHERE role = 'admin' LIMIT 20`));
+    for (const admin of admins.rows as any[]) {
+      await db.execute(sql.raw(
+        `INSERT INTO notifications (user_id, type, title, message, data)
+         VALUES (${admin.id}, 'team_request', 'New Team Request',
+           'A user requested to create team: ${name.replace(/'/g, "''")}',
+           '{"teamId":${team.id},"ownerId":${userId}}')`
+      ));
+    }
+    // Also broadcast to admins
+    broadcastToUser(-1, "team_request", { teamId: team.id, teamName: name, ownerId: userId });
+  } catch { /* ignore notification errors */ }
   res.status(201).json(team);
 });
 

@@ -4,8 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "wouter";
-import { Users, Wifi, WifiOff, Zap, LayoutGrid, Star, Clock, TrendingUp } from "lucide-react";
+import { Link, useSearch } from "wouter";
+import { Users, Wifi, WifiOff, Zap, LayoutGrid, Star, Clock, TrendingUp, ArrowLeftRight, FlaskConical, Timer, Globe, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -102,6 +102,30 @@ const CATEGORY_COLORS: Record<string, string> = {
   Other:         "text-muted-foreground border-border",
 };
 
+const EXCHANGE_SUB_TYPES = [
+  { id: "all",           label: "All Types" },
+  { id: "candydrop",     label: "Candydrop" },
+  { id: "candybomb",     label: "Candybomb" },
+  { id: "booster",       label: "Booster" },
+  { id: "trading_volume",label: "Trading Vol." },
+];
+
+const ACCOUNT_CATEGORIES = [
+  { id: "all", label: "All Accounts" },
+  { id: "new", label: "New Account" },
+  { id: "old", label: "Old Account" },
+];
+
+const TYPE_META: Record<string, { title: string; desc: string; icon: React.ElementType; color: string }> = {
+  exchange: { title: "Exchange Campaigns", desc: "Candydrop · Candybomb · Booster · Trading Volume", icon: ArrowLeftRight, color: "text-amber-400" },
+  instant:  { title: "Instant Rewards",    desc: "Quick airdrop completion campaigns",              icon: Zap,             color: "text-violet-400" },
+  web3:     { title: "Web3 Projects",      desc: "DeFi · NFT · GameFi · Decentralized protocols",  icon: Globe,           color: "text-blue-400" },
+  testnet:  { title: "Testnet Programs",   desc: "Early network testing opportunities",             icon: FlaskConical,    color: "text-orange-400" },
+  waitlist: { title: "Wait-list Programs", desc: "Whitelist and early access campaigns",            icon: Timer,           color: "text-rose-400" },
+  protocol: { title: "Active Protocols",   desc: "Core airdrop campaigns",                         icon: LayoutGrid,      color: "text-primary" },
+  "":       { title: "Active Protocols",   desc: "Core airdrop campaigns",                         icon: LayoutGrid,      color: "text-primary" },
+};
+
 function useBookmarks() {
   const { token } = useAuth();
   const [bookmarks, setBookmarks] = useState<Set<number>>(() => {
@@ -121,28 +145,57 @@ function useBookmarks() {
 }
 
 export default function UserProjects() {
+  const rawSearch = useSearch();
+  const typeParam = new URLSearchParams(rawSearch.startsWith("?") ? rawSearch.slice(1) : rawSearch).get("type") ?? "";
+  const [selectedSubType, setSelectedSubType] = useState("all");
+  const [selectedAccountCat, setSelectedAccountCat] = useState("all");
+
   const { data, isLoading } = useListProjects({ limit: 200 });
   const { online, connected } = useProjectPresence();
   const [selectedCategory, setSelectedCategory] = useState("All");
   const { bookmarks, toggle: toggleBookmark } = useBookmarks();
   const [showBookmarked, setShowBookmarked] = useState(false);
 
+  // Reset sub-filters when type changes
+  useEffect(() => { setSelectedSubType("all"); setSelectedAccountCat("all"); setSelectedCategory("All"); }, [typeParam]);
+
+  const typeMeta = TYPE_META[typeParam] ?? TYPE_META[""];
   const allProjects = data?.projects ?? [];
 
   const filteredProjects = (() => {
-    let list: any[] = selectedCategory === "All"
-      ? allProjects
-      : allProjects.filter((p: any) => ((p as any).category ?? "Other") === selectedCategory);
+    let list: any[] = [...allProjects];
+    // Filter by project type from URL param
+    if (typeParam && typeParam !== "protocol") {
+      list = list.filter((p: any) => (p.project_type ?? "protocol") === typeParam);
+    } else {
+      list = list.filter((p: any) => !p.project_type || p.project_type === "protocol");
+    }
+    // Category filter
+    if (selectedCategory !== "All") {
+      list = list.filter((p: any) => ((p as any).category ?? "Other") === selectedCategory);
+    }
+    // Exchange-specific sub-type filter
+    if (typeParam === "exchange" && selectedSubType !== "all") {
+      list = list.filter((p: any) => (p.exchange_sub_type ?? "candydrop") === selectedSubType);
+    }
+    // Exchange-specific account category filter
+    if (typeParam === "exchange" && selectedAccountCat !== "all") {
+      list = list.filter((p: any) => p.account_category === selectedAccountCat || p.account_category === "both");
+    }
     if (showBookmarked) list = list.filter((p: any) => bookmarks.has(p.id));
     const starred = list.filter((p: any) => bookmarks.has(p.id));
     const rest = list.filter((p: any) => !bookmarks.has(p.id));
     return [...starred, ...rest];
   })();
 
+  const baseList = typeParam && typeParam !== "protocol"
+    ? allProjects.filter((p: any) => (p.project_type ?? "protocol") === typeParam)
+    : allProjects.filter((p: any) => !p.project_type || p.project_type === "protocol");
+
   const categoryCounts = PROJECT_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat] = cat === "All"
-      ? allProjects.length
-      : allProjects.filter((p: any) => ((p as any).category ?? "Other") === cat).length;
+      ? baseList.length
+      : baseList.filter((p: any) => ((p as any).category ?? "Other") === cat).length;
     return acc;
   }, {});
 
@@ -151,11 +204,12 @@ export default function UserProjects() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase text-glow">
-            Active Protocols
+          <h1 className={cn("text-2xl font-bold font-mono tracking-tighter uppercase text-glow", typeMeta.color)}>
+            {typeMeta.title}
           </h1>
           <p className="text-muted-foreground font-mono text-sm mt-0.5">
-            {allProjects.length} airdrop campaigns{bookmarks.size > 0 && ` · ${bookmarks.size} starred`}
+            {filteredProjects.length} campaigns{bookmarks.size > 0 && ` · ${bookmarks.size} starred`}
+            {typeParam && <span className="ml-1 text-muted-foreground/50">· {typeMeta.desc}</span>}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -184,6 +238,43 @@ export default function UserProjects() {
           </div>
         </div>
       </div>
+
+      {/* Exchange-specific sub-filters */}
+      {typeParam === "exchange" && (
+        <div className="space-y-3 bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-3">
+          <div className="font-mono text-[9px] uppercase tracking-widest text-amber-400/70 font-bold">Exchange Filters</div>
+          <div>
+            <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-1.5">Campaign Type</div>
+            <div className="flex flex-wrap gap-1.5">
+              {EXCHANGE_SUB_TYPES.map(sub => (
+                <button key={sub.id} onClick={() => setSelectedSubType(sub.id)}
+                  className={cn("px-3 py-1 rounded-full font-mono text-[10px] border transition-all",
+                    selectedSubType === sub.id
+                      ? "bg-amber-400/15 border-amber-400/40 text-amber-400 font-bold"
+                      : "border-border/40 text-muted-foreground/60 hover:border-amber-400/30 hover:text-amber-400"
+                  )}>
+                  {sub.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/50 mb-1.5">Account Type</div>
+            <div className="flex flex-wrap gap-1.5">
+              {ACCOUNT_CATEGORIES.map(cat => (
+                <button key={cat.id} onClick={() => setSelectedAccountCat(cat.id)}
+                  className={cn("px-3 py-1 rounded-full font-mono text-[10px] border transition-all",
+                    selectedAccountCat === cat.id
+                      ? "bg-primary/15 border-primary/40 text-primary font-bold"
+                      : "border-border/40 text-muted-foreground/60 hover:border-primary/30 hover:text-primary/60"
+                  )}>
+                  {cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Category tabs */}
       <div className="overflow-x-auto -mx-1 px-1 pb-1">

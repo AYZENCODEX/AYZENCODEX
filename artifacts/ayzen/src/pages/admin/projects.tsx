@@ -32,6 +32,9 @@ interface CreateForm {
   experienceLevel: string;
   tutorialLink: string;
   tutorialNotes: string;
+  projectType: string;
+  exchangeSubType: string;
+  accountCategory: string;
 }
 
 const EMPTY_FORM: CreateForm = {
@@ -40,7 +43,12 @@ const EMPTY_FORM: CreateForm = {
   xpName: "", xpPrice: "0.01", rewardEstimate: "", fundingAmount: "", deadline: "",
   category: "DeFi", tier: "1", durationType: "long", difficulty: "average", costType: "free", experienceLevel: "Beginner",
   tutorialLink: "", tutorialNotes: "",
+  projectType: "protocol", exchangeSubType: "candydrop", accountCategory: "both",
 };
+
+const PROJECT_TYPES = ["protocol", "exchange", "instant", "web3", "testnet", "waitlist"];
+const EXCHANGE_SUB_TYPES = ["candydrop", "candybomb", "booster", "trading_volume"];
+const ACCOUNT_CATEGORIES = ["new", "old", "both"];
 
 type CreateTab = "basic" | "economics" | "meta" | "tutorial";
 
@@ -109,6 +117,9 @@ export default function AdminProjects() {
         experienceLevel: form.experienceLevel,
         tutorialLink: form.tutorialLink || undefined,
         tutorialNotes: form.tutorialNotes || undefined,
+        projectType: form.projectType,
+        exchangeSubType: form.exchangeSubType,
+        accountCategory: form.accountCategory,
       }),
     }).then(async r => {
       if (r.ok) {
@@ -281,6 +292,37 @@ export default function AdminProjects() {
                       </Select>
                     </div>
                   </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Project Type</Label>
+                    <PillSelect
+                      options={PROJECT_TYPES}
+                      value={form.projectType}
+                      onChange={v => setForm(p => ({ ...p, projectType: v }))}
+                    />
+                  </div>
+
+                  {form.projectType === "exchange" && (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Exchange Sub-Type</Label>
+                        <PillSelect
+                          options={EXCHANGE_SUB_TYPES}
+                          value={form.exchangeSubType}
+                          onChange={v => setForm(p => ({ ...p, exchangeSubType: v }))}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Account Category</Label>
+                        <PillSelect
+                          options={ACCOUNT_CATEGORIES}
+                          value={form.accountCategory}
+                          onChange={v => setForm(p => ({ ...p, accountCategory: v }))}
+                        />
+                        <p className="text-[9px] font-mono text-muted-foreground/50">Which accounts are eligible for this exchange campaign</p>
+                      </div>
+                    </>
+                  )}
 
                   <div className="space-y-1.5">
                     <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Duration Type</Label>
