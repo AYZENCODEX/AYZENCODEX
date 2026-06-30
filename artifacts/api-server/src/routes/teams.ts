@@ -23,30 +23,39 @@ router.get("/teams", requireAuth, async (req, res): Promise<void> => {
 router.post("/teams", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
   const { name, description } = req.body;
-  if (!name) { res.status(400).json({ error: "name is required" }); return; }
-  const descVal = description ? `'${description.replace(/'/g, "''")}'` : "NULL";
-  const result = await db.execute(sql.raw(
-    `INSERT INTO teams (name, description, owner_id, status) VALUES ('${name.replace(/'/g, "''")}', ${descVal}, ${userId}, 'pending') RETURNING *`
-  ));
-  const team = result.rows[0] as any;
-  await db.execute(sql.raw(
-    `INSERT INTO team_members (team_id, user_id, role, status) VALUES (${team.id}, ${userId}, 'leader', 'active')`
-  ));
-  // Notify all admins about the new team request
+  if (!name?.trim()) { res.status(400).json({ error: "name is required" }); return; }
+  const teamName = String(name).trim();
+  const teamDesc = description ? String(description).trim() : null;
   try {
-    const admins = await db.execute(sql.raw(`SELECT id FROM users WHERE role = 'admin' LIMIT 20`));
-    for (const admin of admins.rows as any[]) {
-      await db.execute(sql.raw(
-        `INSERT INTO notifications (user_id, type, title, message, data)
-         VALUES (${admin.id}, 'team_request', 'New Team Request',
-           'A user requested to create team: ${name.replace(/'/g, "''")}',
-           '{"teamId":${team.id},"ownerId":${userId}}')`
-      ));
-    }
-    // Also broadcast to admins
-    broadcastToUser(-1, "team_request", { teamId: team.id, teamName: name, ownerId: userId });
-  } catch { /* ignore notification errors */ }
-  res.status(201).json(team);
+    const result = await db.execute(sql`
+      INSERT INTO teams (name, description, owner_id, status)
+      VALUES (${teamName}, ${teamDesc}, ${userId}, 'pending')
+      RETURNING *
+    `);
+    const team = result.rows[0] as any;
+    if (!team?.id) { res.status(500).json({ error: "Team creation failed" }); return; }
+    await db.execute(sql`
+      INSERT INTO team_members (team_id, user_id, role, status)
+      VALUES (${team.id}, ${userId}, 'leader', 'active')
+      ON CONFLICT (team_id, user_id) DO NOTHING
+    `);
+    // Notify all admins
+    try {
+      const admins = await db.execute(sql`SELECT id FROM users WHERE role = 'admin' LIMIT 20`);
+      for (const admin of admins.rows as any[]) {
+        await db.execute(sql`
+          INSERT INTO notifications (user_id, type, title, message, data)
+          VALUES (${admin.id}, 'team_request', 'New Team Request',
+            ${'User #' + userId + ' requested to create team: ' + teamName},
+            ${JSON.stringify({ teamId: team.id, ownerId: userId })})
+        `);
+      }
+      broadcastToUser(-1, "team_request", { teamId: team.id, teamName, ownerId: userId });
+    } catch { /* notification errors non-fatal */ }
+    res.status(201).json(team);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to create team", detail: err?.message });
+  }
 });
 
 // ── GET /teams/my-invites — pending invites for current user (MUST be before /:id) ──
@@ -386,15 +395,47 @@ router.patch("/admin/teams/:id", requireAuth, async (req, res): Promise<void> =>
   if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
   const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const { status, name, description } = req.body;
-  const sets: string[] = [];
-  if (status !== undefined) sets.push(`status = '${status}'`);
-  if (name !== undefined) sets.push(`name = '${name.replace(/'/g, "''")}'`);
-  if (description !== undefined) sets.push(`description = '${description.replace(/'/g, "''")}'`);
-  if (!sets.length) { res.status(400).json({ error: "Nothing to update" }); return; }
-  const result = await db.execute(sql.raw(
-    `UPDATE teams SET ${sets.join(", ")} WHERE id = ${teamId} RETURNING *`
-  ));
-  res.json(result.rows[0]);
+  if (!status && !name && !description) { res.status(400).json({ error: "Nothing to update" }); return; }
+  try {
+    // Build update dynamically
+    const teamBefore = await db.execute(sql`SELECT * FROM teams WHERE id = ${teamId}`);
+    const team = teamBefore.rows[0] as any;
+    if (!team) { res.status(404).json({ error: "Team not found" }); return; }
+
+    const newStatus = status ?? team.status;
+    const newName = name ?? team.name;
+    const newDesc = description !== undefined ? description : team.description;
+
+    const result = await db.execute(sql`
+      UPDATE teams SET status = ${newStatus}, name = ${newName}, description = ${newDesc}
+      WHERE id = ${teamId} RETURNING *
+    `);
+    const updated = result.rows[0] as any;
+
+    // Notify owner if status changed
+    if (status && status !== team.status && team.owner_id) {
+      const isApproved = status === "active";
+      const isRejected = status === "rejected";
+      if (isApproved || isRejected) {
+        try {
+          const msg = isApproved
+            ? `Your team "${team.name}" has been approved! You can now invite members.`
+            : `Your team "${team.name}" request was rejected by an admin.`;
+          await db.execute(sql`
+            INSERT INTO notifications (user_id, type, title, message, data)
+            VALUES (${team.owner_id}, 'team_update',
+              ${isApproved ? 'Team Approved!' : 'Team Request Rejected'},
+              ${msg},
+              ${JSON.stringify({ teamId: team.id })})
+          `);
+          broadcastToUser(team.owner_id, "team_update", { teamId: team.id, status, teamName: team.name });
+        } catch { /* non-fatal */ }
+      }
+    }
+    res.json(updated);
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to update team", detail: err?.message });
+  }
 });
 
 export default router;

@@ -21,18 +21,18 @@ const apiFetch = (url: string) =>
   });
 
 // ─── Reusable reveal field ────────────────────────────────────────────────────
-function RevealField({ label, value, mono = true }: { label: string; value: string | null | undefined; mono?: boolean }) {
-  const [shown, setShown] = useState(false);
+function RevealField({ label, value, mono = true, defaultShown = false }: { label: string; value: string | null | undefined; mono?: boolean; defaultShown?: boolean }) {
+  const [shown, setShown] = useState(defaultShown);
   const [copied, setCopied] = useState(false);
   if (!value) return null;
   const copy = () => { navigator.clipboard.writeText(value); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   return (
     <div className="flex items-center gap-2 py-0.5 group/f">
       <span className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-wider w-20 flex-shrink-0">{label}</span>
-      <span className={cn("flex-1 text-[11px] truncate", mono && "font-mono", shown ? "text-foreground/90" : "text-muted-foreground/40 select-none")}>
+      <span className={cn("flex-1 text-[11px] truncate", mono && "font-mono", shown ? "text-foreground/90 select-all" : "text-muted-foreground/40 select-none")}>
         {shown ? value : "•".repeat(Math.min(value.length, 14))}
       </span>
-      <div className="flex gap-1 opacity-0 group-hover/f:opacity-100 transition-opacity">
+      <div className="flex gap-1 transition-opacity">
         <button onClick={() => setShown(s => !s)} className="text-muted-foreground/40 hover:text-primary transition-colors">
           {shown ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
         </button>
@@ -85,9 +85,9 @@ function FullEntityRow({ entry }: { entry: any }) {
             <div className="space-y-0.5 pb-2 border-b border-border/20">
               <p className="text-[9px] font-mono uppercase tracking-widest text-cyan-400 mb-1.5 flex items-center gap-1.5"><Mail className="w-3 h-3" /> Email</p>
               <PlainField label="Address" value={entry.email} />
-              <RevealField label="Password" value={entry.emailPassword} />
+              <RevealField label="Password" value={entry.emailPassword} defaultShown />
               <PlainField label="Recovery" value={entry.emailRecovery} />
-              <RevealField label="Rec. Pass" value={entry.emailRecoveryPassword} />
+              <RevealField label="Rec. Pass" value={entry.emailRecoveryPassword} defaultShown />
             </div>
           )}
           {/* Twitter */}
@@ -95,13 +95,13 @@ function FullEntityRow({ entry }: { entry: any }) {
             <div className="space-y-0.5 pb-2 border-b border-border/20">
               <p className="text-[9px] font-mono uppercase tracking-widest text-sky-400 mb-1.5 flex items-center gap-1.5"><Twitter className="w-3 h-3" /> Twitter / X</p>
               <PlainField label="Username" value={entry.twitterUsername} />
-              <RevealField label="Password" value={entry.twitterPassword} />
+              <RevealField label="Password" value={entry.twitterPassword} defaultShown />
               <PlainField label="Email" value={entry.twitterEmail} />
-              <RevealField label="Email Pass" value={entry.twitterEmailPassword} />
-              <RevealField label="2FA" value={entry.twitter2fa} />
+              <RevealField label="Email Pass" value={entry.twitterEmailPassword} defaultShown />
+              <RevealField label="2FA" value={entry.twitter2fa} defaultShown />
               <PlainField label="Followers" value={entry.twitterFollowers} />
               <PlainField label="Recovery" value={entry.twitterEmailRecovery} />
-              <RevealField label="Rec. Pass" value={entry.twitterEmailRecoveryPassword} />
+              <RevealField label="Rec. Pass" value={entry.twitterEmailRecoveryPassword} defaultShown />
             </div>
           )}
           {/* Discord */}
@@ -109,12 +109,12 @@ function FullEntityRow({ entry }: { entry: any }) {
             <div className="space-y-0.5 pb-2 border-b border-border/20">
               <p className="text-[9px] font-mono uppercase tracking-widest text-violet-400 mb-1.5 flex items-center gap-1.5"><MessageCircle className="w-3 h-3" /> Discord</p>
               <PlainField label="Username" value={entry.discordUsername} />
-              <RevealField label="Password" value={entry.discordPassword} />
+              <RevealField label="Password" value={entry.discordPassword} defaultShown />
               <PlainField label="Email" value={entry.discordEmail} />
-              <RevealField label="Email Pass" value={entry.discordEmailPassword} />
-              <RevealField label="2FA" value={entry.discord2fa} />
+              <RevealField label="Email Pass" value={entry.discordEmailPassword} defaultShown />
+              <RevealField label="2FA" value={entry.discord2fa} defaultShown />
               <PlainField label="Recovery" value={entry.discordEmailRecovery} />
-              <RevealField label="Rec. Pass" value={entry.discordEmailRecoveryPassword} />
+              <RevealField label="Rec. Pass" value={entry.discordEmailRecoveryPassword} defaultShown />
             </div>
           )}
           {/* Telegram */}
@@ -122,11 +122,11 @@ function FullEntityRow({ entry }: { entry: any }) {
             <div className="space-y-0.5 pb-2 border-b border-border/20">
               <p className="text-[9px] font-mono uppercase tracking-widest text-blue-400 mb-1.5 flex items-center gap-1.5"><Phone className="w-3 h-3" /> Telegram</p>
               <PlainField label="Username" value={entry.telegramUsername} />
-              <RevealField label="Password" value={entry.telegramPassword} />
+              <RevealField label="Password" value={entry.telegramPassword} defaultShown />
               <PlainField label="Phone" value={entry.telegramPhone} />
-              <RevealField label="2FA" value={entry.telegram2fa} />
+              <RevealField label="2FA" value={entry.telegram2fa} defaultShown />
               <PlainField label="Linked Email" value={entry.telegramLinkedEmail} />
-              <RevealField label="Email Pass" value={entry.telegramLinkedEmailPassword} />
+              <RevealField label="Email Pass" value={entry.telegramLinkedEmailPassword} defaultShown />
             </div>
           )}
           {/* Wallets */}
@@ -184,10 +184,10 @@ function LocalAccountRow({ acc }: { acc: any }) {
           <PlainField label="Label" value={acc.label} />
           <PlainField label="Username" value={acc.username} />
           <PlainField label="Email" value={acc.email} />
-          <RevealField label="Password" value={acc.password} />
+          <RevealField label="Password" value={acc.password} defaultShown />
           <PlainField label="Recovery" value={acc.recovery_email} />
-          <RevealField label="Rec. Pass" value={acc.recovery_email_password} />
-          <RevealField label="2FA" value={acc.twofa} />
+          <RevealField label="Rec. Pass" value={acc.recovery_email_password} defaultShown />
+          <RevealField label="2FA" value={acc.twofa} defaultShown />
           <PlainField label="Backup" value={acc.backup_codes} />
           <PlainField label="Followers" value={acc.followers?.toString()} />
           {acc.notes && <p className="text-[10px] font-mono text-muted-foreground/60 pt-2 border-t border-border/20">{acc.notes}</p>}
