@@ -7,7 +7,7 @@ import {
   Smartphone, AtSign, Loader2, Twitter, MessageSquare, Phone,
   Settings, Server, Send, Inbox, Save, Trash2, Plus,
   ChevronDown, ChevronUp, Star, CheckCircle2, XCircle, Wifi,
-  Pencil, AlertCircle,
+  Pencil, AlertCircle, RefreshCw, MailOpen, Circle, ChevronLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,12 @@ import { useToast } from "@/hooks/use-toast";
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface InboxMessage {
+  uid: number; seqno: number; seen: boolean;
+  date: string; from: string; to: string; subject: string;
+}
+interface InboxBody { seqno: number; subject: string; from: string; date: string; body: string; }
+
 interface MailItem {
   id: string;
   source: "entity" | "local";
@@ -99,6 +105,156 @@ function accountToForm(a: EmailAccount): ImapSmtpFormState {
     username: a.username ?? "", password: "",
     useSSL: a.useSSL,
   };
+}
+
+// ─── Inbox Panel ──────────────────────────────────────────────────────────────
+function InboxPanel({ accountId, token }: { accountId: number; token: string | null }) {
+  const [messages, setMessages] = useState<InboxMessage[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [openMsg, setOpenMsg] = useState<InboxBody | null>(null);
+  const [bodyLoading, setBodyLoading] = useState(false);
+  const { toast } = useToast();
+
+  const fetch50 = useCallback(async () => {
+    setLoading(true); setError(null);
+    try {
+      const res = await fetch(`${BASE}/api/email-accounts/${accountId}/fetch-inbox`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ limit: 50 }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.detail ?? data.error ?? "Failed"); return; }
+      setMessages(data.messages ?? []);
+      setTotal(data.total ?? 0);
+    } catch (e: any) {
+      setError(e.message ?? "Network error");
+    } finally { setLoading(false); }
+  }, [accountId, token]);
+
+  const openBody = async (msg: InboxMessage) => {
+    setBodyLoading(true);
+    try {
+      const res = await fetch(`${BASE}/api/email-accounts/${accountId}/fetch-body`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ seqno: msg.seqno }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast({ title: data.error ?? "Failed", variant: "destructive" }); return; }
+      setOpenMsg(data);
+      setMessages(prev => prev.map(m => m.seqno === msg.seqno ? { ...m, seen: true } : m));
+    } catch { toast({ title: "Failed to load email", variant: "destructive" }); }
+    finally { setBodyLoading(false); }
+  };
+
+  const formatFrom = (from: string) => {
+    const match = from.match(/"?([^"<]+)"?\s*<?([^>]*)>?/);
+    return match ? { name: match[1].trim(), email: match[2].trim() } : { name: from, email: "" };
+  };
+
+  const formatDate = (dateStr: string) => {
+    try { return new Date(dateStr).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
+    catch { return dateStr; }
+  };
+
+  const unread = messages.filter(m => !m.seen).length;
+
+  if (openMsg) {
+    return (
+      <div className="bg-muted/5 border-t border-border/20 animate-fade-up">
+        <div className="flex items-center gap-2 px-4 py-2 border-b border-border/20">
+          <button onClick={() => setOpenMsg(null)} className="flex items-center gap-1.5 font-mono text-[10px] text-muted-foreground hover:text-primary transition-colors">
+            <ChevronLeft className="w-3 h-3" /> Back to inbox
+          </button>
+        </div>
+        <div className="px-4 py-3 space-y-2 max-h-96 overflow-y-auto">
+          <div className="space-y-1 pb-2 border-b border-border/20">
+            <p className="font-mono text-xs font-bold text-foreground">{openMsg.subject}</p>
+            <p className="font-mono text-[9px] text-muted-foreground/60">From: {openMsg.from}</p>
+            <p className="font-mono text-[9px] text-muted-foreground/40">{openMsg.date}</p>
+          </div>
+          <pre className="font-mono text-[10px] text-foreground/70 whitespace-pre-wrap leading-relaxed break-words">
+            {openMsg.body || "(empty)"}
+          </pre>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t border-primary/10 bg-muted/5 animate-slide-down">
+      <div className="flex items-center gap-2 px-4 py-2 border-b border-border/20">
+        <Inbox className="w-3.5 h-3.5 text-violet-400" />
+        <span className="font-mono text-[10px] font-bold text-violet-400 uppercase tracking-wide">INBOX</span>
+        {total > 0 && <span className="font-mono text-[9px] text-muted-foreground/40">({total} total)</span>}
+        {unread > 0 && <Badge className="ml-1 text-[8px] px-1 py-0 bg-red-500/15 border-red-500/30 text-red-400">{unread} unread</Badge>}
+        <button onClick={fetch50} disabled={loading}
+          className="ml-auto flex items-center gap-1 font-mono text-[9px] text-muted-foreground/50 hover:text-primary transition-colors">
+          <RefreshCw className={cn("w-3 h-3", loading && "animate-spin")} />
+          {loading ? "Fetching…" : messages.length > 0 ? "Refresh" : "Load inbox"}
+        </button>
+      </div>
+
+      {error && (
+        <div className="px-4 py-3 flex items-start gap-2 text-red-400 bg-red-500/5">
+          <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-mono text-[10px] font-bold">Connection failed</p>
+            <p className="font-mono text-[9px] text-muted-foreground/60 mt-0.5">{error}</p>
+            <p className="font-mono text-[9px] text-muted-foreground/40 mt-1">Tip: Gmail requires an App Password (not your main password). Enable IMAP in Gmail Settings first.</p>
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && messages.length === 0 && (
+        <div className="px-4 py-6 text-center">
+          <Inbox className="w-6 h-6 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="font-mono text-[10px] text-muted-foreground/40">Click "Load inbox" to fetch emails</p>
+        </div>
+      )}
+
+      {loading && (
+        <div className="px-4 py-6 flex items-center justify-center gap-2">
+          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+          <span className="font-mono text-[10px] text-muted-foreground/50">Connecting to IMAP…</span>
+        </div>
+      )}
+
+      {!loading && messages.length > 0 && (
+        <div className="divide-y divide-border/10 max-h-80 overflow-y-auto">
+          {messages.map(msg => {
+            const from = formatFrom(msg.from);
+            return (
+              <button key={msg.uid} onClick={() => openBody(msg)} disabled={bodyLoading}
+                className={cn("w-full flex items-start gap-3 px-4 py-2.5 text-left hover:bg-muted/10 transition-colors group",
+                  !msg.seen && "bg-primary/3")}>
+                <div className="flex-shrink-0 mt-1">
+                  {msg.seen
+                    ? <MailOpen className="w-3.5 h-3.5 text-muted-foreground/30" />
+                    : <Circle className="w-3.5 h-3.5 text-primary fill-primary/40" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className={cn("font-mono text-[10px] truncate flex-1", msg.seen ? "text-muted-foreground/60" : "font-bold text-foreground")}>
+                      {from.name || from.email || msg.from}
+                    </span>
+                    <span className="font-mono text-[9px] text-muted-foreground/30 flex-shrink-0">{formatDate(msg.date)}</span>
+                  </div>
+                  <p className={cn("font-mono text-[9px] truncate mt-0.5", msg.seen ? "text-muted-foreground/40" : "text-foreground/70")}>
+                    {msg.subject}
+                  </p>
+                </div>
+                {bodyLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground/30 flex-shrink-0 mt-1 opacity-0 group-hover:opacity-100" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── IMAP/SMTP Inline Config Form ─────────────────────────────────────────────
@@ -260,6 +416,7 @@ function MailCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
   const copyEmail = async () => { await navigator.clipboard.writeText(item.email); setEmailCopied(true); setTimeout(() => setEmailCopied(false), 1500); };
