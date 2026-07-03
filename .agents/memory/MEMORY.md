@@ -1,3 +1,4 @@
+- [Telegram 409 polling fix](telegram-bot-polling-409.md) — stop+backoff on 409, 2s poll timeout, 20s startup delay; 1-2 warnings per restart is normal.
 - [AYZEN Auth Pattern](ayzen-auth.md) — Mock auth uses SHA-256+static salt + base64 JSON tokens; OTP registration added (in-memory Map, 10min expiry); magic-link uses Resend OTP not Supabase.
 - [Orval Body Schema Naming](orval-body-naming.md) — Body schemas must use entity-shaped names (NoteInput, not CreateNoteBody) or TS2308 collisions break the build after codegen.
 - [Express 5 Wildcard Routes](express5-routes.md) — Use `/{*splat}` not `*` for catch-all routes; `req.params.id` is `string|string[]`, always parse with Array.isArray guard.

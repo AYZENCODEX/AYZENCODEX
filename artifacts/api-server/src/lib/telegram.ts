@@ -522,9 +522,16 @@ function registerHandlers(b: TelegramBot): void {
       bot = null;
       return;
     }
-    // 409 = another instance is polling — common in dev restarts
+    // 409 = another instance is polling — stop immediately and retry after backoff
+    // (letting the library retry right away just keeps the lock alive forever)
     if (msg.includes("409")) {
-      logger.warn("Telegram 409: another polling session is already running. Will retry.");
+      logger.warn("Telegram 409: another polling session active. Stopping, will retry in 15s.");
+      b.stopPolling().catch(() => {}).then(() => {
+        setTimeout(() => {
+          if (bot !== b) return; // bot was replaced, don't restart
+          b.startPolling().catch(() => {});
+        }, 15000);
+      });
       return;
     }
     logger.warn({ err: msg }, "Telegram polling error");
@@ -607,14 +614,16 @@ export function initTelegramBot(): void {
   }
   // Create bot with autoStart:false so we can clear any previous session first
   const b = new TelegramBot(TOKEN, {
-    polling: { autoStart: false, params: { timeout: 10 } },
+    polling: { autoStart: false, params: { timeout: 2 } },
   });
   bot = b;
   registerHandlers(b);
 
-  // Delete any lingering webhook / prior polling session, then start clean
+  // Delete any lingering webhook, wait 12s for Telegram to release the old
+  // polling session, then start clean — prevents 409 on rapid restarts
   b.deleteWebhook({ drop_pending_updates: true })
     .catch(() => {})
+    .then(() => new Promise<void>(resolve => setTimeout(resolve, 20000)))
     .then(() => b.startPolling())
     .then(() => {
       logger.info("Telegram bot started (polling mode)");
