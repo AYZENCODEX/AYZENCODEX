@@ -26,10 +26,6 @@ args = "Frontend"
 task = "workflow.run"
 args = "API Server"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "AYZEN Mobile"
-
 [[workflows.workflow]]
 name = "Frontend"
 author = "agent"
@@ -39,7 +35,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PORT=5000 AYZEN_API_PORT=8000 pnpm --filter @workspace/ayzen run dev"
+args = "cd artifacts/ayzen && PORT=5000 AYZEN_API_PORT=8000 node_modules/.bin/vite --config vite.config.ts --host 0.0.0.0"
 waitForPort = 5000
 
 [[workflows.workflow]]
@@ -53,17 +49,6 @@ outputType = "console"
 task = "shell.exec"
 args = "pnpm --filter @workspace/api-server run build && PORT=8000 node --enable-source-maps artifacts/api-server/dist/index.mjs"
 waitForPort = 8000
-
-[[workflows.workflow]]
-name = "AYZEN Mobile"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "cd artifacts/ayzen-mobile && EXPO_PUBLIC_API_URL=https://$REPLIT_DEV_DOMAIN:8000 pnpm run dev -- --tunnel --clear"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
@@ -82,16 +67,16 @@ localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 8000
-externalPort = 8000
-
-[[ports]]
 localPort = 8083
 externalPort = 3003
 
 [[ports]]
 localPort = 23325
 externalPort = 3000
+
+[[ports]]
+localPort = 8000
+externalPort = 8000
 
 [userenv]
 
