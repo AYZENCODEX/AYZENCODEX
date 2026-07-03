@@ -50,7 +50,7 @@ function PendingInvitesBanner({ onAccepted }: { onAccepted: () => void }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    customFetch<PendingInvite[]>("/teams/my-invites")
+    customFetch<PendingInvite[]>("/api/teams/my-invites")
       .then(d => setInvites(Array.isArray(d) ? d : []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -58,7 +58,7 @@ function PendingInvitesBanner({ onAccepted }: { onAccepted: () => void }) {
 
   const respond = async (teamId: number, action: "accept" | "reject") => {
     try {
-      await customFetch(`/teams/${teamId}/invites/respond`, { method: "PATCH", body: JSON.stringify({ action }) });
+      await customFetch(`/api/teams/${teamId}/invites/respond`, { method: "PATCH", body: JSON.stringify({ action }) });
       setInvites(prev => prev.filter(i => i.team_id !== teamId));
       toast({ title: action === "accept" ? "Joined team!" : "Invite declined" });
       if (action === "accept") onAccepted();
@@ -92,7 +92,7 @@ function TeamDashboard({ team }: { team: TeamDetail }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    customFetch<TeamStats>(`/teams/${team.id}/stats`)
+    customFetch<TeamStats>(`/api/teams/${team.id}/stats`)
       .then(d => setStats(d)).catch(() => {}).finally(() => setLoading(false));
   }, [team.id]);
 
@@ -184,7 +184,7 @@ function TeamMembers({ team, onRefresh }: { team: TeamDetail; onRefresh: () => v
 
   const removeMember = async (userId: number) => {
     try {
-      await customFetch(`/teams/${team.id}/members/${userId}`, { method: "DELETE" });
+      await customFetch(`/api/teams/${team.id}/members/${userId}`, { method: "DELETE" });
       toast({ title: "Member removed" }); onRefresh();
     } catch { toast({ title: "Failed", variant: "destructive" }); }
   };
@@ -192,7 +192,7 @@ function TeamMembers({ team, onRefresh }: { team: TeamDetail; onRefresh: () => v
   const promoteOrDemote = async (userId: number, currentRole: string) => {
     const newRole = currentRole === "leader" ? "member" : "leader";
     try {
-      await customFetch(`/teams/${team.id}/members/${userId}/role`, { method: "PATCH", body: JSON.stringify({ role: newRole }) });
+      await customFetch(`/api/teams/${team.id}/members/${userId}/role`, { method: "PATCH", body: JSON.stringify({ role: newRole }) });
       toast({ title: `Role updated to ${newRole}` }); onRefresh();
     } catch { toast({ title: "Failed", variant: "destructive" }); }
   };
@@ -260,7 +260,7 @@ function TeamVault({ team }: { team: TeamDetail }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    customFetch<VaultEntry[]>(`/teams/${team.id}/vault`)
+    customFetch<VaultEntry[]>(`/api/teams/${team.id}/vault`)
       .then(d => setEntries(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
   }, [team.id]);
 
@@ -326,7 +326,7 @@ function TeamMissions({ team }: { team: TeamDetail }) {
   const { toast } = useToast();
 
   const loadMissions = () => {
-    customFetch<Mission[]>(`/teams/${team.id}/missions`)
+    customFetch<Mission[]>(`/api/teams/${team.id}/missions`)
       .then(d => setMissions(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(() => { loadMissions(); }, [team.id]);
@@ -335,7 +335,7 @@ function TeamMissions({ team }: { team: TeamDetail }) {
     if (!form.title.trim()) return;
     setSaving(true);
     try {
-      await customFetch(`/teams/${team.id}/missions`, { method: "POST", body: JSON.stringify(form) });
+      await customFetch(`/api/teams/${team.id}/missions`, { method: "POST", body: JSON.stringify(form) });
       toast({ title: "Mission created!" });
       setCreateOpen(false);
       setForm({ title: "", description: "", target_value: "100", reward_amount: "0", deadline: "" });
@@ -346,7 +346,7 @@ function TeamMissions({ team }: { team: TeamDetail }) {
   const updateProgress = async (mission: Mission, delta: number) => {
     const newVal = Math.min(mission.target_value, Math.max(0, mission.current_value + delta));
     try {
-      await customFetch(`/teams/${team.id}/missions/${mission.id}`, { method: "PATCH", body: JSON.stringify({ current_value: newVal }) });
+      await customFetch(`/api/teams/${team.id}/missions/${mission.id}`, { method: "PATCH", body: JSON.stringify({ current_value: newVal }) });
       setMissions(prev => prev.map(m => m.id === mission.id ? { ...m, current_value: newVal } : m));
     } catch { toast({ title: "Failed", variant: "destructive" }); }
   };
@@ -449,7 +449,7 @@ function TeamLeaderboard({ team }: { team: TeamDetail }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    customFetch<LeaderboardEntry[]>(`/teams/${team.id}/leaderboard`)
+    customFetch<LeaderboardEntry[]>(`/api/teams/${team.id}/leaderboard`)
       .then(d => setBoard(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
   }, [team.id]);
 
@@ -495,7 +495,7 @@ function TeamProjects({ team }: { team: TeamDetail }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    customFetch<TeamProject[]>(`/teams/${team.id}/projects`)
+    customFetch<TeamProject[]>(`/api/teams/${team.id}/projects`)
       .then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
   }, [team.id]);
 
@@ -537,7 +537,7 @@ function TeamChat({ team, currentUserId }: { team: TeamDetail; currentUserId: nu
   const { toast } = useToast();
 
   const loadMessages = () => {
-    customFetch<Message[]>(`/teams/${team.id}/messages`)
+    customFetch<Message[]>(`/api/teams/${team.id}/messages`)
       .then(d => setMessages(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(() => { loadMessages(); }, [team.id]);
@@ -549,7 +549,7 @@ function TeamChat({ team, currentUserId }: { team: TeamDetail; currentUserId: nu
     setSending(true);
     setInput("");
     try {
-      const msg = await customFetch<Message>(`/teams/${team.id}/messages`, { method: "POST", body: JSON.stringify({ message: text }) });
+      const msg = await customFetch<Message>(`/api/teams/${team.id}/messages`, { method: "POST", body: JSON.stringify({ message: text }) });
       setMessages(prev => [...prev, msg]);
     } catch { toast({ title: "Failed to send", variant: "destructive" }); setSending(false); }
     setSending(false);
@@ -611,7 +611,7 @@ function TeamPanel({ team, onRefresh, onDelete }: { team: TeamDetail; onRefresh:
   const saveTeam = async () => {
     setSaving(true);
     try {
-      await customFetch(`/teams/${team.id}`, { method: "PATCH", body: JSON.stringify({ name: newName, description: newDesc }) });
+      await customFetch(`/api/teams/${team.id}`, { method: "PATCH", body: JSON.stringify({ name: newName, description: newDesc }) });
       toast({ title: "Team updated!" }); onRefresh();
     } catch { toast({ title: "Failed", variant: "destructive" }); } finally { setSaving(false); }
   };
@@ -620,7 +620,7 @@ function TeamPanel({ team, onRefresh, onDelete }: { team: TeamDetail; onRefresh:
     if (!inviteEmail.trim()) return;
     setInviting(true);
     try {
-      await customFetch(`/teams/${team.id}/invite`, { method: "POST", body: JSON.stringify({ username: inviteEmail.trim() }) });
+      await customFetch(`/api/teams/${team.id}/invite`, { method: "POST", body: JSON.stringify({ username: inviteEmail.trim() }) });
       toast({ title: "Invite sent!" }); setInviteEmail(""); onRefresh();
     } catch { toast({ title: "Failed to invite", variant: "destructive" }); } finally { setInviting(false); }
   };
@@ -628,7 +628,7 @@ function TeamPanel({ team, onRefresh, onDelete }: { team: TeamDetail; onRefresh:
   const deleteTeam = async () => {
     if (!confirm("Disband this team? This cannot be undone.")) return;
     try {
-      await customFetch(`/teams/${team.id}`, { method: "DELETE" });
+      await customFetch(`/api/teams/${team.id}`, { method: "DELETE" });
       toast({ title: "Team disbanded" }); onDelete();
     } catch { toast({ title: "Failed to delete", variant: "destructive" }); }
   };
@@ -692,14 +692,14 @@ export default function TeamsPage() {
 
   const loadTeams = async () => {
     try {
-      const data = await customFetch<Team[]>("/teams");
+      const data = await customFetch<Team[]>("/api/teams");
       setTeams(Array.isArray(data) ? data : []);
     } catch { setTeams([]); } finally { setLoading(false); }
   };
 
   const loadTeamDetail = async (id: number) => {
     try {
-      const data = await customFetch<TeamDetail>(`/teams/${id}`);
+      const data = await customFetch<TeamDetail>(`/api/teams/${id}`);
       setSelectedTeam(data);
     } catch { toast({ title: "Failed to load team", variant: "destructive" }); }
   };
@@ -710,7 +710,7 @@ export default function TeamsPage() {
     if (!teamName.trim()) return;
     setCreating(true);
     try {
-      await customFetch("/teams", { method: "POST", body: JSON.stringify({ name: teamName.trim(), description: teamDesc.trim() }) });
+      await customFetch("/api/teams", { method: "POST", body: JSON.stringify({ name: teamName.trim(), description: teamDesc.trim() }) });
       toast({ title: "Team request submitted!", description: "Awaiting admin approval." });
       setCreateOpen(false); setTeamName(""); setTeamDesc("");
       await loadTeams();

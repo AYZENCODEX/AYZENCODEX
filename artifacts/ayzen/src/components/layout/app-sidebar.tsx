@@ -118,9 +118,10 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Vault", icon: Vault,
     items: [
-      { href: "/vault?tab=entity", label: "Entity",     icon: Shield,      pluginSlug: "vault" },
-      { href: "/vault?tab=local",  label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
-      { href: "/vault?tab=2fa",    label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
+      { href: "/vault?tab=entity",  label: "Entity",     icon: Shield,      pluginSlug: "vault" },
+      { href: "/vault?tab=local",   label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
+      { href: "/vault?tab=2fa",     label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
+      { href: "/vault?tab=wallet",  label: "Wallet",     icon: Wallet,      pluginSlug: "vault" },
     ],
   },
   {
@@ -390,15 +391,13 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
         <Terminal className="w-5 h-5" />
         <span className="flex-1">AYZEN</span>
         <div className="flex items-center gap-1">
-          {!isAdmin && (
-            <button
-              onClick={() => { navigate("/ayzen-email"); onNavigate?.(); }}
-              className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors"
-              title="AYZEN Mail"
-            >
-              <AtSign className="w-3.5 h-3.5" />
-            </button>
-          )}
+          <button
+            onClick={() => { navigate("/ayzen-email"); onNavigate?.(); }}
+            className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors"
+            title="AYZEN Mail"
+          >
+            <AtSign className="w-3.5 h-3.5" />
+          </button>
           <button onClick={openSearch} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="Search (⌘K)">
             <Search className="w-3.5 h-3.5" />
           </button>
