@@ -492,6 +492,23 @@ const MIGRATIONS = [
   "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS difficulty_level TEXT DEFAULT 'medium'",
   "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_cost REAL DEFAULT 0",
   "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_profit REAL DEFAULT 0",
+  // ── Phase 15: NFT Subscription system ─────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS nft_subscriptions (
+    id SERIAL PRIMARY KEY,
+    token_id TEXT NOT NULL UNIQUE,
+    owner_id INTEGER NOT NULL REFERENCES users(id),
+    original_owner_id INTEGER NOT NULL REFERENCES users(id),
+    plan TEXT NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    expires_at TIMESTAMP NOT NULL,
+    is_listed BOOLEAN NOT NULL DEFAULT FALSE,
+    list_price REAL,
+    transfer_count INTEGER NOT NULL DEFAULT 0,
+    is_burned BOOLEAN NOT NULL DEFAULT FALSE,
+    minted_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_nft_subscriptions_owner ON nft_subscriptions(owner_id)",
+  "CREATE INDEX IF NOT EXISTS idx_nft_subscriptions_listed ON nft_subscriptions(is_listed) WHERE is_listed = TRUE",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

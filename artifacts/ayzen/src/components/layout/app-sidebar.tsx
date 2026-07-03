@@ -113,6 +113,7 @@ const USER_NAV: NavGroup[] = [
     label: "Wallet", icon: Wallet,
     items: [
       { href: "/wallet", label: "My Wallet", icon: Wallet },
+      { href: "/nft-marketplace", label: "NFT Market", icon: Zap },
     ],
   },
   {

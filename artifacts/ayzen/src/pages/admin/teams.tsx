@@ -36,7 +36,7 @@ export default function AdminTeamsPage() {
   const loadTeams = async () => {
     setLoading(true);
     try {
-      const url = filter !== "all" ? `/admin/teams?status=${filter}` : "/admin/teams";
+      const url = filter !== "all" ? `/api/admin/teams?status=${filter}` : "/api/admin/teams";
       const data = await customFetch<AdminTeam[]>(url);
       setTeams(Array.isArray(data) ? data : []);
     } catch { toast({ title: "Failed to load teams", variant: "destructive" }); } finally { setLoading(false); }
@@ -47,7 +47,7 @@ export default function AdminTeamsPage() {
   const updateTeam = async (id: number, status: string) => {
     setActing(a => ({ ...a, [id]: true }));
     try {
-      await customFetch(`/admin/teams/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
+      await customFetch(`/api/admin/teams/${id}`, { method: "PATCH", body: JSON.stringify({ status }) });
       toast({ title: status === "active" ? "Team approved!" : "Team rejected" });
       setTeams(prev => prev.map(t => t.id === id ? { ...t, status } : t));
     } catch { toast({ title: "Failed", variant: "destructive" }); } finally { setActing(a => ({ ...a, [id]: false })); }

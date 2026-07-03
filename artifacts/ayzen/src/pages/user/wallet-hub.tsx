@@ -6,10 +6,12 @@ import { Label } from "@/components/ui/label";
 import {
   Wallet, Send, ArrowUpRight, ArrowDownLeft, RefreshCw,
   Loader2, Copy, Check, Zap, DollarSign, Coins, TrendingUp,
-  History, Plus, AlertCircle, User,
+  History, Plus, AlertCircle, User, BarChart2, Gem,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { Link } from "wouter";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -33,32 +35,107 @@ interface Transfer {
   to_username: string | null;
 }
 
-const CURRENCY_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType; desc: string }> = {
-  AZN: { label: "AZN", color: "text-primary border-primary/30 bg-primary/5", icon: Coins, desc: "AYZEN Token" },
-  USDT: { label: "USDT", color: "text-emerald-400 border-emerald-400/30 bg-emerald-400/5", icon: DollarSign, desc: "Tether USD" },
-  XP:   { label: "XP",   color: "text-violet-400 border-violet-400/30 bg-violet-400/5", icon: Zap, desc: "Experience Points" },
-  BDT:  { label: "BDT",  color: "text-amber-400 border-amber-400/30 bg-amber-400/5", icon: TrendingUp, desc: "AYZEN BDT" },
+const CURRENCY_CONFIG: Record<string, { label: string; color: string; borderColor: string; hex: string; icon: React.ElementType; desc: string }> = {
+  AZN:  { label: "AZN",  color: "text-primary border-primary/30 bg-primary/5",        borderColor: "border-primary/40",     hex: "#22d3ee", icon: Coins,      desc: "AYZEN Token" },
+  USDT: { label: "USDT", color: "text-emerald-400 border-emerald-400/30 bg-emerald-400/5", borderColor: "border-emerald-400/40", hex: "#34d399", icon: DollarSign, desc: "Tether USD" },
+  XP:   { label: "XP",   color: "text-violet-400 border-violet-400/30 bg-violet-400/5",   borderColor: "border-violet-400/40",  hex: "#a78bfa", icon: Zap,         desc: "Experience Points" },
+  BDT:  { label: "BDT",  color: "text-amber-400 border-amber-400/30 bg-amber-400/5",      borderColor: "border-amber-400/40",   hex: "#fbbf24", icon: TrendingUp,  desc: "AYZEN BDT" },
 };
 
-function BalanceCard({ currency, amount, currentUserId }: { currency: string; amount: number; currentUserId?: number }) {
+function BalanceCard({ currency, amount, onClick, selected }: { currency: string; amount: number; onClick?: () => void; selected?: boolean }) {
   const cfg = CURRENCY_CONFIG[currency];
   if (!cfg) return null;
   const Icon = cfg.icon;
   return (
-    <div className={cn("rounded-xl border p-4 space-y-2 transition-all hover:scale-[1.01]", cfg.color)}>
+    <button
+      onClick={onClick}
+      className={cn(
+        "rounded-xl border p-4 space-y-2 transition-all text-left w-full",
+        cfg.color,
+        selected && "ring-2 ring-offset-2 ring-offset-background",
+        selected ? cfg.borderColor : "hover:scale-[1.02]"
+      )}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className={cn("w-7 h-7 rounded-full border flex items-center justify-center", cfg.color)}>
             <Icon className="w-3.5 h-3.5" />
           </div>
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{cfg.desc}</div>
-          </div>
+          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{cfg.desc}</div>
         </div>
         <Badge variant="outline" className={cn("font-mono text-[9px] uppercase", cfg.color)}>{currency}</Badge>
       </div>
       <div className="font-mono text-2xl font-bold">
         {amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+      </div>
+    </button>
+  );
+}
+
+function AssetPieChart({ balances }: { balances: Balances }) {
+  const total = balances.azn + balances.usdt + balances.xp + balances.bdt;
+  if (total === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-32 text-center">
+        <BarChart2 className="w-8 h-8 text-muted-foreground/20 mb-2" />
+        <p className="font-mono text-xs text-muted-foreground/50">No assets yet</p>
+      </div>
+    );
+  }
+
+  const data = [
+    { name: "AZN",  value: balances.azn,  color: "#22d3ee" },
+    { name: "USDT", value: balances.usdt, color: "#34d399" },
+    { name: "XP",   value: balances.xp,   color: "#a78bfa" },
+    { name: "BDT",  value: balances.bdt,  color: "#fbbf24" },
+  ].filter(d => d.value > 0);
+
+  const pct = (v: number) => total > 0 ? ((v / total) * 100).toFixed(1) : "0.0";
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="h-36">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius={40}
+              outerRadius={65}
+              dataKey="value"
+              strokeWidth={0}
+            >
+              {data.map((entry, i) => (
+                <Cell key={i} fill={entry.color} />
+              ))}
+            </Pie>
+            <Tooltip
+              formatter={(value: number, name: string) => [
+                `${value.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${name}`,
+                `${pct(value)}%`,
+              ]}
+              contentStyle={{
+                background: "hsl(var(--card))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "8px",
+                fontFamily: "monospace",
+                fontSize: "11px",
+              }}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* Legend */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {data.map(d => (
+          <div key={d.name} className="flex items-center gap-2 px-2 py-1.5 rounded bg-muted/20">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: d.color }} />
+            <span className="font-mono text-[10px] text-muted-foreground flex-1">{d.name}</span>
+            <span className="font-mono text-[10px] font-bold" style={{ color: d.color }}>{pct(d.value)}%</span>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -71,7 +148,6 @@ export default function WalletHub() {
   const [balances, setBalances] = useState<Balances>({ azn: 0, usdt: 0, xp: 0, bdt: 0, credits: 0 });
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [_txLoading, _setTxLoading] = useState(false);
   const [copying, setCopying] = useState(false);
 
   // Built-in wallet address
@@ -93,9 +169,9 @@ export default function WalletHub() {
     try {
       const [balRes, txRes, walRes, meRes] = await Promise.all([
         fetch(`${BASE}/api/wallets/ayzen-balance`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${BASE}/api/wallets/transfers`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${BASE}/api/wallets`, { headers: { Authorization: `Bearer ${token}` } }),
-        fetch(`${BASE}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${BASE}/api/wallets/transfers`,     { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${BASE}/api/wallets`,               { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${BASE}/api/auth/me`,               { headers: { Authorization: `Bearer ${token}` } }),
       ]);
       if (balRes.ok) setBalances(await balRes.json());
       if (txRes.ok) setTransfers(await txRes.json());
@@ -129,7 +205,6 @@ export default function WalletHub() {
         toast({ title: "Built-in wallet created ✓", description: "Your AYZEN wallet address is ready." });
       } else {
         toast({ variant: "destructive", title: d.error ?? "Failed to create wallet" });
-        // If already exists, reload
         await load();
       }
     } catch {
@@ -186,9 +261,16 @@ export default function WalletHub() {
           </h1>
           <p className="text-muted-foreground font-mono text-sm">AYZEN built-in wallet · Transfer AZN, USDT, XP between users</p>
         </div>
-        <Button variant="outline" size="sm" onClick={load} disabled={loading} className="font-mono text-xs gap-2">
-          <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/nft-marketplace">
+            <Button variant="outline" size="sm" className="font-mono text-xs gap-2">
+              <Gem className="w-3.5 h-3.5 text-primary" /> NFT Market
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="font-mono text-xs gap-2">
+            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Built-in Wallet Address */}
@@ -221,19 +303,31 @@ export default function WalletHub() {
         )}
       </div>
 
-      {/* Balances */}
+      {/* Balances + Asset Chart */}
       {loading ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-24 rounded-xl border border-border/40 bg-card animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <BalanceCard currency="AZN" amount={balances.azn} />
-          <BalanceCard currency="USDT" amount={balances.usdt} />
-          <BalanceCard currency="XP" amount={balances.xp} />
-          <BalanceCard currency="BDT" amount={balances.bdt} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Balance Cards — 2 col */}
+          <div className="lg:col-span-2 grid grid-cols-2 gap-3">
+            <BalanceCard currency="AZN"  amount={balances.azn}  onClick={() => setCurrency("AZN")}  selected={currency === "AZN"} />
+            <BalanceCard currency="USDT" amount={balances.usdt} onClick={() => setCurrency("USDT")} selected={currency === "USDT"} />
+            <BalanceCard currency="XP"   amount={balances.xp}   onClick={() => setCurrency("XP")}   selected={currency === "XP"} />
+            <BalanceCard currency="BDT"  amount={balances.bdt}  onClick={() => setCurrency("BDT")}  selected={currency === "BDT"} />
+          </div>
+
+          {/* Asset Allocation Pie Chart */}
+          <div className="rounded-xl border border-card-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart2 className="w-4 h-4 text-primary" />
+              <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">Asset Allocation</span>
+            </div>
+            <AssetPieChart balances={balances} />
+          </div>
         </div>
       )}
 
@@ -267,7 +361,8 @@ export default function WalletHub() {
               })}
             </div>
             <p className="font-mono text-[10px] text-muted-foreground/50">
-              Balance: <span className={currency === "AZN" ? "text-primary" : currency === "USDT" ? "text-emerald-400" : currency === "XP" ? "text-violet-400" : "text-amber-400"}>
+              Balance:{" "}
+              <span className={CURRENCY_CONFIG[currency]?.color.split(" ")[0]}>
                 {selectedBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} {currency}
               </span>
             </p>
@@ -358,7 +453,7 @@ export default function WalletHub() {
             <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">Transfer History</span>
           </div>
 
-          {_txLoading ? (
+          {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (
                 <div key={i} className="h-14 rounded-lg bg-muted/30 animate-pulse" />
@@ -403,7 +498,7 @@ export default function WalletHub() {
                       <div className={cn("font-mono text-sm font-bold", isOut ? "text-red-400" : "text-emerald-400")}>
                         {isOut ? "-" : "+"}{tx.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
                       </div>
-                      <div className={cn("font-mono text-[9px]", cfg.color)}>{tx.currency}</div>
+                      <div className={cn("font-mono text-[9px]", (cfg as any).color)}>{tx.currency}</div>
                     </div>
                   </div>
                 );
