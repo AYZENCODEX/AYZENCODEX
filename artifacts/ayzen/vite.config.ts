@@ -48,6 +48,39 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    target: "esnext",
+    minify: "esbuild",
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // React core — cached longest, changes least
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
+            return "react-core";
+          }
+          // Routing + state
+          if (id.includes("node_modules/wouter") || id.includes("node_modules/@tanstack/react-query")) {
+            return "routing-state";
+          }
+          // Charts — heavy, only needed on dashboard/marketplace
+          if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-")) {
+            return "charts";
+          }
+          // Icons — large, rarely changes
+          if (id.includes("node_modules/lucide-react")) {
+            return "icons";
+          }
+          // Radix UI — UI primitives
+          if (id.includes("node_modules/@radix-ui")) {
+            return "radix";
+          }
+          // Everything else from node_modules
+          if (id.includes("node_modules")) {
+            return "vendor";
+          }
+        },
+      },
+    },
   },
   server: {
     port,

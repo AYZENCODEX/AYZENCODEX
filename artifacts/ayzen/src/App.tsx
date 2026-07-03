@@ -6,11 +6,13 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { PluginsProvider } from "@/hooks/use-plugins";
 import { AppLayout } from "@/components/layout/app-layout";
-import { AiChat } from "@/components/ai-chat";
 import { useRealtime } from "@/hooks/use-realtime";
-import { CommandSearch } from "@/components/command-search";
-import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { ScrollToTop } from "@/components/scroll-to-top";
+
+// Lazy-load heavy overlay components — not needed on initial paint
+const AiChat         = lazy(() => import("@/components/ai-chat").then(m => ({ default: m.AiChat })));
+const CommandSearch  = lazy(() => import("@/components/command-search").then(m => ({ default: m.CommandSearch })));
+const KeyboardShortcuts = lazy(() => import("@/components/keyboard-shortcuts").then(m => ({ default: m.KeyboardShortcuts })));
 
 // Always eager-load auth pages (users hit these first)
 import Login from "@/pages/login";
@@ -173,8 +175,9 @@ function Router() {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 10_000,
-      refetchOnWindowFocus: true,
+      staleTime: 60_000,          // cache data 60s — avoid refetch on every navigation
+      gcTime: 5 * 60_000,         // keep unused data in memory 5 min
+      refetchOnWindowFocus: false, // don't re-fetch just because user switched tabs
       retry: 1,
     },
   },
@@ -203,9 +206,11 @@ function App() {
             <PluginsProvider>
               <RealtimeProvider>
                 <Router />
-                <AiChat />
-                <CommandSearch />
-                <KeyboardShortcuts />
+                <Suspense fallback={null}>
+                  <AiChat />
+                  <CommandSearch />
+                  <KeyboardShortcuts />
+                </Suspense>
                 <ScrollToTop />
               </RealtimeProvider>
             </PluginsProvider>
