@@ -576,6 +576,27 @@ const MIGRATIONS = [
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
   "ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS azn_amount REAL DEFAULT 0",
+  // ── Phase 18: Daily Check-in ──────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS user_checkins (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    checked_in_date DATE NOT NULL,
+    streak_day INTEGER NOT NULL DEFAULT 1,
+    xp_earned INTEGER NOT NULL DEFAULT 10,
+    azn_earned REAL NOT NULL DEFAULT 0.1,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, checked_in_date)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_checkins_user ON user_checkins(user_id, checked_in_date DESC)",
+  // ── Phase 18: Project Watchlist ───────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS user_watchlist (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, project_id)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_watchlist_user ON user_watchlist(user_id)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

@@ -10,7 +10,7 @@ import {
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
   ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList, User,
-  Store, Swords, ListTodo, BarChart2, MessageSquare,
+  Store, Swords, ListTodo, BarChart2, MessageSquare, Flame, Bookmark,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -87,8 +87,9 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Command", icon: LayoutDashboard,
     items: [
-      { href: "/dashboard", label: "Dashboard",    icon: LayoutDashboard },
-      { href: "/history",   label: "Activity Log", icon: History },
+      { href: "/dashboard",  label: "Dashboard",    icon: LayoutDashboard },
+      { href: "/checkin",    label: "Daily Check-in", icon: Flame },
+      { href: "/history",    label: "Activity Log", icon: History },
     ],
   },
   {
@@ -142,6 +143,7 @@ const USER_NAV: NavGroup[] = [
     label: "Earn", icon: DollarSign,
     items: [
       { href: "/earn",                        label: "Earn Center",   icon: DollarSign    },
+      { href: "/watchlist",                  label: "Watchlist",     icon: Bookmark },
       { href: "/leaderboard",                label: "Operators",     icon: Trophy,    pluginSlug: "leaderboard" },
       { href: "/leaderboard?tab=entities",   label: "Entity Board",  icon: LayoutList, pluginSlug: "leaderboard" },
       { href: "/referrals",                  label: "Referrals",     icon: Share2,    pluginSlug: "referrals" },

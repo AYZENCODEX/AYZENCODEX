@@ -73,6 +73,8 @@ const WalletHub         = lazy(() => import("@/pages/user/wallet-hub"));
 const NftMarketplace    = lazy(() => import("@/pages/user/nft-marketplace"));
 const Marketplace       = lazy(() => import("@/pages/user/marketplace"));
 const AdminMarketplace  = lazy(() => import("@/pages/admin/marketplace"));
+const CheckinPage       = lazy(() => import("@/pages/user/checkin"));
+const WatchlistPage     = lazy(() => import("@/pages/user/watchlist"));
 
 function PageLoader() {
   return (
@@ -166,6 +168,8 @@ function Router() {
       <Route path="/wallet">{() => <ProtectedRoute component={WalletHub} />}</Route>
       <Route path="/nft-marketplace">{() => <ProtectedRoute component={NftMarketplace} />}</Route>
       <Route path="/marketplace">{() => <ProtectedRoute component={Marketplace} />}</Route>
+      <Route path="/checkin">{() => <ProtectedRoute component={CheckinPage} />}</Route>
+      <Route path="/watchlist">{() => <ProtectedRoute component={WatchlistPage} />}</Route>
 
       <Route component={NotFound} />
     </Switch>

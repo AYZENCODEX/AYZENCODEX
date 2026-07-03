@@ -47,6 +47,8 @@ import nftSubscriptionsRouter from "./nft-subscriptions";
 import ayzenMailRouter from "./ayzen-mail";
 import marketplaceRouter from "./marketplace";
 import securityRouter from "./security";
+import checkinRouter from "./checkin";
+import watchlistRouter from "./watchlist";
 
 const router: IRouter = Router();
 
@@ -98,5 +100,7 @@ router.use(nftSubscriptionsRouter);
 router.use(ayzenMailRouter);
 router.use(marketplaceRouter);
 router.use(securityRouter);
+router.use(checkinRouter);
+router.use(watchlistRouter);
 
 export default router;

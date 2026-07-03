@@ -1,12 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import {
   Search, LayoutDashboard, Shield, FolderOpen, Settings,
   Terminal, ChevronRight, Zap, Activity, Wallet, BookOpen,
+  Flame, CheckCircle2, Loader2, Coins, Bookmark,
+  Store, Users, ArrowRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
+
+const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 const QUICK_LINKS = [
   {
@@ -45,15 +51,119 @@ const QUICK_LINKS = [
 
 const ALL_LINKS = [
   ...QUICK_LINKS,
-  { label: "Tasks", icon: Zap, href: "/tasks", desc: "Task center & submissions", color: "from-emerald-500/15 to-emerald-500/5 border-emerald-500/30 hover:border-emerald-500/60", iconColor: "text-emerald-400" },
-  { label: "Leaderboard", icon: Activity, href: "/leaderboard", desc: "Rankings & scores", color: "from-orange-500/15 to-orange-500/5 border-orange-500/30 hover:border-orange-500/60", iconColor: "text-orange-400" },
-  { label: "Wallets", icon: Wallet, href: "/wallets", desc: "Multi-chain wallet tracker", color: "from-sky-500/15 to-sky-500/5 border-sky-500/30 hover:border-sky-500/60", iconColor: "text-sky-400" },
-  { label: "History", icon: BookOpen, href: "/history", desc: "Activity log & timeline", color: "from-rose-500/15 to-rose-500/5 border-rose-500/30 hover:border-rose-500/60", iconColor: "text-rose-400" },
+  { label: "Tasks",       icon: Zap,      href: "/tasks",        desc: "Task center & submissions",       color: "from-emerald-500/15 to-emerald-500/5 border-emerald-500/30 hover:border-emerald-500/60", iconColor: "text-emerald-400" },
+  { label: "Leaderboard", icon: Activity, href: "/leaderboard",  desc: "Rankings & scores",               color: "from-orange-500/15 to-orange-500/5 border-orange-500/30 hover:border-orange-500/60",  iconColor: "text-orange-400" },
+  { label: "Wallets",     icon: Wallet,   href: "/wallets",      desc: "Multi-chain wallet tracker",     color: "from-sky-500/15 to-sky-500/5 border-sky-500/30 hover:border-sky-500/60",          iconColor: "text-sky-400" },
+  { label: "History",     icon: BookOpen, href: "/history",      desc: "Activity log & timeline",        color: "from-rose-500/15 to-rose-500/5 border-rose-500/30 hover:border-rose-500/60",       iconColor: "text-rose-400" },
+  { label: "P2P Market",  icon: Store,    href: "/marketplace",  desc: "Buy & sell airdrop assets",      color: "from-teal-500/15 to-teal-500/5 border-teal-500/30 hover:border-teal-500/60",      iconColor: "text-teal-400" },
+  { label: "Teams",       icon: Users,    href: "/teams",        desc: "Collaborate with operators",     color: "from-indigo-500/15 to-indigo-500/5 border-indigo-500/30 hover:border-indigo-500/60", iconColor: "text-indigo-400" },
+  { label: "Watchlist",   icon: Bookmark, href: "/watchlist",    desc: "Bookmarked projects",            color: "from-pink-500/15 to-pink-500/5 border-pink-500/30 hover:border-pink-500/60",      iconColor: "text-pink-400" },
+  { label: "Check-in",    icon: Flame,    href: "/checkin",      desc: "Daily streak & rewards",         color: "from-orange-500/15 to-orange-500/5 border-orange-500/30 hover:border-orange-500/60", iconColor: "text-orange-400" },
 ];
+
+interface CheckinStatus {
+  checkedInToday: boolean;
+  currentStreak: number;
+  nextXP: number;
+  nextAZN: number;
+  nextMilestone: string | null;
+}
+
+function CheckinWidget({ token }: { token: string }) {
+  const [, setLocation] = useLocation();
+  const [status, setStatus] = useState<CheckinStatus | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE}/api/checkin/status`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { const d = await r.json(); setStatus(d); setDone(d.checkedInToday); }
+    } catch { }
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const doCheckin = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setChecking(true);
+    try {
+      const r = await fetch(`${BASE}/api/checkin`, { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { setDone(true); await load(); }
+    } catch { }
+    setChecking(false);
+  };
+
+  return (
+    <div
+      onClick={() => setLocation("/checkin")}
+      className={cn(
+        "relative overflow-hidden rounded-xl border p-4 cursor-pointer transition-all group",
+        done
+          ? "border-emerald-500/30 bg-emerald-500/5 hover:border-emerald-500/50"
+          : "border-orange-500/30 bg-orange-500/5 hover:border-orange-500/60"
+      )}
+    >
+      <div className="flex items-center gap-3">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center border flex-shrink-0",
+          done ? "border-emerald-500/30 bg-emerald-500/10" : "border-orange-500/30 bg-orange-500/10"
+        )}>
+          {done
+            ? <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+            : <Flame className={cn("w-5 h-5 text-orange-400", !done && "animate-pulse")} />
+          }
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-mono font-bold text-sm text-foreground">Daily Check-in</span>
+            {status && (
+              <Badge variant="outline" className={cn(
+                "text-[9px] font-mono",
+                status.currentStreak >= 7  ? "border-yellow-400/30 text-yellow-400" :
+                status.currentStreak >= 3  ? "border-orange-400/30 text-orange-400" :
+                "border-muted/30 text-muted-foreground"
+              )}>
+                🔥 {status.currentStreak}d streak
+              </Badge>
+            )}
+          </div>
+          <p className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">
+            {done
+              ? "Claimed today! Come back tomorrow."
+              : status
+              ? `Claim +${status.nextXP} XP · +${status.nextAZN} AZN${status.nextMilestone ? ` · 🎉 ${status.nextMilestone}` : ""}`
+              : "Claim your daily reward"
+            }
+          </p>
+        </div>
+        {!done && (
+          <Button
+            size="sm"
+            onClick={doCheckin}
+            disabled={checking}
+            className="text-xs font-mono gap-1 h-8 flex-shrink-0"
+          >
+            {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+            {checking ? "..." : "Claim"}
+          </Button>
+        )}
+        {done && (
+          <ArrowRight className="w-4 h-4 text-muted-foreground/30 group-hover:text-muted-foreground/60 flex-shrink-0 transition-colors" />
+        )}
+      </div>
+      {status?.nextMilestone && !done && (
+        <div className="mt-2 pt-2 border-t border-orange-500/10">
+          <p className="font-mono text-[9px] text-orange-400/80">🎯 Milestone today: {status.nextMilestone}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function UserHome() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, token } = useAuth() as any;
   const [search, setSearch] = useState("");
 
   const filtered = search.trim()
@@ -88,6 +198,9 @@ export default function UserHome() {
         </p>
       </div>
 
+      {/* ── Daily Check-in widget ────────────────────────────────── */}
+      {token && <CheckinWidget token={token} />}
+
       {/* ── Search ──────────────────────────────────────────────── */}
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/40 pointer-events-none" />
@@ -95,7 +208,7 @@ export default function UserHome() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           onKeyDown={e => e.key === "Escape" && setSearch("")}
-          placeholder="Search workspace — Dashboard, Vault, Tasks…"
+          placeholder="Search workspace — Dashboard, Vault, Tasks, Market…"
           className="h-13 pl-12 pr-6 font-mono text-sm bg-card border-card-border rounded-xl focus-visible:ring-primary/30 focus-visible:border-primary/50 h-[3.25rem]"
         />
         {search && (
@@ -119,10 +232,7 @@ export default function UserHome() {
             No matches for &ldquo;{search}&rdquo;
           </div>
         ) : (
-          <div className={cn(
-            "grid gap-3",
-            showingAll ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-4"
-          )}>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {filtered.map(link => {
               const Icon = link.icon;
               return (
