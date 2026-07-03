@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Settings, Send, Link2, Unlink, RefreshCw, CheckCircle2,
   ExternalLink, KeyRound, Eye, EyeOff, Bell, Shield, Loader2,
+  Lock, Key, Copy, Trash2, Plus, AlertTriangle, Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -345,6 +346,218 @@ export default function UserSettings() {
           Notifications are delivered via connected Telegram. Link your Telegram above to receive them.
         </p>
       </Section>
+
+      {/* ── Security: Backup Codes ── */}
+      <SecuritySection token={token} />
+    </div>
+  );
+}
+
+// ─── Security Section ──────────────────────────────────────────────────────────
+function SecuritySection({ token }: { token: string }) {
+  const { toast } = useToast();
+  const [backupCodes, setBackupCodes] = useState<{ id: number; code: string; is_used: boolean }[]>([]);
+  const [magicCodes, setMagicCodes] = useState<{ id: number; code: string; label?: string; is_used: boolean; expires_at?: string }[]>([]);
+  const [genLoading, setGenLoading] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+  const [magicLabel, setMagicLabel] = useState("");
+  const [revealed, setRevealed] = useState(false);
+
+  const loadCodes = useCallback(async () => {
+    try {
+      const [bR, mR] = await Promise.all([
+        fetch(`${BASE}/api/security/backup-codes`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${BASE}/api/security/magic-codes`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+      if (bR.ok) setBackupCodes(await bR.json());
+      if (mR.ok) setMagicCodes(await mR.json());
+    } catch { }
+  }, [token]);
+
+  useEffect(() => { loadCodes(); }, [loadCodes]);
+
+  const generateBackupCodes = async () => {
+    setGenLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/security/backup-codes/generate`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast({ title: "✅ 10 backup codes generated! Save them now." });
+      await loadCodes();
+      setRevealed(true);
+    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
+    setGenLoading(false);
+  };
+
+  const createMagicCode = async () => {
+    setMagicLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/security/magic-codes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ label: magicLabel.trim() || "Magic Code" }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error);
+      toast({ title: "Magic code created!" });
+      setMagicLabel("");
+      await loadCodes();
+    } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
+    setMagicLoading(false);
+  };
+
+  const deleteMagicCode = async (id: number) => {
+    try {
+      await fetch(`${BASE}/api/security/magic-codes/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      setMagicCodes(prev => prev.filter(c => c.id !== id));
+      toast({ title: "Code deleted" });
+    } catch { toast({ title: "Failed", variant: "destructive" }); }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => toast({ title: "Copied!" })).catch(() => {});
+  };
+
+  const copyAllBackupCodes = () => {
+    const text = backupCodes.filter(c => !c.is_used).map(c => c.code).join("\n");
+    copyToClipboard(text);
+  };
+
+  const unusedBackup = backupCodes.filter(c => !c.is_used);
+  const usedBackup = backupCodes.filter(c => c.is_used);
+
+  return (
+    <div className="space-y-4">
+      {/* Backup Codes */}
+      <div className="bg-card border border-card-border rounded-lg overflow-hidden">
+        <div className="bg-primary/5 border-b border-card-border px-5 py-4 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+            <Key className="w-4 h-4 text-primary" />
+          </div>
+          <div className="flex-1">
+            <div className="font-mono font-bold text-sm text-foreground">Backup Codes</div>
+            <div className="text-[10px] font-mono text-muted-foreground">One-time codes to access your account if you lose access</div>
+          </div>
+          {unusedBackup.length > 0 && (
+            <Badge variant="outline" className="font-mono text-[10px] text-emerald-400 border-emerald-400/30">
+              {unusedBackup.length} remaining
+            </Badge>
+          )}
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          {unusedBackup.length === 0 && backupCodes.length === 0 && (
+            <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs font-mono text-amber-400">No backup codes yet. Generate them to protect your account.</p>
+            </div>
+          )}
+          {unusedBackup.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Active Codes ({unusedBackup.length})</span>
+                <div className="flex gap-2">
+                  <Button variant="ghost" size="sm" onClick={() => setRevealed(r => !r)} className="h-7 text-xs gap-1">
+                    {revealed ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />} {revealed ? "Hide" : "Show"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={copyAllBackupCodes} className="h-7 text-xs gap-1">
+                    <Copy className="w-3 h-3" /> Copy All
+                  </Button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {unusedBackup.map(c => (
+                  <div key={c.id} className="flex items-center gap-2 bg-muted/30 border border-border/30 rounded-lg px-3 py-2">
+                    <span className={cn("font-mono text-xs font-bold flex-1 tracking-widest transition-all", revealed ? "text-primary" : "text-muted-foreground/30 blur-sm")}>
+                      {c.code}
+                    </span>
+                    <button onClick={() => copyToClipboard(c.code)} className="text-muted-foreground hover:text-primary flex-shrink-0">
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {usedBackup.length > 0 && (
+                <p className="text-[10px] font-mono text-muted-foreground/40">{usedBackup.length} code{usedBackup.length > 1 ? "s" : ""} already used</p>
+              )}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={generateBackupCodes} disabled={genLoading} className="text-xs gap-1.5 h-9">
+              {genLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Key className="w-3.5 h-3.5" />}
+              {backupCodes.length > 0 ? "Regenerate Codes" : "Generate 10 Codes"}
+            </Button>
+            {backupCodes.length > 0 && (
+              <p className="text-[10px] font-mono text-muted-foreground/50 self-center">Regenerating will invalidate existing unused codes.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Magic Codes */}
+      <div className="bg-card border border-card-border rounded-lg overflow-hidden">
+        <div className="bg-violet-400/5 border-b border-card-border px-5 py-4 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-violet-400/10 border border-violet-400/20 flex items-center justify-center">
+            <Zap className="w-4 h-4 text-violet-400" />
+          </div>
+          <div>
+            <div className="font-mono font-bold text-sm text-foreground">Magic Login Codes</div>
+            <div className="text-[10px] font-mono text-muted-foreground">One-time codes for instant login — share with trusted devices</div>
+          </div>
+        </div>
+        <div className="px-5 py-5 space-y-4">
+          <div className="flex gap-2">
+            <Input
+              value={magicLabel}
+              onChange={e => setMagicLabel(e.target.value)}
+              placeholder="Label (e.g. Phone, Office PC)"
+              className="font-mono text-xs h-9 flex-1"
+              onKeyDown={e => e.key === "Enter" && createMagicCode()}
+            />
+            <Button size="sm" onClick={createMagicCode} disabled={magicLoading} className="text-xs gap-1 h-9">
+              {magicLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Create
+            </Button>
+          </div>
+          {magicCodes.length === 0 ? (
+            <p className="text-xs font-mono text-muted-foreground/40">No magic codes yet. Create one to enable one-tap login.</p>
+          ) : (
+            <div className="space-y-2">
+              {magicCodes.map(c => (
+                <div key={c.id} className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border",
+                  c.is_used ? "bg-muted/10 border-border/20 opacity-50" : "bg-muted/20 border-border/40"
+                )}>
+                  <Zap className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-xs font-bold text-foreground">{c.label || "Magic Code"}</div>
+                    <div className="font-mono text-[10px] text-muted-foreground/60 mt-0.5">
+                      {c.is_used ? "Used" : c.expires_at ? `Expires ${new Date(c.expires_at).toLocaleDateString()}` : "No expiry"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {!c.is_used && (
+                      <button onClick={() => copyToClipboard(c.code)} className="p-1.5 rounded hover:bg-muted/40 text-muted-foreground hover:text-primary">
+                        <Copy className="w-3 h-3" />
+                      </button>
+                    )}
+                    <button onClick={() => deleteMagicCode(c.id)} className="p-1.5 rounded hover:bg-red-500/10 text-muted-foreground hover:text-red-400">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="bg-muted/20 border border-border/30 rounded-lg p-3">
+            <p className="text-[10px] font-mono text-muted-foreground/60 leading-relaxed">
+              Magic codes are single-use. Share one with a trusted device for instant login without password.
+              Use them carefully — anyone with the code can log in to your account.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

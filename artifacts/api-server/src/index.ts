@@ -509,6 +509,73 @@ const MIGRATIONS = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_nft_subscriptions_owner ON nft_subscriptions(owner_id)",
   "CREATE INDEX IF NOT EXISTS idx_nft_subscriptions_listed ON nft_subscriptions(is_listed) WHERE is_listed = TRUE",
+  // ── Phase 16: P2P Marketplace ─────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS marketplace_listings (
+    id SERIAL PRIMARY KEY,
+    seller_id INTEGER NOT NULL REFERENCES users(id),
+    listing_type TEXT NOT NULL DEFAULT 'entity',
+    item_id INTEGER,
+    title TEXT NOT NULL,
+    description TEXT,
+    price_azn REAL NOT NULL DEFAULT 0,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id INTEGER REFERENCES users(id),
+    sold_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_marketplace_listings_status ON marketplace_listings(status)",
+  "CREATE INDEX IF NOT EXISTS idx_marketplace_listings_seller ON marketplace_listings(seller_id)",
+  `CREATE TABLE IF NOT EXISTS marketplace_orders (
+    id SERIAL PRIMARY KEY,
+    listing_id INTEGER NOT NULL REFERENCES marketplace_listings(id),
+    buyer_id INTEGER NOT NULL REFERENCES users(id),
+    seller_id INTEGER NOT NULL REFERENCES users(id),
+    price_azn REAL NOT NULL,
+    fee_pct REAL NOT NULL DEFAULT 5,
+    fee_azn REAL,
+    seller_receives REAL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    message TEXT,
+    admin_note TEXT,
+    resolved_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_marketplace_orders_status ON marketplace_orders(status)",
+  "CREATE INDEX IF NOT EXISTS idx_marketplace_orders_buyer ON marketplace_orders(buyer_id)",
+  "CREATE INDEX IF NOT EXISTS idx_marketplace_orders_seller ON marketplace_orders(seller_id)",
+  `CREATE TABLE IF NOT EXISTS marketplace_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    fee_pct REAL NOT NULL DEFAULT 5,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  // ── Phase 17: Security / 2FA codes ────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS user_backup_codes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    code TEXT NOT NULL,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_backup_codes_user ON user_backup_codes(user_id)",
+  `CREATE TABLE IF NOT EXISTS user_magic_codes (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    code TEXT NOT NULL UNIQUE,
+    label TEXT,
+    is_used BOOLEAN NOT NULL DEFAULT FALSE,
+    used_at TIMESTAMP,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_magic_codes_code ON user_magic_codes(code)",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+  "ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS azn_amount REAL DEFAULT 0",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

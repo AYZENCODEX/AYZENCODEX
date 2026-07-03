@@ -10,6 +10,7 @@ import {
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
   ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList, User,
+  Store, Swords, ListTodo, BarChart2, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/admin/credits", label: "Credit Approvals", icon: Coins },
       { href: "/admin/subscriptions", label: "Subscriptions", icon: Star },
+      { href: "/admin/marketplace", label: "P2P Marketplace", icon: Store },
     ],
   },
   {
@@ -106,14 +108,25 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Teams", icon: Users,
     items: [
-      { href: "/teams", label: "My Team", icon: Users },
+      { href: "/teams",             label: "Dashboard",   icon: LayoutDashboard },
+      { href: "/teams?tab=members", label: "Members",     icon: Users },
+      { href: "/teams?tab=missions",label: "Missions",    icon: Swords },
+      { href: "/teams?tab=tasks",   label: "Tasks",       icon: ListTodo },
+      { href: "/teams?tab=chat",    label: "Chat",        icon: MessageSquare },
+    ],
+  },
+  {
+    label: "Market", icon: Store,
+    items: [
+      { href: "/marketplace",      label: "P2P Market",  icon: Store },
+      { href: "/nft-marketplace",  label: "NFT Market",  icon: Zap },
     ],
   },
   {
     label: "Wallet", icon: Wallet,
     items: [
       { href: "/wallet", label: "My Wallet", icon: Wallet },
-      { href: "/nft-marketplace", label: "NFT Market", icon: Zap },
+      { href: "/credits", label: "AZN & Credits", icon: Coins },
     ],
   },
   {
@@ -145,7 +158,6 @@ const USER_NAV: NavGroup[] = [
   {
     label: "System", icon: Settings,
     items: [
-      { href: "/credits",       label: "Credits & AZN", icon: Coins },
       { href: "/subscription",  label: "Subscription",  icon: Star },
       { href: "/settings",      label: "Settings",      icon: Settings },
     ],
@@ -296,11 +308,14 @@ function NavGroupComp({ group, location, search, isEnabled, onNavigate }: {
       const [path, qs] = href.split("?");
       return location === path && search === `?${qs}`;
     }
-    // /projects without query: active only when no project type is selected
     if (href === "/projects") {
       const sp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
       const t = sp.get("type");
       return location === "/projects" && (!t || t === "protocol");
+    }
+    if (href === "/teams") {
+      const sp = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+      return location === "/teams" && !sp.get("tab");
     }
     return location === href || location.startsWith(href + "/");
   };
@@ -339,13 +354,21 @@ function NavGroupComp({ group, location, search, isEnabled, onNavigate }: {
             return (
               <Link key={item.href} href={item.href} onClick={onNavigate}>
                 <div className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer font-mono",
+                  "flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer font-mono group",
                   isActive
-                    ? "bg-primary/10 text-primary border border-primary/20"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground border border-transparent"
+                    ? "bg-primary/10 text-primary border border-primary/25 shadow-[inset_0_1px_0_rgba(34,211,238,0.1)]"
+                    : "text-sidebar-foreground/55 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground border border-transparent hover:border-border/30"
                 )}>
-                  <Icon className="w-4 h-4 flex-shrink-0" />
-                  <span className="truncate">{item.label}</span>
+                  <div className={cn(
+                    "w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-all",
+                    isActive
+                      ? "bg-primary/20 border border-primary/30"
+                      : "bg-muted/30 border border-transparent group-hover:bg-muted/60 group-hover:border-border/30"
+                  )}>
+                    <Icon className={cn("w-3.5 h-3.5", isActive ? "text-primary" : "text-current")} />
+                  </div>
+                  <span className="truncate text-[11px]">{item.label}</span>
+                  {isActive && <span className="ml-auto w-1 h-1 rounded-full bg-primary flex-shrink-0" />}
                 </div>
               </Link>
             );

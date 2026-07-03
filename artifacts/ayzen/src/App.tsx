@@ -69,6 +69,8 @@ const TeamsPage         = lazy(() => import("@/pages/user/teams"));
 const ContentPage       = lazy(() => import("@/pages/user/content"));
 const WalletHub         = lazy(() => import("@/pages/user/wallet-hub"));
 const NftMarketplace    = lazy(() => import("@/pages/user/nft-marketplace"));
+const Marketplace       = lazy(() => import("@/pages/user/marketplace"));
+const AdminMarketplace  = lazy(() => import("@/pages/admin/marketplace"));
 
 function PageLoader() {
   return (
@@ -133,6 +135,7 @@ function Router() {
       <Route path="/admin/tools/networks">{() => <ProtectedRoute component={AdminNetworks} adminOnly />}</Route>
       <Route path="/admin/health-rules">{() => <ProtectedRoute component={AdminHealthRules} adminOnly />}</Route>
       <Route path="/admin/teams">{() => <ProtectedRoute component={AdminTeams} adminOnly />}</Route>
+      <Route path="/admin/marketplace">{() => <ProtectedRoute component={AdminMarketplace} adminOnly />}</Route>
 
       {/* User Routes */}
       <Route path="/home">{() => <ProtectedRoute component={UserHome} />}</Route>
@@ -160,6 +163,7 @@ function Router() {
       <Route path="/content">{() => <ProtectedRoute component={ContentPage} />}</Route>
       <Route path="/wallet">{() => <ProtectedRoute component={WalletHub} />}</Route>
       <Route path="/nft-marketplace">{() => <ProtectedRoute component={NftMarketplace} />}</Route>
+      <Route path="/marketplace">{() => <ProtectedRoute component={Marketplace} />}</Route>
 
       <Route component={NotFound} />
     </Switch>

@@ -811,8 +811,8 @@ export default function TeamsPage() {
 
   return (
     <div className="flex -m-4 md:-m-6 lg:-m-8 min-h-[calc(100vh-50px)]">
-      {/* ── Left sub-sidebar ── */}
-      <div className="w-52 flex-shrink-0 border-r border-border/40 bg-sidebar/50 flex flex-col animate-slide-in-left">
+      {/* ── Left sub-sidebar (desktop only) ── */}
+      <div className="hidden md:flex w-52 flex-shrink-0 border-r border-border/40 bg-sidebar/50 flex-col animate-slide-in-left">
         {/* Back + team header */}
         <div className="p-3 border-b border-border/40">
           <button onClick={() => setSelectedTeam(null)} className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-primary transition-colors mb-3">
@@ -873,24 +873,64 @@ export default function TeamsPage() {
       </div>
 
       {/* ── Main content area ── */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6">
-        {tab === "dashboard"   && <TeamDashboard team={selectedTeam} />}
-        {tab === "members"     && <TeamMembers team={selectedTeam} onRefresh={() => loadTeamDetail(selectedTeam.id)} />}
-        {tab === "chat"        && <TeamChat team={selectedTeam} currentUserId={user?.id ?? 0} />}
-        {tab === "vault"       && <TeamVault team={selectedTeam} />}
-        {tab === "tasks"       && (
-          <div className="text-center py-16 space-y-3">
-            <ListTodo className="w-10 h-10 text-muted-foreground/20 mx-auto" />
-            <p className="text-sm text-muted-foreground font-mono">Team tasks are tracked via Projects.</p>
-            <Button size="sm" variant="outline" onClick={() => setTab("projects")}>View Projects</Button>
+      <div className="flex-1 overflow-y-auto flex flex-col min-w-0">
+        {/* Mobile top bar */}
+        <div className="md:hidden flex items-center gap-2 px-3 py-2.5 border-b border-border/40 bg-sidebar/50 sticky top-0 z-10 flex-shrink-0">
+          <button onClick={() => setSelectedTeam(null)} className="p-1.5 rounded-md hover:bg-muted/30 text-muted-foreground hover:text-primary flex-shrink-0">
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold font-mono text-xs flex-shrink-0">
+              {selectedTeam.name[0].toUpperCase()}
+            </div>
+            <span className="font-mono font-bold text-sm text-foreground truncate">{selectedTeam.name}</span>
+            <Badge variant="outline" className={cn("text-[9px] capitalize flex-shrink-0",
+              selectedTeam.myRole === "leader" ? "border-yellow-500/30 text-yellow-400" : "")}>
+              {selectedTeam.myRole}
+            </Badge>
           </div>
-        )}
-        {tab === "missions"    && <TeamMissions team={selectedTeam} />}
-        {tab === "leaderboard" && <TeamLeaderboard team={selectedTeam} />}
-        {tab === "projects"    && <TeamProjects team={selectedTeam} />}
-        {tab === "panel"       && selectedTeam.myRole === "leader" && (
-          <TeamPanel team={selectedTeam} onRefresh={() => loadTeamDetail(selectedTeam.id)} onDelete={() => { setSelectedTeam(null); loadTeams(); }} />
-        )}
+          <button onClick={() => loadTeamDetail(selectedTeam.id)} className="p-1.5 rounded-md hover:bg-muted/30 text-muted-foreground flex-shrink-0">
+            <RefreshCw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        {/* Mobile tab bar */}
+        <div className="md:hidden flex overflow-x-auto border-b border-border/40 bg-background/50 sticky top-[52px] z-10 flex-shrink-0 scrollbar-hide">
+          {TABS.map(t => {
+            const Icon = t.icon;
+            return (
+              <button key={t.id} onClick={() => setTab(t.id)}
+                className={cn("flex flex-col items-center gap-1 px-3 py-2.5 flex-shrink-0 text-[9px] font-mono font-bold uppercase tracking-wider transition-all border-b-2",
+                  tab === t.id
+                    ? "text-primary border-primary"
+                    : "text-muted-foreground/50 border-transparent hover:text-muted-foreground")}>
+                <Icon className="w-4 h-4" />
+                <span className="leading-none">{t.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 p-4 md:p-6">
+          {tab === "dashboard"   && <TeamDashboard team={selectedTeam} />}
+          {tab === "members"     && <TeamMembers team={selectedTeam} onRefresh={() => loadTeamDetail(selectedTeam.id)} />}
+          {tab === "chat"        && <TeamChat team={selectedTeam} currentUserId={user?.id ?? 0} />}
+          {tab === "vault"       && <TeamVault team={selectedTeam} />}
+          {tab === "tasks"       && (
+            <div className="text-center py-16 space-y-3">
+              <ListTodo className="w-10 h-10 text-muted-foreground/20 mx-auto" />
+              <p className="text-sm text-muted-foreground font-mono">Team tasks are tracked via Projects.</p>
+              <Button size="sm" variant="outline" onClick={() => setTab("projects")}>View Projects</Button>
+            </div>
+          )}
+          {tab === "missions"    && <TeamMissions team={selectedTeam} />}
+          {tab === "leaderboard" && <TeamLeaderboard team={selectedTeam} />}
+          {tab === "projects"    && <TeamProjects team={selectedTeam} />}
+          {tab === "panel"       && selectedTeam.myRole === "leader" && (
+            <TeamPanel team={selectedTeam} onRefresh={() => loadTeamDetail(selectedTeam.id)} onDelete={() => { setSelectedTeam(null); loadTeams(); }} />
+          )}
+        </div>
       </div>
     </div>
   );

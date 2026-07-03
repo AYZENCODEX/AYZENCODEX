@@ -35,13 +35,14 @@ interface Stats {
   tradingVolume: number;
 }
 
-const PLAN_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string; aznCost: number }> = {
+const PLAN_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string; aznCost: number; isLifetime?: boolean; durationLabel: string }> = {
   pro: {
     label: "Pro",
     icon: Zap,
     color: "text-primary border-primary/40",
     bg: "bg-primary/5",
     aznCost: 30,
+    durationLabel: "30-day pass",
   },
   enterprise: {
     label: "Enterprise",
@@ -49,6 +50,25 @@ const PLAN_CONFIG: Record<string, { label: string; icon: React.ElementType; colo
     color: "text-amber-400 border-amber-400/40",
     bg: "bg-amber-400/5",
     aznCost: 60,
+    durationLabel: "30-day pass",
+  },
+  lifetime_pro: {
+    label: "Lifetime Pro",
+    icon: Star,
+    color: "text-violet-400 border-violet-400/40",
+    bg: "bg-violet-400/5",
+    aznCost: 500,
+    isLifetime: true,
+    durationLabel: "Lifetime pass",
+  },
+  lifetime_enterprise: {
+    label: "Lifetime Enterprise",
+    icon: Shield,
+    color: "text-rose-400 border-rose-400/40",
+    bg: "bg-rose-400/5",
+    aznCost: 1000,
+    isLifetime: true,
+    durationLabel: "Lifetime pass",
   },
 };
 
@@ -123,7 +143,7 @@ function MintModal({ onClose, onSuccess, token }: { onClose: () => void; onSucce
                   <Icon className="w-4 h-4 flex-shrink-0" />
                   <div className="flex-1">
                     <div className="font-mono font-bold text-sm">{cfg.label} Plan</div>
-                    <div className="font-mono text-[10px] text-muted-foreground">30-day subscription NFT</div>
+                    <div className="font-mono text-[10px] text-muted-foreground">{cfg.durationLabel} {cfg.isLifetime ? "· Never expires" : "· 30-day access"}</div>
                   </div>
                   <div className="font-mono text-sm font-bold text-primary">{cfg.aznCost} AZN</div>
                 </button>

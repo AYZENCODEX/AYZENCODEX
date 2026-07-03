@@ -1,5 +1,6 @@
 import { ReactNode, useState, useEffect, useRef, useCallback } from "react";
 import { AppSidebar } from "./app-sidebar";
+import { MobileDock } from "./mobile-dock";
 import { Menu, Mail, X, RefreshCw, Inbox, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -225,10 +226,11 @@ export function AppLayout({ children }: AppLayoutProps) {
           </div>
         )}
 
-        <div className="relative z-10 p-4 md:p-6 lg:p-8 flex-1">
+        <div className="relative z-10 p-4 md:p-6 lg:p-8 flex-1 pb-24 md:pb-8">
           {children}
         </div>
       </main>
+      <MobileDock />
     </div>
   );
 }

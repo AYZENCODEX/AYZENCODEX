@@ -45,6 +45,8 @@ import adTasksRouter from "./ad-tasks";
 import searchRouter from "./search";
 import nftSubscriptionsRouter from "./nft-subscriptions";
 import ayzenMailRouter from "./ayzen-mail";
+import marketplaceRouter from "./marketplace";
+import securityRouter from "./security";
 
 const router: IRouter = Router();
 
@@ -94,5 +96,7 @@ router.use(adTasksRouter);
 router.use(searchRouter);
 router.use(nftSubscriptionsRouter);
 router.use(ayzenMailRouter);
+router.use(marketplaceRouter);
+router.use(securityRouter);
 
 export default router;
