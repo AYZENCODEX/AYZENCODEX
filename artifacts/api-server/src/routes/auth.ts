@@ -52,6 +52,70 @@ function generateReferralCode(): string {
   return "AYZN" + crypto.randomBytes(3).toString("hex").toUpperCase();
 }
 
+// ─── POST /auth/init — one-time seed: create first admin + optional user ─────
+// Only works when zero admins exist in the database.
+router.post("/auth/init", async (req, res): Promise<void> => {
+  try {
+    const existing = await db.select({ id: usersTable.id }).from(usersTable).where(eq(usersTable.role, "admin")).limit(1);
+    if (existing.length > 0) {
+      res.status(403).json({ error: "Admin already initialised. Use /auth/register for new users." });
+      return;
+    }
+
+    const {
+      adminUsername = "admin",
+      adminEmail = "admin@ayzen.io",
+      adminPassword,
+      userUsername,
+      userEmail,
+      userPassword,
+    } = req.body;
+
+    if (!adminPassword) {
+      res.status(400).json({ error: "adminPassword is required" });
+      return;
+    }
+
+    const created: Record<string, unknown>[] = [];
+
+    // Create admin
+    const adminReferralCode = generateReferralCode();
+    const [admin] = await db.insert(usersTable).values({
+      username: adminUsername,
+      email: adminEmail,
+      passwordHash: hashPassword(adminPassword),
+      role: "admin",
+      status: "active",
+      emailVerified: true,
+      twoFaEnabled: false,
+      referralCode: adminReferralCode,
+    }).returning();
+    db.execute(sql.raw(`INSERT INTO wallets (user_id, label, address, chain, chain_id, is_primary, balance, balance_usd, created_at, updated_at) VALUES (${admin.id}, 'My Wallet', 'pending', 'ETH', 1, true, 0, 0, NOW(), NOW())`)).catch(() => {});
+    created.push({ role: "admin", ...sanitizeUser(admin), token: generateToken(admin.id, admin.role) });
+
+    // Create regular user (optional)
+    if (userUsername && userEmail && userPassword) {
+      const userReferralCode = generateReferralCode();
+      const [user] = await db.insert(usersTable).values({
+        username: userUsername,
+        email: userEmail,
+        passwordHash: hashPassword(userPassword),
+        role: "user",
+        status: "active",
+        emailVerified: true,
+        twoFaEnabled: false,
+        referralCode: userReferralCode,
+      }).returning();
+      db.execute(sql.raw(`INSERT INTO wallets (user_id, label, address, chain, chain_id, is_primary, balance, balance_usd, created_at, updated_at) VALUES (${user.id}, 'My Wallet', 'pending', 'ETH', 1, true, 0, 0, NOW(), NOW())`)).catch(() => {});
+      created.push({ role: "user", ...sanitizeUser(user), token: generateToken(user.id, user.role) });
+    }
+
+    res.status(201).json({ message: "Initialised successfully", created });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── POST /auth/send-otp — send 6-digit email verification code ──────────────
 router.post("/auth/send-otp", async (req, res): Promise<void> => {
   const { email } = req.body;
