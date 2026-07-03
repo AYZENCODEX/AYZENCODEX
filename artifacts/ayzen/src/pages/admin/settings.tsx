@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Settings as SettingsIcon, Mail, Send, CheckCircle2, Eye, EyeOff, Loader2, AlertTriangle } from "lucide-react";
+import { Settings as SettingsIcon, Mail, Send, CheckCircle2, Eye, EyeOff, Loader2, AlertTriangle, Globe, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
@@ -21,6 +21,8 @@ export default function AdminSettings() {
   const [testEmail, setTestEmail] = useState("");
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [customDomain, setCustomDomain] = useState("");
+  const [savingDomain, setSavingDomain] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -31,8 +33,22 @@ export default function AdminSettings() {
         smtpPassword: "",
         smtpFrom: (settings as any).smtpFrom ?? "",
       });
+      setCustomDomain((settings as any).customDomain ?? "");
     }
   }, [settings]);
+
+  const saveDomain = async () => {
+    setSavingDomain(true);
+    try {
+      const res = await fetch(`${BASE}/api/settings`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ customDomain }),
+      });
+      if (res.ok) { toast({ title: "Domain saved" }); refetch(); }
+      else toast({ variant: "destructive", title: "Failed to save domain" });
+    } finally { setSavingDomain(false); }
+  };
 
   const saveSmtp = async () => {
     setSaving(true);
@@ -110,6 +126,42 @@ export default function AdminSettings() {
               <span className="text-xs font-medium">{value}</span>
             </div>
           ))}
+        </CardContent>
+      </Card>
+
+      {/* Custom Domain */}
+      <Card className="bg-card border-card-border shadow-none">
+        <CardHeader>
+          <CardTitle className="font-mono uppercase text-xs flex items-center gap-2">
+            <Globe className="h-4 w-4 text-primary" /> Custom Domain
+            {customDomain
+              ? <Badge className="ml-auto text-[9px] bg-green-500/20 text-green-400 border-green-500/30 font-mono">SET</Badge>
+              : <Badge variant="secondary" className="ml-auto text-[9px] font-mono">NOT SET</Badge>
+            }
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-1.5">
+            <Label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Branded Domain</Label>
+            <Input
+              value={customDomain}
+              onChange={e => setCustomDomain(e.target.value)}
+              className="font-mono text-xs h-10 bg-input border-border"
+              placeholder="app.yourbrand.com"
+            />
+          </div>
+          <div className="bg-primary/5 border border-primary/15 rounded-md p-3 flex gap-2">
+            <Info className="w-3.5 h-3.5 text-primary flex-shrink-0 mt-0.5" />
+            <p className="text-[10px] font-mono text-muted-foreground leading-relaxed">
+              This value is used for display/branding (emails, shared links) only. To actually point a real domain
+              at AYZEN, add it under Replit's <span className="text-primary">Deployments → Settings → Domains</span> panel
+              and configure the DNS records shown there — domain binding happens at the deployment layer, not here.
+            </p>
+          </div>
+          <Button onClick={saveDomain} disabled={savingDomain} className="font-mono text-xs gap-2">
+            {savingDomain ? <Loader2 className="w-3 h-3 animate-spin" /> : <Globe className="w-3 h-3" />}
+            {savingDomain ? "Saving..." : "Save Domain"}
+          </Button>
         </CardContent>
       </Card>
 

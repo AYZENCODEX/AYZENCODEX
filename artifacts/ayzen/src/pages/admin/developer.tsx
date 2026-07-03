@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import {
   Terminal, Cpu, Zap, CheckCircle, Clock, Send, Bot, User, Radio, Trash2,
   PauseCircle, PlayCircle, Activity, Wifi, MemoryStick, RefreshCw,
-  Play, CheckCircle2, XCircle, Loader2, Server,
+  Play, CheckCircle2, XCircle, Loader2, Server, TerminalSquare, ArrowUp,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -309,6 +310,140 @@ function LiveConsoleTab({ token }: { token: string }) {
             );
           })}
           <div ref={bottomRef} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shell Tab (real command execution) ───────────────────────────────────────
+interface ShellEntry {
+  id: number; command: string; stdout: string; stderr: string;
+  exitCode: number; error: string | null; timedOut: boolean; durationMs: number; ts: number;
+}
+
+function ShellTab({ token }: { token: string }) {
+  const [input, setInput] = useState("");
+  const [history, setHistory] = useState<ShellEntry[]>([]);
+  const [running, setRunning] = useState(false);
+  const [cmdHistory, setCmdHistory] = useState<string[]>([]);
+  const [histIdx, setHistIdx] = useState<number | null>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const idRef = useRef(0);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [history]);
+
+  const run = async () => {
+    const command = input.trim();
+    if (!command || running) return;
+    setRunning(true);
+    setCmdHistory(prev => [...prev, command]);
+    setHistIdx(null);
+    setInput("");
+    try {
+      const res = await fetch(`${BASE}/api/admin/shell/exec`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ command }),
+      });
+      const data = await res.json();
+      idRef.current += 1;
+      if (!res.ok) {
+        setHistory(prev => [...prev, {
+          id: idRef.current, command, stdout: "", stderr: data.error || "Request failed",
+          exitCode: 1, error: data.error || "Request failed", timedOut: false, durationMs: 0, ts: Date.now(),
+        }]);
+      } else {
+        setHistory(prev => [...prev, { id: idRef.current, ts: Date.now(), ...data }]);
+      }
+    } catch (e: any) {
+      idRef.current += 1;
+      setHistory(prev => [...prev, {
+        id: idRef.current, command, stdout: "", stderr: e?.message ?? "Network error",
+        exitCode: 1, error: e?.message ?? "Network error", timedOut: false, durationMs: 0, ts: Date.now(),
+      }]);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") { e.preventDefault(); run(); }
+    else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      if (cmdHistory.length === 0) return;
+      const next = histIdx === null ? cmdHistory.length - 1 : Math.max(0, histIdx - 1);
+      setHistIdx(next);
+      setInput(cmdHistory[next] ?? "");
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      if (histIdx === null) return;
+      const next = histIdx + 1;
+      if (next >= cmdHistory.length) { setHistIdx(null); setInput(""); }
+      else { setHistIdx(next); setInput(cmdHistory[next] ?? ""); }
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2 flex items-start gap-2">
+        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+        <p className="text-[10px] font-mono text-amber-300 leading-relaxed">
+          This runs real shell commands directly on the server with full filesystem access. Every command is
+          logged to the Activity Log for audit. Use with caution — there is no sandboxing.
+        </p>
+      </div>
+
+      <div className="border border-card-border rounded-xl bg-[#0a0a0f] overflow-hidden">
+        <div className="h-[480px] overflow-y-auto p-3 font-mono text-xs space-y-3 scrollbar-thin">
+          {history.length === 0 && (
+            <div className="flex items-center justify-center h-full text-muted-foreground/40 gap-2">
+              <TerminalSquare className="w-5 h-5" />
+              <span>No commands executed yet. Type a command below.</span>
+            </div>
+          )}
+          {history.map(entry => (
+            <div key={entry.id} className="space-y-1">
+              <div className="flex items-center gap-2 text-primary">
+                <span className="text-muted-foreground/50">$</span>
+                <span className="break-all">{entry.command}</span>
+                <span className="ml-auto text-[9px] text-muted-foreground/40 shrink-0">
+                  {entry.exitCode === 0 ? "exit 0" : `exit ${entry.exitCode}`} · {entry.durationMs}ms
+                </span>
+              </div>
+              {entry.stdout && (
+                <pre className="whitespace-pre-wrap break-all text-muted-foreground/90 pl-4">{entry.stdout}</pre>
+              )}
+              {entry.stderr && (
+                <pre className="whitespace-pre-wrap break-all text-red-400/80 pl-4">{entry.stderr}</pre>
+              )}
+              {entry.timedOut && (
+                <div className="pl-4 text-amber-400 text-[10px]">⚠ command timed out</div>
+              )}
+            </div>
+          ))}
+          <div ref={bottomRef} />
+        </div>
+        <div className="border-t border-card-border flex items-center gap-2 px-3 py-2 bg-card/40">
+          <span className="text-primary font-mono text-xs">$</span>
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={onKeyDown}
+            disabled={running}
+            placeholder="ls -la, pnpm run build, git status..."
+            className="flex-1 bg-transparent outline-none font-mono text-xs text-foreground placeholder:text-muted-foreground/40"
+          />
+          <button
+            onClick={run}
+            disabled={running || !input.trim()}
+            className="flex items-center gap-1.5 px-2.5 py-1 border border-primary/30 text-primary rounded text-[11px] font-mono hover:bg-primary/10 transition-colors disabled:opacity-40"
+          >
+            {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowUp className="w-3 h-3" />}
+            Run
+          </button>
         </div>
       </div>
     </div>
@@ -799,6 +934,7 @@ const DEV_SIDEBAR = [
   { id: "ping",      label: "Ping Test",     icon: RefreshCw },
   { id: "functions", label: "Functions",     icon: Server },
   { id: "errors",    label: "Error Log",     icon: XCircle },
+  { id: "shell",     label: "Shell",         icon: TerminalSquare },
 ] as const;
 
 type DevSection = typeof DEV_SIDEBAR[number]["id"];
@@ -881,6 +1017,8 @@ export default function AdminDeveloper() {
           {section === "ping" && <PingTab token={token} />}
 
           {section === "functions" && <FunctionRegistryTab token={token} />}
+
+          {section === "shell" && <ShellTab token={token} />}
 
           {section === "errors" && (
             <div className="border border-card-border rounded-md bg-card/50">

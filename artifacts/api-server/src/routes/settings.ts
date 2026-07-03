@@ -29,7 +29,7 @@ router.get("/settings", async (_req, res): Promise<void> => {
 router.patch("/settings", async (req, res): Promise<void> => {
   const existing = await getOrCreate();
   const updates: Record<string, unknown> = { updatedAt: new Date() };
-  const fields = ["platformName", "logoUrl", "primaryColor", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFrom", "telegramBotUsername", "telegramWebhookUrl", "twoFaIssuerName"];
+  const fields = ["platformName", "logoUrl", "primaryColor", "smtpHost", "smtpPort", "smtpUser", "smtpPassword", "smtpFrom", "telegramBotUsername", "telegramWebhookUrl", "customDomain", "twoFaIssuerName"];
   for (const f of fields) if (req.body[f] !== undefined) updates[f] = req.body[f];
   const [s] = await db.update(settingsTable).set(updates).where(eq(settingsTable.id, existing.id)).returning();
   res.json(formatSettings(s!));

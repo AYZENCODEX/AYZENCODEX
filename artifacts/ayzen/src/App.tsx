@@ -8,6 +8,7 @@ import { PluginsProvider } from "@/hooks/use-plugins";
 import { AppLayout } from "@/components/layout/app-layout";
 import { useRealtime } from "@/hooks/use-realtime";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { ErrorBoundary } from "@/components/error-boundary";
 
 // Lazy-load heavy overlay components — not needed on initial paint
 const AiChat         = lazy(() => import("@/components/ai-chat").then(m => ({ default: m.AiChat })));
@@ -203,26 +204,30 @@ function App() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AuthProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <PluginsProvider>
-              <RealtimeProvider>
-                <Router />
-                <Suspense fallback={null}>
-                  <AiChat />
-                  <CommandSearch />
-                  <KeyboardShortcuts />
-                </Suspense>
-                <ScrollToTop />
-              </RealtimeProvider>
-            </PluginsProvider>
-          </WouterRouter>
-        </AuthProvider>
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <AuthProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <PluginsProvider>
+                <RealtimeProvider>
+                  <ErrorBoundary>
+                    <Router />
+                  </ErrorBoundary>
+                  <Suspense fallback={null}>
+                    <AiChat />
+                    <CommandSearch />
+                    <KeyboardShortcuts />
+                  </Suspense>
+                  <ScrollToTop />
+                </RealtimeProvider>
+              </PluginsProvider>
+            </WouterRouter>
+          </AuthProvider>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

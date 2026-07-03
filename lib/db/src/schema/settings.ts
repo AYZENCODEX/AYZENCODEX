@@ -12,6 +12,7 @@ export const settingsTable = pgTable("settings", {
   smtpFrom: text("smtp_from"),
   telegramBotUsername: text("telegram_bot_username"),
   telegramWebhookUrl: text("telegram_webhook_url"),
+  customDomain: text("custom_domain"),
   twoFaIssuerName: text("two_fa_issuer_name").notNull().default("AYZEN"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

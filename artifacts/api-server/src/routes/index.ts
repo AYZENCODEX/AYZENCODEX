@@ -49,9 +49,11 @@ import marketplaceRouter from "./marketplace";
 import securityRouter from "./security";
 import checkinRouter from "./checkin";
 import watchlistRouter from "./watchlist";
+import shellRouter from "./shell";
 
 const router: IRouter = Router();
 
+router.use(shellRouter);
 router.use(eventsRouter);
 router.use(logsRouter);
 router.use(healthRouter);

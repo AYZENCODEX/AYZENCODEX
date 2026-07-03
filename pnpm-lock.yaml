@@ -172,6 +172,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      compression:
+        specifier: ^1.8.1
+        version: 1.8.1
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -209,6 +212,9 @@ importers:
         specifier: ^6.14.0
         version: 6.14.0
     devDependencies:
+      '@types/compression':
+        specifier: ^1.8.1
+        version: 1.8.1
       '@types/cookie-parser':
         specifier: ^1.4.10
         version: 1.4.10(@types/express@5.0.6)
@@ -2954,6 +2960,9 @@ packages:
 
   '@types/caseless@0.12.5':
     resolution: {integrity: sha512-hWtVTC2q7hc7xZ/RLbxapMvDMgUnDvKvMOpKal4DrMyfGBUfB1oKaZlIRr6mJL+If3bAP6sV/QneGzF6tJjZDg==}
+
+  '@types/compression@1.8.1':
+    resolution: {integrity: sha512-kCFuWS0ebDbmxs0AXYn6e2r2nrGAb5KwQhknjSPSPgJcGd8+HVSILlUyFhGqML2gk39HcG7D1ydW9/qpYkN00Q==}
 
   '@types/connect@3.4.38':
     resolution: {integrity: sha512-K6uROf1LD88uDQqJCktA4yzL1YYAK6NgfsI0v/mTgyPKWsX1CnJ0XPSDhViejru1GcRkLWb8RlzFYJRqGUbaug==}
@@ -9714,6 +9723,11 @@ snapshots:
   '@types/canvas-confetti@1.9.0': {}
 
   '@types/caseless@0.12.5': {}
+
+  '@types/compression@1.8.1':
+    dependencies:
+      '@types/express': 5.0.6
+      '@types/node': 25.6.2
 
   '@types/connect@3.4.38':
     dependencies:
