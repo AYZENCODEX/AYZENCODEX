@@ -320,20 +320,28 @@ export default function Login() {
 
   const handleDemoAdmin = async () => {
     setLoading(true);
-    const data = await backendLogin("support@ayzen.tech", "1234578@Ba1");
+    const data = await backendLogin("demoadmin@ayzen.io", "Demo@1234");
     if (data) {
       setAuthContext(data.user, data.token);
-      setLocation("/admin/dashboard");
+      setSuccessMsg(`Welcome, ${data.user.username}!`);
+      setShowSuccess(true);
+      setTimeout(() => setLocation("/admin/dashboard"), 1600);
+    } else {
+      toast({ variant: "destructive", title: "Demo admin login failed" });
     }
     setLoading(false);
   };
 
   const handleDemoUser = async () => {
     setLoading(true);
-    const data = await backendLogin("user@ayzen.io", "demo123");
+    const data = await backendLogin("demo@ayzen.io", "Demo@1234");
     if (data) {
       setAuthContext(data.user, data.token);
-      setLocation("/dashboard");
+      setSuccessMsg(`Welcome, ${data.user.username}!`);
+      setShowSuccess(true);
+      setTimeout(() => setLocation("/dashboard"), 1600);
+    } else {
+      toast({ variant: "destructive", title: "Demo user login failed" });
     }
     setLoading(false);
   };
