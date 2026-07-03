@@ -186,6 +186,8 @@ export default function Login() {
     setMagicVerifyLoading(false);
   };
 
+  const DEMO_EMAILS = ["demoadmin@ayzen.io", "demo@ayzen.io"];
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
@@ -193,6 +195,18 @@ export default function Login() {
     try {
       const data = await backendLogin(email, password);
       if (data) {
+        // Demo accounts: skip OTP entirely
+        if (DEMO_EMAILS.includes(email.toLowerCase().trim())) {
+          setAuthContext(data.user, data.token, keepSignedIn);
+          setSuccessMsg(`Welcome back, ${data.user.username}!`);
+          setShowSuccess(true);
+          setTimeout(() => {
+            if (data.user.role === "admin") setLocation("/admin/dashboard");
+            else setLocation("/dashboard");
+          }, 1600);
+          setLoading(false);
+          return;
+        }
         // Step 1: credentials valid — send OTP
         setTempSigninData(data);
         setSigninOtpSending(true);
