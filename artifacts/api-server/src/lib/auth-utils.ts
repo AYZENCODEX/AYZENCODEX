@@ -2,7 +2,6 @@ import jwt from "jsonwebtoken";
 import { db, usersTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import type { Request } from "express";
-import { verifyFirebaseToken } from "./firebase-admin";
 
 export function getTokenFromReq(req: Request): string | null {
   const authHeader = req.headers.authorization;
@@ -36,21 +35,6 @@ export async function getUserFromToken(token: string): Promise<{ userId: number;
     const payload = JSON.parse(Buffer.from(token, "base64").toString());
     if (payload.userId) return { userId: Number(payload.userId), role: payload.role ?? "user" };
   } catch {}
-
-  // Try Firebase ID token
-  const firebaseResult = await verifyFirebaseToken(token);
-  if (firebaseResult?.email) {
-    const [existing] = await db.select().from(usersTable).where(eq(usersTable.email, firebaseResult.email));
-    if (existing) return { userId: existing.id, role: existing.role };
-    const base = firebaseResult.email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "_");
-    const username = `${base}_${Date.now()}`;
-    const [newUser] = await db.insert(usersTable).values({
-      email: firebaseResult.email, username, passwordHash: "",
-      role: "user", status: "active", emailVerified: true, twoFaEnabled: false,
-      avatarUrl: firebaseResult.picture ?? null,
-    }).returning();
-    return { userId: newUser.id, role: "user" };
-  }
 
   // Try Supabase / standard JWT (fallback)
   const jwtSecret = process.env.SUPABASE_JWT_SECRET;

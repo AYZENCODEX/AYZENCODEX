@@ -4,7 +4,6 @@ import { eq, sql } from "drizzle-orm";
 import * as crypto from "crypto";
 import { referralsTable } from "@workspace/db";
 import { getUserFromToken } from "../lib/auth-utils";
-import { getFirebaseAdmin } from "../lib/firebase-admin";
 import { sendEmail } from "../lib/email";
 
 const router = Router();
@@ -281,18 +280,6 @@ router.post("/auth/magic-link/verify", async (req, res): Promise<void> => {
   res.json({ token, refreshToken: token, user: sanitizeUser(user) });
 });
 
-// ─── Firebase OAuth sync ──────────────────────────────────────────────────────
-router.post("/auth/firebase-sync", async (req, res): Promise<void> => {
-  const { idToken } = req.body as { idToken?: string };
-  if (!idToken) { res.status(400).json({ error: "idToken is required" }); return; }
-  const result = await getUserFromToken(idToken);
-  if (!result) { res.status(401).json({ error: "Invalid Firebase token" }); return; }
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, result.userId));
-  if (!user) { res.status(404).json({ error: "User not found" }); return; }
-  await db.update(usersTable).set({ lastActiveAt: new Date() }).where(eq(usersTable.id, user.id));
-  const token = generateToken(user.id, user.role);
-  res.json({ token, refreshToken: token, user: sanitizeUser(user) });
-});
 
 // ─── Supabase OAuth sync — legacy fallback ────────────────────────────────────
 router.post("/auth/supabase-sync", async (req, res): Promise<void> => {

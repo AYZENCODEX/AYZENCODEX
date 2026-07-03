@@ -1,8 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { logBus } from "./lib/log-bus";
-import { initTelegramBot } from "./lib/telegram";
-import { getFirebaseAdmin } from "./lib/firebase-admin";
+import { initTelegramBot, stopTelegramBot } from "./lib/telegram";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -639,6 +638,12 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "Server listening");
   logBus.system(`🚀 AYZEN API Server started on port ${port}`);
-  getFirebaseAdmin();
   initTelegramBot();
+
+  // Graceful shutdown — stop Telegram polling before exit so the next start has no 409
+  const shutdown = () => {
+    stopTelegramBot().finally(() => process.exit(0));
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 });

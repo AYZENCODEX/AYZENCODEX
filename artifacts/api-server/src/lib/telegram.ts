@@ -593,31 +593,36 @@ export async function verifyTelegramCode(
   return true;
 }
 
+export function stopTelegramBot(): Promise<void> {
+  if (!bot) return Promise.resolve();
+  const b = bot;
+  bot = null;
+  return b.stopPolling().catch(() => {});
+}
+
 export function initTelegramBot(): void {
   if (!TOKEN) {
     logger.warn("TELEGRAM_BOT_TOKEN not set — Telegram bot disabled");
     return;
   }
-  try {
-    bot = new TelegramBot(TOKEN, {
-      polling: {
-        autoStart: true,
-        params: { timeout: 10 },
-      },
-      // Kill any previous polling session before starting a new one
-      // This resolves 409 errors on server restart
-    });
-    // First delete any existing webhook + cancel prior polling
-    bot.deleteWebhook().then(() => {
-      logger.info("Telegram bot started (polling mode)");
-    }).catch(() => {});
-    registerHandlers(bot);
+  // Create bot with autoStart:false so we can clear any previous session first
+  const b = new TelegramBot(TOKEN, {
+    polling: { autoStart: false, params: { timeout: 10 } },
+  });
+  bot = b;
+  registerHandlers(b);
 
-    // Send startup notification to all connected users
-    broadcastToAll(
-      "🚀 *AYZEN is online!*\n\nThe Airdrop Command Center is up and running.\nUse /status to check platform health."
-    ).catch(() => {});
-  } catch (err: any) {
-    logger.error({ err: err?.message }, "Failed to start Telegram bot");
-  }
+  // Delete any lingering webhook / prior polling session, then start clean
+  b.deleteWebhook({ drop_pending_updates: true })
+    .catch(() => {})
+    .then(() => b.startPolling())
+    .then(() => {
+      logger.info("Telegram bot started (polling mode)");
+      broadcastToAll(
+        "🚀 *AYZEN is online!*\n\nThe Airdrop Command Center is up and running.\nUse /status to check platform health."
+      ).catch(() => {});
+    })
+    .catch((err: any) => {
+      logger.error({ err: err?.message }, "Failed to start Telegram bot polling");
+    });
 }
