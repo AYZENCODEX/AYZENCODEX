@@ -11,6 +11,7 @@ import {
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
   ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList, User,
   Store, Swords, ListTodo, BarChart2, MessageSquare, Flame, Bookmark,
+  Bot as BotIcon, Cpu, Activity, RefreshCw as RefreshCwIcon, XCircle, TerminalSquare, Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,9 +48,15 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
+    label: "Team", icon: Users,
+    items: [
+      { href: "/admin/teams", label: "Overview", icon: Users },
+      { href: "/admin/team-vault", label: "Team Vault", icon: Vault },
+    ],
+  },
+  {
     label: "Community", icon: Radio,
     items: [
-      { href: "/admin/teams", label: "Teams", icon: Users },
       { href: "/admin/broadcast", label: "Broadcast", icon: Radio, pluginSlug: "broadcast" },
       { href: "/admin/referrals", label: "Referrals", icon: Share2, pluginSlug: "referrals" },
       { href: "/admin/leaderboard", label: "Leaderboard", icon: Trophy, pluginSlug: "leaderboard" },
@@ -78,7 +85,19 @@ const ADMIN_NAV: NavGroup[] = [
       { href: "/admin/tools/networks", label: "Networks", icon: Radio },
       { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
       { href: "/admin/settings", label: "Settings", icon: Settings },
-      { href: "/admin/developer", label: "Developer", icon: Code2 },
+    ],
+  },
+  {
+    label: "Developer", icon: Code2,
+    items: [
+      { href: "/admin/developer?tab=ai",        label: "AI Assistant", icon: BotIcon },
+      { href: "/admin/developer?tab=console",   label: "Live Console", icon: Terminal },
+      { href: "/admin/developer?tab=models",    label: "AI Models",    icon: Cpu },
+      { href: "/admin/developer?tab=telemetry", label: "Telemetry",    icon: Activity },
+      { href: "/admin/developer?tab=ping",      label: "Ping Test",    icon: RefreshCwIcon },
+      { href: "/admin/developer?tab=functions", label: "Functions",    icon: Server },
+      { href: "/admin/developer?tab=errors",    label: "Error Log",    icon: XCircle },
+      { href: "/admin/developer?tab=shell",     label: "Shell",        icon: TerminalSquare },
     ],
   },
 ];
@@ -109,11 +128,15 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Teams", icon: Users,
     items: [
-      { href: "/teams",             label: "Dashboard",   icon: LayoutDashboard },
-      { href: "/teams?tab=members", label: "Members",     icon: Users },
-      { href: "/teams?tab=missions",label: "Missions",    icon: Swords },
-      { href: "/teams?tab=tasks",   label: "Tasks",       icon: ListTodo },
-      { href: "/teams?tab=chat",    label: "Chat",        icon: MessageSquare },
+      { href: "/teams",              label: "Overview",    icon: LayoutDashboard },
+      { href: "/teams?tab=members",  label: "Members",     icon: Users },
+      { href: "/teams?tab=chat",     label: "Chat",        icon: MessageSquare },
+      { href: "/teams?tab=vault",    label: "Vault",       icon: Vault },
+      { href: "/teams?tab=tasks",    label: "Tasks",       icon: ListTodo },
+      { href: "/teams?tab=missions", label: "Missions",    icon: Swords },
+      { href: "/teams?tab=leaderboard", label: "Leaderboard", icon: Trophy },
+      { href: "/teams?tab=projects", label: "Projects",    icon: FolderGit2 },
+      { href: "/teams?tab=panel",    label: "Panel",       icon: Settings },
     ],
   },
   {

@@ -24,3 +24,10 @@ All manual `customFetch(...)` calls in `artifacts/ayzen/src/pages/user/teams.tsx
 ## Email @ Icon
 - `AtSign` icon is in the sidebar header icon row for ALL users (admin and non-admin)
 - Links to `/ayzen-email` via `navigate()`
+
+## Sidebar Tab Deep-Linking Pattern
+Pages with an internal tab switcher (e.g. `teams.tsx`, `developer.tsx`) sync tab state to the URL `?tab=` query param via `useSearch()`/`useLocation()` from `wouter`, so sidebar sub-items can link directly to a specific tab and the page highlights the right one on load.
+
+**Why:** Sidebar nav groups need a stable href per sub-item to support active-state highlighting and direct navigation; without URL sync, clicking a sub-item lands on the default tab.
+
+**How to apply:** When adding a new sidebar sub-item that maps to an in-page tab, check whether the target page already reads `?tab=` — if not, add a `useState` initializer that reads `urlTab` plus a `useEffect` that re-syncs on URL change (see `developer.tsx` and `teams.tsx`). When building a typed tab-options array with a `.filter()`, declare the typed array as a separate `const` first — annotating the array literal then chaining `.filter()` directly loses the literal string-union typing on `id`.

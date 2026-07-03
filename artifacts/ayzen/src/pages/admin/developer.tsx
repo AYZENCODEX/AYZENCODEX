@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSearch, useLocation } from "wouter";
 import { useGetTelemetryFunctions, useGetTelemetryErrors } from "@workspace/api-client-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -944,7 +945,22 @@ export default function AdminDeveloper() {
   const [models, setModels] = useState<GroqModel[]>([]);
   const [modelsLoading, setModelsLoading] = useState(true);
   const [activeModel, setActiveModel] = useState("llama-3.3-70b-versatile");
-  const [section, setSection] = useState<DevSection>("ai");
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlTab = new URLSearchParams(search).get("tab") as DevSection | null;
+  const [section, setSectionState] = useState<DevSection>(
+    urlTab && DEV_SIDEBAR.some(s => s.id === urlTab) ? urlTab : "ai"
+  );
+  const setSection = (id: DevSection) => {
+    setSectionState(id);
+    navigate(`/admin/developer?tab=${id}`, { replace: true });
+  };
+  useEffect(() => {
+    if (urlTab && DEV_SIDEBAR.some(s => s.id === urlTab) && urlTab !== section) {
+      setSectionState(urlTab);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
   const [testResults, setTestResults] = useState<Record<string, string>>({});
   const [testLoading, setTestLoading] = useState<Record<string, boolean>>({});
   const token = localStorage.getItem("ayzen_token") ?? "";

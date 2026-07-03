@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useSearch, useLocation } from "wouter";
 import { customFetch } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -682,7 +683,19 @@ export default function TeamsPage() {
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<TeamDetail | null>(null);
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const VALID_TABS: Tab[] = ["dashboard", "members", "vault", "missions", "tasks", "leaderboard", "projects", "chat", "panel"];
+  const urlTab = new URLSearchParams(search).get("tab") as Tab | null;
+  const [tab, setTabState] = useState<Tab>(urlTab && VALID_TABS.includes(urlTab) ? urlTab : "dashboard");
+  const setTab = (t: Tab) => {
+    setTabState(t);
+    navigate(t === "dashboard" ? "/teams" : `/teams?tab=${t}`, { replace: true });
+  };
+  useEffect(() => {
+    if (urlTab && VALID_TABS.includes(urlTab) && urlTab !== tab) setTabState(urlTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [teamName, setTeamName] = useState("");
@@ -797,7 +810,7 @@ export default function TeamsPage() {
   }
 
   // ── Team selected — sidebar layout ────────────────────────────────────────
-  const TABS: { id: Tab; label: string; icon: React.ElementType; leaderOnly?: boolean }[] = [
+  const ALL_TABS: { id: Tab; label: string; icon: React.ElementType; leaderOnly?: boolean }[] = [
     { id: "dashboard",   label: "Overview",     icon: LayoutDashboard },
     { id: "members",     label: "Members",      icon: Users },
     { id: "chat",        label: "Chat",         icon: MessageCircle },
@@ -807,7 +820,8 @@ export default function TeamsPage() {
     { id: "leaderboard", label: "Leaderboard",  icon: Trophy },
     { id: "projects",    label: "Projects",     icon: FolderGit2 },
     { id: "panel",       label: "Panel",        icon: Settings, leaderOnly: true },
-  ].filter(t => !t.leaderOnly || selectedTeam.myRole === "leader");
+  ];
+  const TABS = ALL_TABS.filter(t => !t.leaderOnly || selectedTeam.myRole === "leader");
 
   return (
     <div className="flex -m-4 md:-m-6 lg:-m-8 min-h-[calc(100vh-50px)]">

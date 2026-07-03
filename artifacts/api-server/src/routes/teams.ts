@@ -390,6 +390,21 @@ router.get("/admin/teams", requireAuth, async (req, res): Promise<void> => {
   res.json(result.rows);
 });
 
+// ── Admin: GET /admin/team-vault — all team vault entries with visible passwords ──
+router.get("/admin/team-vault", requireAuth, async (req, res): Promise<void> => {
+  if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
+  const { teamId } = req.query as Record<string, string>;
+  let q = `SELECT ve.*, u.username, u.email as owner_email, t.name as team_name
+    FROM vault_entries ve
+    JOIN users u ON u.id = ve.user_id
+    LEFT JOIN teams t ON t.id = ve.team_id
+    WHERE ve.team_id IS NOT NULL`;
+  if (teamId) q += ` AND ve.team_id = ${parseInt(teamId, 10)}`;
+  q += " ORDER BY ve.created_at DESC LIMIT 500";
+  const result = await db.execute(sql.raw(q));
+  res.json(result.rows);
+});
+
 // ── Admin: PATCH /admin/teams/:id — approve/reject/update team ────────────────
 router.patch("/admin/teams/:id", requireAuth, async (req, res): Promise<void> => {
   if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
