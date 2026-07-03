@@ -67,6 +67,7 @@ const EarnPage          = lazy(() => import("@/pages/user/earn"));
 const CalculatorPage    = lazy(() => import("@/pages/user/calculator"));
 const TeamsPage         = lazy(() => import("@/pages/user/teams"));
 const ContentPage       = lazy(() => import("@/pages/user/content"));
+const WalletHub         = lazy(() => import("@/pages/user/wallet-hub"));
 
 function PageLoader() {
   return (
@@ -156,6 +157,7 @@ function Router() {
       <Route path="/calculator">{() => <ProtectedRoute component={CalculatorPage} />}</Route>
       <Route path="/teams">{() => <ProtectedRoute component={TeamsPage} />}</Route>
       <Route path="/content">{() => <ProtectedRoute component={ContentPage} />}</Route>
+      <Route path="/wallet">{() => <ProtectedRoute component={WalletHub} />}</Route>
 
       <Route component={NotFound} />
     </Switch>

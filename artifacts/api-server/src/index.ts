@@ -488,6 +488,10 @@ const MIGRATIONS = [
     updated_at  TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
   "CREATE INDEX IF NOT EXISTS idx_email_accounts_user ON email_accounts(user_id)",
+  // ── Phase 14: Task admin fields ───────────────────────────────────────────
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS difficulty_level TEXT DEFAULT 'medium'",
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_cost REAL DEFAULT 0",
+  "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimated_profit REAL DEFAULT 0",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

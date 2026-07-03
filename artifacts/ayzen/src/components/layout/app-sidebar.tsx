@@ -9,7 +9,7 @@ import {
   Radio, Code2, Database, AtSign, UserCircle, Mail, HelpCircle, Share2, Puzzle,
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
-  ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList,
+  ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList, User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -95,6 +95,7 @@ const USER_NAV: NavGroup[] = [
       { href: "/projects",                   label: "Protocol",  icon: FolderGit2,    pluginSlug: "projects" },
       { href: "/projects?type=exchange",     label: "Exchange",  icon: ArrowLeftRight, pluginSlug: "projects" },
       { href: "/projects?type=instant",      label: "Instant",   icon: Zap,           pluginSlug: "projects" },
+      { href: "/projects?type=account",      label: "Account",   icon: User,          pluginSlug: "projects" },
       { href: "/projects?type=web3",         label: "Web3",      icon: Globe,         pluginSlug: "projects" },
       { href: "/projects?type=testnet",      label: "Testnet",   icon: FlaskConical,  pluginSlug: "projects" },
       { href: "/projects?type=waitlist",     label: "Wait-list", icon: Timer,         pluginSlug: "projects" },
@@ -109,20 +110,17 @@ const USER_NAV: NavGroup[] = [
     ],
   },
   {
-    label: "Vault", icon: Vault,
+    label: "Wallet", icon: Wallet,
     items: [
-      { href: "/vault?tab=entity", label: "Entity",     icon: Shield,      pluginSlug: "vault" },
-      { href: "/vault?tab=wallet", label: "Wallet",     icon: Wallet,      pluginSlug: "vault" },
-      { href: "/vault?tab=local",  label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
-      { href: "/vault?tab=2fa",    label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
-      { href: "/vault?tab=mail",   label: "Mail Hub",   icon: Mail,        pluginSlug: "vault" },
+      { href: "/wallet", label: "My Wallet", icon: Wallet },
     ],
   },
   {
-    label: "Mail", icon: Mail,
+    label: "Vault", icon: Vault,
     items: [
-      { href: "/ayzen-email",    label: "AYZEN Mail", icon: AtSign, pluginSlug: "ayzen-email" },
-      { href: "/email-accounts", label: "LOCAL Mail", icon: Mail,   pluginSlug: "email-manager" },
+      { href: "/vault?tab=entity", label: "Entity",     icon: Shield,      pluginSlug: "vault" },
+      { href: "/vault?tab=local",  label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
+      { href: "/vault?tab=2fa",    label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
     ],
   },
   {
@@ -376,7 +374,7 @@ function useThemeToggle() {
 }
 
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const search = useSearch();
   const { isAdmin, logout, user } = useAuth();
   const { isEnabled } = usePlugins();
@@ -392,6 +390,15 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
         <Terminal className="w-5 h-5" />
         <span className="flex-1">AYZEN</span>
         <div className="flex items-center gap-1">
+          {!isAdmin && (
+            <button
+              onClick={() => { navigate("/ayzen-email"); onNavigate?.(); }}
+              className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors"
+              title="AYZEN Mail"
+            >
+              <AtSign className="w-3.5 h-3.5" />
+            </button>
+          )}
           <button onClick={openSearch} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="Search (⌘K)">
             <Search className="w-3.5 h-3.5" />
           </button>

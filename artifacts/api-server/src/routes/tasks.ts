@@ -48,6 +48,10 @@ function formatTask(t: any, projectName?: string | null, userStatus?: string | n
     xpAmount: t.xpAmount ?? t.xp_amount ?? 0,
     taskLink: t.taskLink ?? t.task_link ?? null,
     steps,
+    priority: t.priority ?? "normal",
+    difficultyLevel: t.difficultyLevel ?? t.difficulty_level ?? "medium",
+    estimatedCost: t.estimatedCost ?? t.estimated_cost ?? 0,
+    estimatedProfit: t.estimatedProfit ?? t.estimated_profit ?? 0,
   };
 }
 
@@ -97,7 +101,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
 
 // ── POST /tasks — create task ───────────────────────────────────────────────
 router.post("/tasks", requireAdmin, async (req, res): Promise<void> => {
-  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes, xpAmount, steps } = req.body;
+  const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes, xpAmount, steps, priority, difficultyLevel, estimatedCost, estimatedProfit } = req.body;
   if (!name) { res.status(400).json({ error: "name is required" }); return; }
   const projIdSql = projectId ? `${Number(projectId)}` : "NULL";
   const stepsJson = steps && Array.isArray(steps) ? JSON.stringify(steps) : "[]";
@@ -105,7 +109,7 @@ router.post("/tasks", requireAdmin, async (req, res): Promise<void> => {
     const { taskLink } = req.body;
     const taskLinkSql = taskLink ? `'${String(taskLink).replace(/'/g, "''")}'` : "NULL";
     const result = await db.execute(sql.raw(
-      `INSERT INTO tasks (project_id, name, description, reward_amount, xp_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes, steps, task_link)
+      `INSERT INTO tasks (project_id, name, description, reward_amount, xp_amount, verification_type, task_type, cost, profit, category, task_category, deadline, time_limit_minutes, steps, task_link, priority, difficulty_level, estimated_cost, estimated_profit)
        VALUES (${projIdSql}, '${name.replace(/'/g, "''")}',
          ${description ? `'${description.replace(/'/g, "''")}'` : "NULL"},
          ${rewardAmount != null ? Number(rewardAmount) : "NULL"},
@@ -118,7 +122,11 @@ router.post("/tasks", requireAdmin, async (req, res): Promise<void> => {
          ${deadline ? `'${deadline}'` : "NULL"},
          ${timeLimitMinutes ? Number(timeLimitMinutes) : "NULL"},
          '${stepsJson.replace(/'/g, "''")}',
-         ${taskLinkSql})
+         ${taskLinkSql},
+         '${(priority ?? "normal").replace(/'/g, "''")}',
+         '${(difficultyLevel ?? "medium").replace(/'/g, "''")}',
+         ${Number(estimatedCost ?? 0)},
+         ${Number(estimatedProfit ?? 0)})
        RETURNING *`
     ));
     const task = result.rows[0] as any;
@@ -222,6 +230,10 @@ router.patch("/tasks/:id", requireAdmin, async (req, res): Promise<void> => {
   if (req.body.projectId !== undefined) rawSets.push(`project_id = ${req.body.projectId ? Number(req.body.projectId) : "NULL"}`);
   if (req.body.steps !== undefined) rawSets.push(`steps = '${JSON.stringify(req.body.steps).replace(/'/g, "''")}'`);
   if (req.body.taskLink !== undefined) rawSets.push(`task_link = ${req.body.taskLink ? `'${String(req.body.taskLink).replace(/'/g, "''")}'` : "NULL"}`);
+  if (req.body.priority !== undefined) rawSets.push(`priority = '${String(req.body.priority).replace(/'/g, "''")}'`);
+  if (req.body.difficultyLevel !== undefined) rawSets.push(`difficulty_level = '${String(req.body.difficultyLevel).replace(/'/g, "''")}'`);
+  if (req.body.estimatedCost !== undefined) rawSets.push(`estimated_cost = ${Number(req.body.estimatedCost) || 0}`);
+  if (req.body.estimatedProfit !== undefined) rawSets.push(`estimated_profit = ${Number(req.body.estimatedProfit) || 0}`);
 
   try {
     let task: any;

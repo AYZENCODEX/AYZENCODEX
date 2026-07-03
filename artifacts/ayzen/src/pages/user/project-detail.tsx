@@ -15,7 +15,9 @@ import {
   MessageCircle, Wallet, Trash2, ChevronRight, Zap, Link2, Plus,
   LayoutDashboard, ListTodo, Users, Settings, DollarSign, TrendingUp,
   TrendingDown, AlertCircle, Shield, Copy, Check, Edit3, Globe, Star, X,
+  Send, Loader2, Info, BookOpen, Settings2,
 } from "lucide-react";
+import confetti from "canvas-confetti";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { cn } from "@/lib/utils";
@@ -23,6 +25,15 @@ import { TaskCategoryBadge } from "@/components/ui/task-category-badge";
 import { CountdownTimer } from "@/components/ui/countdown-timer";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+
+const COST_CATEGORIES = ["Gas Fee", "Account Create Fee", "Swap Fee", "Bridge Fee", "Net Fee", "Manual"] as const;
+const PROFIT_CATEGORIES = ["Refer", "Trade Volume", "Mystery Box", "FCFS", "Random", "TGE", "Manual"] as const;
+
+interface CostEntry { id: string; type: "cost" | "profit"; category: string; label: string; amount: string; }
+function newCostEntry(type: "cost" | "profit"): CostEntry {
+  return { id: Math.random().toString(36).slice(2), type, category: "", label: "", amount: "" };
+}
+type SubmitTab = "guide" | "details" | "cost-roi" | "points" | "settings";
 
 // ─── Activity Heatmap ─────────────────────────────────────────────────────────
 function ActivityHeatmap({ activity }: { activity: { day: string; count: number }[] }) {
@@ -134,6 +145,10 @@ interface Task {
   userStatus?: string | null;
   taskCategory?: string; category?: string;
   deadline?: string | null; timeLimitMinutes?: number | null;
+  steps?: { title: string; description?: string }[];
+  xpAmount?: number | null;
+  projectName?: string | null;
+  taskLink?: string | null;
 }
 
 interface EntityTaskStatus {
@@ -191,45 +206,99 @@ function TaskSubmitDialog({
   task: Task; projectId: number; onDone: () => void; token: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [proofUrl, setProofUrl] = useState("");
-  const [notes, setNotes] = useState("");
-  const [cost, setCost] = useState("");
-  const [profit, setProfit] = useState("");
   const { toast } = useToast();
+  const { data: vaultData } = useListVaultEntries();
+  const vaultEntries = Array.isArray(vaultData) ? vaultData : [];
 
   const isDone = task.userStatus === "approved" || task.userStatus === "completed" || task.userStatus === "pending";
 
+  const steps: { title: string; description?: string }[] = Array.isArray(task.steps) ? task.steps : [];
+  const hasSteps = steps.length > 0;
+
+  const [activeTab, setActiveTab] = useState<SubmitTab>(hasSteps ? "guide" : "details");
+  const [proofUrl, setProofUrl] = useState("");
+  const [notes, setNotes] = useState("");
+  const [costEntries, setCostEntries] = useState<CostEntry[]>([]);
+  const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
+  const [selectedEntityIds, setSelectedEntityIds] = useState<Set<number>>(new Set());
+  const [loading, setLoading] = useState(false);
+
+  const totalCost = costEntries.filter(e => e.type === "cost").reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const totalProfit = costEntries.filter(e => e.type === "profit").reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const roi = totalCost > 0 && totalProfit > 0
+    ? (((totalProfit - totalCost) / totalCost) * 100).toFixed(1) : null;
+
+  const addEntry = (type: "cost" | "profit") => setCostEntries(e => [...e, newCostEntry(type)]);
+  const removeEntry = (id: string) => setCostEntries(e => e.filter(x => x.id !== id));
+  const updateEntry = (id: string, patch: Partial<CostEntry>) =>
+    setCostEntries(e => e.map(x => x.id === id ? { ...x, ...patch } : x));
+
+  const toggleStep = (i: number) => setCheckedSteps(prev => {
+    const next = new Set(prev);
+    if (next.has(i)) next.delete(i); else next.add(i);
+    return next;
+  });
+
+  const toggleEntity = (id: number) => setSelectedEntityIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const resetState = () => {
+    setProofUrl(""); setNotes(""); setCostEntries([]);
+    setCheckedSteps(new Set()); setSelectedEntityIds(new Set());
+    setActiveTab(hasSteps ? "guide" : "details");
+  };
+
   const handleSubmit = async () => {
-    setSubmitting(true);
+    setLoading(true);
     try {
       const res = await fetch(`${BASE}/api/tasks/${task.id}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({
-          proofUrl: proofUrl || undefined,
-          notes: notes || undefined,
-          cost: Number(cost) || 0,
-          profit: Number(profit) || 0,
+          proofUrl: proofUrl.trim() || undefined,
+          notes: notes.trim() || undefined,
+          costEntries: costEntries.length > 0
+            ? costEntries.map(({ id: _id, ...rest }) => ({ ...rest, amount: Number(rest.amount) || 0 }))
+            : undefined,
+          entityIds: selectedEntityIds.size > 0 ? [...selectedEntityIds] : undefined,
         }),
       });
       const data = await res.json();
-      if (!res.ok) { toast({ variant: "destructive", title: data.error || "Submission failed" }); return; }
-      toast({ title: "Task submitted!", description: task.verificationType === "auto" ? "Auto-approved!" : "Pending admin review." });
-      setOpen(false);
-      onDone();
+      if (res.ok) {
+        if (data.status === "approved") {
+          toast({ title: "✅ Auto-verified!", description: `Reward credited for "${task.name}"` });
+          confetti({ particleCount: 120, spread: 70, origin: { y: 0.6 }, colors: ["#22d3ee", "#a78bfa", "#34d399", "#fbbf24"] });
+        } else {
+          toast({ title: "📨 Submitted for review", description: "Admin will verify shortly." });
+          confetti({ particleCount: 60, spread: 50, origin: { y: 0.6 }, colors: ["#22d3ee", "#a78bfa"] });
+        }
+        setOpen(false); resetState(); onDone();
+      } else {
+        toast({ variant: "destructive", title: data.error ?? "Submission failed" });
+      }
     } catch {
-      toast({ variant: "destructive", title: "Network error" });
-    } finally { setSubmitting(false); }
+      toast({ variant: "destructive", title: "Connection error" });
+    }
+    setLoading(false);
   };
+
+  const TABS: { id: SubmitTab; label: string; icon: React.ElementType }[] = [
+    ...(hasSteps ? [{ id: "guide" as SubmitTab, label: "Guide", icon: BookOpen }] : []),
+    { id: "details",  label: "Details",   icon: Info },
+    { id: "cost-roi", label: "Cost/ROI",  icon: DollarSign },
+    { id: "points",   label: "Points",    icon: Star },
+    { id: "settings", label: "Settings",  icon: Settings2 },
+  ];
 
   return (
     <>
+      {/* Trigger row */}
       <button
-        onClick={() => setOpen(true)}
-        className={cn(
-          "flex-1 flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors text-left group",
-        )}
+        onClick={() => { if (!isDone) { setOpen(true); } }}
+        className="flex-1 flex items-center justify-between px-4 py-3 hover:bg-muted/10 transition-colors text-left group"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div className={cn("flex-shrink-0", isDone ? "text-emerald-400" : "text-muted-foreground/40")}>
@@ -255,70 +324,276 @@ function TaskSubmitDialog({
         </div>
       </button>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-card border-card-border max-w-md">
-          <DialogHeader>
-            <DialogTitle className="font-mono uppercase tracking-wider text-primary flex items-center gap-2">
-              <ListTodo className="w-4 h-4" /> Submit Task
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-1">
-            <div>
-              <div className="font-mono font-bold text-sm">{task.name}</div>
-              {task.description && <p className="text-xs font-mono text-muted-foreground mt-1 leading-relaxed">{task.description}</p>}
-            </div>
+      {/* Full multilayer modal */}
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="bg-card border border-card-border rounded-xl w-full max-w-lg shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-primary to-transparent" />
 
-            <div className="space-y-1">
-              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <Link2 className="w-2.5 h-2.5" /> Proof URL (optional)
-              </Label>
-              <Input value={proofUrl} onChange={e => setProofUrl(e.target.value)} className="font-mono text-xs h-8 bg-input" placeholder="https://..." />
-            </div>
-
-            <div className="space-y-1">
-              <Label className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Notes (optional)</Label>
-              <Textarea value={notes} onChange={e => setNotes(e.target.value)} className="font-mono text-xs bg-input min-h-[55px] resize-none" placeholder="Any additional notes..." />
-            </div>
-
-            {/* Cost & Profit */}
-            <div className="p-3 rounded-lg bg-primary/3 border border-primary/10 space-y-2">
-              <div className="flex items-center gap-1.5">
-                <DollarSign className="w-3 h-3 text-primary/60" />
-                <span className="font-mono text-[10px] uppercase tracking-wider text-primary/70 font-bold">Cost & Profit Tracking</span>
+            {/* Header */}
+            <div className="px-5 pt-5 pb-0">
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <Send className="w-4 h-4 text-primary" />
+                  <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">Execute Task</span>
+                </div>
+                <button onClick={() => { setOpen(false); resetState(); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="font-mono text-[9px] uppercase tracking-wider text-red-400/70 flex items-center gap-1">
-                    <TrendingDown className="w-2.5 h-2.5" /> Cost ($)
-                  </Label>
-                  <Input value={cost} onChange={e => setCost(e.target.value)} type="number" className="font-mono text-xs h-8 bg-input" placeholder="0.00" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="font-mono text-[9px] uppercase tracking-wider text-emerald-400/70 flex items-center gap-1">
-                    <TrendingUp className="w-2.5 h-2.5" /> Profit ($)
-                  </Label>
-                  <Input value={profit} onChange={e => setProfit(e.target.value)} type="number" className="font-mono text-xs h-8 bg-input" placeholder="0.00" />
-                </div>
+              <p className="font-mono font-semibold text-foreground text-sm mt-1.5">{task.name}</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                <Badge variant="outline" className="font-mono text-[10px] uppercase border-primary/30 text-primary/80">{task.taskType}</Badge>
+                {task.taskCategory && <Badge variant="outline" className="font-mono text-[10px] uppercase border-violet-400/30 text-violet-400">{task.taskCategory}</Badge>}
+                <Badge variant="outline" className="font-mono text-[10px] border-muted-foreground/30 text-muted-foreground">
+                  {task.verificationType === "auto" ? "⚡ Auto" : "👤 Manual"}
+                </Badge>
+                {hasSteps && (
+                  <Badge variant="outline" className="font-mono text-[10px] border-primary/30 text-primary">
+                    {checkedSteps.size}/{steps.length} steps
+                  </Badge>
+                )}
               </div>
-              {Number(cost) > 0 || Number(profit) > 0 ? (
-                <div className={cn(
-                  "text-[10px] font-mono font-bold flex items-center gap-1.5",
-                  Number(profit) - Number(cost) >= 0 ? "text-emerald-400" : "text-red-400"
-                )}>
-                  <Star className="w-3 h-3" />
-                  Net: {Number(profit) - Number(cost) >= 0 ? "+" : ""}${(Number(profit) - Number(cost)).toFixed(2)}
-                </div>
-              ) : null}
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-border mt-4 px-5 overflow-x-auto">
+              {TABS.map(t => {
+                const Icon = t.icon;
+                return (
+                  <button key={t.id} onClick={() => setActiveTab(t.id)}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-2.5 text-[10px] font-mono uppercase tracking-wider border-b-2 transition-all -mb-px whitespace-nowrap",
+                      activeTab === t.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="w-3 h-3" />{t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tab content */}
+            <div className="p-5 space-y-4 min-h-[200px] max-h-[55vh] overflow-y-auto">
+
+              {/* Guide */}
+              {activeTab === "guide" && (
+                <>
+                  <p className="text-[11px] font-mono text-muted-foreground">Follow these steps. Check each one off as you complete it.</p>
+                  {steps.map((step, i) => {
+                    const done = checkedSteps.has(i);
+                    return (
+                      <button key={i} type="button" onClick={() => toggleStep(i)}
+                        className={cn("w-full text-left rounded-lg border p-3 transition-all", done ? "bg-emerald-500/5 border-emerald-500/30" : "bg-muted/20 border-border/40 hover:border-primary/30")}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={cn("mt-0.5 w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-all", done ? "bg-emerald-500 border-emerald-500" : "border-border/60")}>
+                            {done && <span className="text-white text-[9px] font-bold">✓</span>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className={cn("font-mono text-xs font-bold", done && "line-through text-muted-foreground")}>Step {i + 1}: {step.title}</div>
+                            {step.description && <div className="font-mono text-[10px] text-muted-foreground/70 mt-0.5 leading-relaxed">{step.description}</div>}
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {checkedSteps.size === steps.length && steps.length > 0 && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3 text-center font-mono text-xs text-emerald-400">
+                      ✅ All steps done! Go to Details to submit.
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Details */}
+              {activeTab === "details" && (
+                <>
+                  {task.description && <p className="text-[11px] font-mono text-muted-foreground bg-muted/20 rounded px-3 py-2">{task.description}</p>}
+                  <div>
+                    <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Proof URL / TX Hash — optional</label>
+                    <Input placeholder="https://... or 0x..." value={proofUrl} onChange={e => setProofUrl(e.target.value)} className="font-mono text-xs h-10 bg-input border-border" />
+                  </div>
+                  <div>
+                    <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Notes — optional</label>
+                    <Textarea placeholder="Notes for the reviewer..." value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="font-mono text-xs bg-input border-border resize-none" />
+                  </div>
+                  {vaultEntries.length > 0 && (
+                    <div>
+                      <label className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5 block">Select Entities — optional</label>
+                      <div className="max-h-40 overflow-y-auto space-y-1">
+                        {vaultEntries.map((entry: any) => {
+                          const serial = `AYZNA-${String(entry.id).padStart(4, "0")}`;
+                          const sel = selectedEntityIds.has(entry.id);
+                          return (
+                            <button key={entry.id} type="button" onClick={() => toggleEntity(entry.id)}
+                              className={cn("w-full flex items-center gap-2.5 px-3 py-2 rounded border text-left transition-all", sel ? "bg-primary/10 border-primary/40 text-primary" : "bg-muted/20 border-border/40 text-muted-foreground hover:border-border")}
+                            >
+                              <div className={cn("w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center", sel ? "bg-primary border-primary" : "border-border/60")}>
+                                {sel && <span className="text-primary-foreground text-[8px] font-bold">✓</span>}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-mono text-[11px] font-medium truncate">{entry.projectName || serial}</div>
+                                <div className="font-mono text-[9px] text-muted-foreground/60 truncate">{serial} · {entry.category ?? "General"}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Cost/ROI */}
+              {activeTab === "cost-roi" && (
+                <>
+                  <p className="text-[11px] font-mono text-muted-foreground">Track your spending and earnings for this task.</p>
+
+                  {/* Cost */}
+                  <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-red-400 font-bold">Costs {totalCost > 0 && `(${totalCost.toFixed(2)})`}</span>
+                      <button type="button" onClick={() => addEntry("cost")} className="flex items-center gap-1 font-mono text-[10px] text-red-400 border border-red-500/30 rounded px-2 py-1 hover:border-red-400/50 transition-all">
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                    </div>
+                    {costEntries.filter(e => e.type === "cost").length === 0
+                      ? <p className="font-mono text-[10px] text-muted-foreground/50 text-center py-1">No cost entries yet</p>
+                      : costEntries.filter(e => e.type === "cost").map(entry => (
+                        <div key={entry.id} className="space-y-2 p-2 rounded bg-black/20 border border-red-500/10">
+                          <div className="flex flex-wrap gap-1">
+                            {COST_CATEGORIES.map(cat => (
+                              <button key={cat} type="button" onClick={() => updateEntry(entry.id, { category: cat })}
+                                className={cn("px-2 py-0.5 rounded-full font-mono text-[9px] border transition-all", entry.category === cat ? "bg-red-500/20 border-red-500/50 text-red-400 font-bold" : "border-border/40 text-muted-foreground/60 hover:border-red-500/30")}
+                              >{cat}</button>
+                            ))}
+                          </div>
+                          {entry.category === "Manual" && (
+                            <Input placeholder="Custom name..." value={entry.label} onChange={e => updateEntry(entry.id, { label: e.target.value })} className="font-mono text-[10px] h-7 bg-input border-border" />
+                          )}
+                          <div className="flex gap-2 items-center">
+                            <div className="relative flex-1">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-[10px]">$</span>
+                              <Input type="text" inputMode="decimal" placeholder="0.00" value={entry.amount} onChange={e => updateEntry(entry.id, { amount: e.target.value })} className="font-mono text-[10px] h-7 bg-input border-border pl-5" />
+                            </div>
+                            <button onClick={() => removeEntry(entry.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+
+                  {/* Profit */}
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-emerald-400 font-bold">Profit {totalProfit > 0 && `(${totalProfit.toFixed(2)})`}</span>
+                      <button type="button" onClick={() => addEntry("profit")} className="flex items-center gap-1 font-mono text-[10px] text-emerald-400 border border-emerald-500/30 rounded px-2 py-1 hover:border-emerald-400/50 transition-all">
+                        <Plus className="w-3 h-3" /> Add
+                      </button>
+                    </div>
+                    {costEntries.filter(e => e.type === "profit").length === 0
+                      ? <p className="font-mono text-[10px] text-muted-foreground/50 text-center py-1">No profit entries yet</p>
+                      : costEntries.filter(e => e.type === "profit").map(entry => (
+                        <div key={entry.id} className="space-y-2 p-2 rounded bg-black/20 border border-emerald-500/10">
+                          <div className="flex flex-wrap gap-1">
+                            {PROFIT_CATEGORIES.map(cat => (
+                              <button key={cat} type="button" onClick={() => updateEntry(entry.id, { category: cat })}
+                                className={cn("px-2 py-0.5 rounded-full font-mono text-[9px] border transition-all", entry.category === cat ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400 font-bold" : "border-border/40 text-muted-foreground/60 hover:border-emerald-500/30")}
+                              >{cat}</button>
+                            ))}
+                          </div>
+                          {entry.category === "Manual" && (
+                            <Input placeholder="Custom name..." value={entry.label} onChange={e => updateEntry(entry.id, { label: e.target.value })} className="font-mono text-[10px] h-7 bg-input border-border" />
+                          )}
+                          <div className="flex gap-2 items-center">
+                            <div className="relative flex-1">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground font-mono text-[10px]">$</span>
+                              <Input type="text" inputMode="decimal" placeholder="0.00" value={entry.amount} onChange={e => updateEntry(entry.id, { amount: e.target.value })} className="font-mono text-[10px] h-7 bg-input border-border pl-5" />
+                            </div>
+                            <button onClick={() => removeEntry(entry.id)} className="text-muted-foreground/40 hover:text-red-400 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+
+                  {/* ROI calc */}
+                  <div className={cn("rounded-lg border p-4 text-center transition-all", roi ? (Number(roi) >= 0 ? "border-emerald-500/20 bg-emerald-500/5" : "border-red-500/20 bg-red-500/5") : "border-border bg-muted/20")}>
+                    <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-1">ROI</div>
+                    <div className={cn("font-mono text-3xl font-bold", roi ? (Number(roi) >= 0 ? "text-emerald-400" : "text-red-400") : "text-muted-foreground/40")}>
+                      {roi ? `${Number(roi) >= 0 ? "+" : ""}${roi}%` : "—"}
+                    </div>
+                    {totalCost > 0 && totalProfit > 0 && <div className="font-mono text-[10px] text-muted-foreground mt-1">Net: ${(totalProfit - totalCost).toFixed(2)}</div>}
+                  </div>
+                </>
+              )}
+
+              {/* Points */}
+              {activeTab === "points" && (
+                <>
+                  <p className="text-[11px] font-mono text-muted-foreground">Rewards you'll earn upon successful verification.</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-center">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">XP Points</div>
+                      <div className="font-mono text-2xl font-bold text-primary">{task.xpAmount ? `+${task.xpAmount}` : "—"}</div>
+                    </div>
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 text-center">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground mb-2">Reward</div>
+                      <div className="font-mono text-2xl font-bold text-amber-400">{task.rewardAmount ? `${task.rewardAmount}` : "—"}</div>
+                    </div>
+                  </div>
+                  <div className="bg-muted/20 border border-border rounded-lg divide-y divide-border">
+                    {[
+                      { label: "Type", value: task.taskType },
+                      { label: "Verification", value: task.verificationType === "auto" ? "⚡ Automatic" : "👤 Manual review" },
+                      { label: "Category", value: task.taskCategory ?? task.category ?? "General" },
+                    ].map(row => (
+                      <div key={row.label} className="flex justify-between items-center px-4 py-2.5">
+                        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">{row.label}</span>
+                        <span className="font-mono text-[10px] text-foreground">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Settings */}
+              {activeTab === "settings" && (
+                <>
+                  <p className="text-[11px] font-mono text-muted-foreground">Task configuration set by the admin.</p>
+                  <div className="bg-muted/20 border border-border rounded-lg divide-y divide-border">
+                    {[
+                      { label: "Task ID", value: `#${task.id}` },
+                      { label: "Project", value: task.projectName ?? "General" },
+                      { label: "Type", value: task.taskType },
+                      { label: "Verification", value: task.verificationType === "auto" ? "Automatic" : "Manual review" },
+                      { label: "Steps", value: hasSteps ? `${steps.length} steps` : "Not configured" },
+                      { label: "Deadline", value: task.deadline ? new Date(task.deadline).toLocaleDateString() : "None" },
+                    ].map(row => (
+                      <div key={row.label} className="flex justify-between items-center px-4 py-2.5">
+                        <span className="font-mono text-[10px] text-muted-foreground uppercase tracking-wide">{row.label}</span>
+                        <span className="font-mono text-[10px] text-foreground">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="border-t border-border px-5 py-4 flex gap-3">
+              <Button variant="outline" className="flex-1 font-mono text-xs h-10" onClick={() => { setOpen(false); resetState(); }} disabled={loading}>
+                Cancel
+              </Button>
+              <Button className="flex-1 font-mono text-xs h-10 gap-2" onClick={handleSubmit} disabled={loading || isDone}>
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {loading ? "Submitting…" : "Submit Task"}
+              </Button>
             </div>
           </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} className="font-mono text-xs">Cancel</Button>
-            <Button onClick={handleSubmit} disabled={submitting || isDone} className="font-mono text-xs uppercase tracking-wider gap-2">
-              {submitting ? <span className="animate-pulse">Submitting...</span> : <><CheckCircle2 className="w-3.5 h-3.5" /> Mark Complete</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </>
   );
 }
