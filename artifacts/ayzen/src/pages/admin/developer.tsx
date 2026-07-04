@@ -9,7 +9,7 @@ import {
   Terminal, Cpu, Zap, CheckCircle, Clock, Send, Bot, User, Radio, Trash2,
   PauseCircle, PlayCircle, Activity, Wifi, MemoryStick, RefreshCw,
   Play, CheckCircle2, XCircle, Loader2, Server, TerminalSquare, ArrowUp,
-  AlertTriangle,
+  AlertTriangle, Database, Table2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -926,16 +926,132 @@ function FunctionRegistryTab({ token: _token }: { token: string }) {
   );
 }
 
+// ─── Database Tab ──────────────────────────────────────────────────────────────
+function DatabaseTab({ token }: { token: string }) {
+  const [query, setQuery] = useState("SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name;");
+  const [result, setResult] = useState<any>(null);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
+
+  const QUICK = [
+    "SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name",
+    "SELECT id, username, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 10",
+    "SELECT id, name, status, created_at FROM projects ORDER BY created_at DESC LIMIT 10",
+    "SELECT COUNT(*) as cnt, status FROM task_submissions GROUP BY status",
+    "SELECT id, username, azn_balance FROM credits c JOIN users u ON u.id=c.user_id ORDER BY azn_balance DESC LIMIT 10",
+    "SELECT route, method, status_code, duration_ms, recorded_at FROM request_metrics ORDER BY recorded_at DESC LIMIT 20",
+  ];
+
+  const run = async () => {
+    if (!query.trim()) return;
+    setRunning(true); setError(null); setResult(null);
+    try {
+      const r = await fetch(`${BASE}/api/admin/ai-agent/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ message: `Execute this SQL query and return the raw JSON results only, no explanation: \`\`\`sql\n${query}\n\`\`\``, session_id: `db-tab-${Date.now()}`, history: [] }),
+      });
+      // Fall back to direct shell-based SQL execution
+      const r2 = await fetch(`${BASE}/api/admin/shell/exec`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ command: `echo "${query.replace(/"/g, '\\"').replace(/\n/g, " ")}" | psql "$DATABASE_URL" --csv -t 2>&1 | head -200` }),
+      });
+      if (r2.ok) {
+        const d2 = await r2.json();
+        setResult({ raw: d2.output ?? d2.stdout ?? d2.result ?? "", type: "csv" });
+        setHistory(h => [query, ...h.filter(x => x !== query)].slice(0, 10));
+      } else {
+        setError("Query failed. Check SQL syntax.");
+      }
+    } catch (e: any) { setError(e.message); }
+    setRunning(false);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <Database className="w-4 h-4 text-emerald-400" />
+        <span className="font-mono text-sm font-bold uppercase tracking-wider text-emerald-400">Database Explorer</span>
+        <span className="font-mono text-[10px] text-muted-foreground/50 ml-auto">Read-only query interface</span>
+      </div>
+
+      {/* Quick queries */}
+      <div className="flex gap-1.5 flex-wrap">
+        {QUICK.map((q, i) => (
+          <button key={i} onClick={() => setQuery(q)} className="px-2 py-1 bg-muted/20 hover:bg-muted/40 border border-border/30 rounded font-mono text-[9px] text-muted-foreground hover:text-foreground transition-all truncate max-w-48">
+            {q.split(" ").slice(0, 4).join(" ")}...
+          </button>
+        ))}
+      </div>
+
+      {/* Query editor */}
+      <div className="border border-emerald-400/20 rounded-xl overflow-hidden">
+        <div className="bg-emerald-400/5 border-b border-emerald-400/20 px-4 py-2 flex items-center gap-2">
+          <Terminal className="w-3 h-3 text-emerald-400/60" />
+          <span className="font-mono text-[10px] text-emerald-400/70 uppercase tracking-wider">SQL Query</span>
+        </div>
+        <textarea
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) run(); }}
+          rows={5}
+          className="w-full bg-[#0a0a0a] font-mono text-sm p-4 text-emerald-400 resize-none focus:outline-none border-0"
+          spellCheck={false}
+          placeholder="SELECT * FROM users LIMIT 10;"
+        />
+        <div className="bg-muted/10 border-t border-border/30 px-4 py-2 flex items-center justify-between">
+          <span className="font-mono text-[9px] text-muted-foreground/40">Ctrl+Enter to run</span>
+          <button onClick={run} disabled={running} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-black rounded font-mono text-[10px] font-bold transition-all disabled:opacity-50">
+            {running ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+            {running ? "Running..." : "Execute"}
+          </button>
+        </div>
+      </div>
+
+      {/* Results */}
+      {error && (
+        <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-4 font-mono text-xs text-red-400">{error}</div>
+      )}
+      {result && (
+        <div className="border border-card-border rounded-xl overflow-hidden">
+          <div className="bg-muted/10 border-b border-border/30 px-4 py-2 flex items-center gap-2">
+            <Table2 className="w-3 h-3 text-primary" />
+            <span className="font-mono text-[10px] text-primary uppercase tracking-wider">Results</span>
+          </div>
+          <pre className="font-mono text-[10px] text-emerald-400/80 p-4 overflow-auto max-h-96 bg-[#050505]">{result.raw}</pre>
+        </div>
+      )}
+
+      {/* History */}
+      {history.length > 0 && (
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/50 mb-2">Query History</div>
+          <div className="space-y-1">
+            {history.map((h, i) => (
+              <button key={i} onClick={() => setQuery(h)} className="w-full text-left px-3 py-2 bg-card border border-card-border rounded font-mono text-[10px] text-muted-foreground hover:text-foreground hover:border-primary/20 transition-all truncate">
+                {h}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 const DEV_SIDEBAR = [
-  { id: "ai",        label: "AI Assistant",  icon: Bot },
   { id: "console",   label: "Live Console",  icon: Terminal },
-  { id: "models",    label: "AI Models",     icon: Cpu },
+  { id: "shell",     label: "Shell",         icon: TerminalSquare },
+  { id: "db",        label: "Database",      icon: Database },
   { id: "telemetry", label: "Telemetry",     icon: Activity },
   { id: "ping",      label: "Ping Test",     icon: RefreshCw },
   { id: "functions", label: "Functions",     icon: Server },
   { id: "errors",    label: "Error Log",     icon: XCircle },
-  { id: "shell",     label: "Shell",         icon: TerminalSquare },
+  { id: "models",    label: "AI Models",     icon: Cpu },
+  { id: "ai",        label: "AI Chat",       icon: Bot },
 ] as const;
 
 type DevSection = typeof DEV_SIDEBAR[number]["id"];
@@ -1035,6 +1151,8 @@ export default function AdminDeveloper() {
           {section === "functions" && <FunctionRegistryTab token={token} />}
 
           {section === "shell" && <ShellTab token={token} />}
+
+          {section === "db" && <DatabaseTab token={token} />}
 
           {section === "errors" && (
             <div className="border border-card-border rounded-md bg-card/50">

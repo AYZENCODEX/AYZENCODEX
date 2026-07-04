@@ -10,7 +10,7 @@ import {
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
   ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList, User,
-  Store, Swords, ListTodo, BarChart2, MessageSquare, Flame, Bookmark,
+  Store, Swords, ListTodo, BarChart2, MessageSquare, Flame, Bookmark, Image,
   Bot as BotIcon, Cpu, Activity, RefreshCw as RefreshCwIcon, XCircle, TerminalSquare, Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -88,16 +88,23 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
+    label: "AI Agent", icon: BotIcon,
+    items: [
+      { href: "/admin/ai-agent",            label: "AI Assistant",  icon: BotIcon },
+      { href: "/admin/ai-agent?tab=models", label: "AI Models",     icon: Cpu },
+      { href: "/admin/ai-agent?tab=settings", label: "AI Settings", icon: Settings },
+    ],
+  },
+  {
     label: "Developer", icon: Code2,
     items: [
-      { href: "/admin/developer?tab=ai",        label: "AI Assistant", icon: BotIcon },
       { href: "/admin/developer?tab=console",   label: "Live Console", icon: Terminal },
-      { href: "/admin/developer?tab=models",    label: "AI Models",    icon: Cpu },
       { href: "/admin/developer?tab=telemetry", label: "Telemetry",    icon: Activity },
       { href: "/admin/developer?tab=ping",      label: "Ping Test",    icon: RefreshCwIcon },
       { href: "/admin/developer?tab=functions", label: "Functions",    icon: Server },
       { href: "/admin/developer?tab=errors",    label: "Error Log",    icon: XCircle },
       { href: "/admin/developer?tab=shell",     label: "Shell",        icon: TerminalSquare },
+      { href: "/admin/developer?tab=db",        label: "Database",     icon: Database },
     ],
   },
 ];
@@ -142,8 +149,11 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Market", icon: Store,
     items: [
-      { href: "/marketplace",      label: "P2P Market",  icon: Store },
-      { href: "/marketplace?tab=nft", label: "NFT Market",  icon: Zap },
+      { href: "/marketplace",          label: "P2P Market",    icon: Store },
+      { href: "/marketplace/azn",      label: "AZN Market",    icon: Zap },
+      { href: "/marketplace/nft",      label: "NFT Market",    icon: Image },
+      { href: "/marketplace/vault",    label: "Vault Market",  icon: Vault },
+      { href: "/marketplace/wallet",   label: "Market Wallet", icon: Wallet },
     ],
   },
   {

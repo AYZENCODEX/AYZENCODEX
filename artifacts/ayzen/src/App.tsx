@@ -47,6 +47,7 @@ const AdminNetworks     = lazy(() => import("@/pages/admin/tools/networks"));
 const AdminHealthRules  = lazy(() => import("@/pages/admin/health-rules"));
 const AdminTeams        = lazy(() => import("@/pages/admin/teams"));
 const AdminTeamVault    = lazy(() => import("@/pages/admin/team-vault"));
+const AdminAiAgent      = lazy(() => import("@/pages/admin/ai-agent"));
 
 const UserHome          = lazy(() => import("@/pages/user/home"));
 const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
@@ -75,6 +76,10 @@ const ContentPage       = lazy(() => import("@/pages/user/content"));
 const WalletHub         = lazy(() => import("@/pages/user/wallet-hub"));
 const NftMarketplace    = lazy(() => import("@/pages/user/nft-marketplace"));
 const Marketplace       = lazy(() => import("@/pages/user/marketplace"));
+const MarketplaceAzn    = lazy(() => import("@/pages/user/marketplace-azn"));
+const MarketplaceNftNew = lazy(() => import("@/pages/user/marketplace-nft"));
+const MarketplaceVault  = lazy(() => import("@/pages/user/marketplace-vault"));
+const MarketplaceWallet = lazy(() => import("@/pages/user/marketplace-wallet"));
 const AdminMarketplace  = lazy(() => import("@/pages/admin/marketplace"));
 const CheckinPage       = lazy(() => import("@/pages/user/checkin"));
 const WatchlistPage     = lazy(() => import("@/pages/user/watchlist"));
@@ -144,6 +149,7 @@ function Router() {
       <Route path="/admin/teams">{() => <ProtectedRoute component={AdminTeams} adminOnly />}</Route>
       <Route path="/admin/team-vault">{() => <ProtectedRoute component={AdminTeamVault} adminOnly />}</Route>
       <Route path="/admin/marketplace">{() => <ProtectedRoute component={AdminMarketplace} adminOnly />}</Route>
+      <Route path="/admin/ai-agent">{() => <ProtectedRoute component={AdminAiAgent} adminOnly />}</Route>
 
       {/* User Routes */}
       <Route path="/home">{() => <ProtectedRoute component={UserHome} />}</Route>
@@ -172,6 +178,10 @@ function Router() {
       <Route path="/content">{() => <ProtectedRoute component={ContentPage} />}</Route>
       <Route path="/wallet">{() => <ProtectedRoute component={WalletHub} />}</Route>
       <Route path="/nft-marketplace">{() => { window.location.replace("/marketplace?tab=nft"); return null; }}</Route>
+      <Route path="/marketplace/azn">{() => <ProtectedRoute component={MarketplaceAzn} />}</Route>
+      <Route path="/marketplace/nft">{() => <ProtectedRoute component={MarketplaceNftNew} />}</Route>
+      <Route path="/marketplace/vault">{() => <ProtectedRoute component={MarketplaceVault} />}</Route>
+      <Route path="/marketplace/wallet">{() => <ProtectedRoute component={MarketplaceWallet} />}</Route>
       <Route path="/marketplace">{() => <ProtectedRoute component={Marketplace} />}</Route>
       <Route path="/checkin">{() => <ProtectedRoute component={CheckinPage} />}</Route>
       <Route path="/watchlist">{() => <ProtectedRoute component={WatchlistPage} />}</Route>

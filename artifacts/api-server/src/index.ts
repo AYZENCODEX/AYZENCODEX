@@ -144,6 +144,118 @@ const MIGRATIONS = [
   "ALTER TABLE projects ADD COLUMN IF NOT EXISTS completion_pct REAL DEFAULT 0",
   // User display color tag
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS color_tag TEXT DEFAULT '#22d3ee'",
+  // ── Marketplace wallets (dedicated per market_type: azn | nft | vault) ──────
+  `CREATE TABLE IF NOT EXISTS marketplace_wallets (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    market_type TEXT NOT NULL,
+    balance REAL NOT NULL DEFAULT 0,
+    locked_balance REAL NOT NULL DEFAULT 0,
+    address TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(user_id, market_type)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_mw_user ON marketplace_wallets(user_id)",
+  // ── AZN marketplace listings ─────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS azn_listings (
+    id SERIAL PRIMARY KEY,
+    seller_id INTEGER NOT NULL REFERENCES users(id),
+    amount REAL NOT NULL,
+    price_per_unit REAL NOT NULL,
+    total_price REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USDT',
+    min_buy REAL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    sold_at TIMESTAMP
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_azn_listings_status ON azn_listings(status)",
+  // ── NFT marketplace listings (independent) ───────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS nft_market_listings (
+    id SERIAL PRIMARY KEY,
+    seller_id INTEGER NOT NULL REFERENCES users(id),
+    name TEXT NOT NULL,
+    description TEXT,
+    image_url TEXT,
+    price REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'AZN',
+    category TEXT DEFAULT 'collectible',
+    rarity TEXT DEFAULT 'common',
+    collection TEXT,
+    edition INTEGER DEFAULT 1,
+    total_supply INTEGER DEFAULT 1,
+    traits TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id INTEGER,
+    views INTEGER DEFAULT 0,
+    likes INTEGER DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    sold_at TIMESTAMP
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_nft_market_status ON nft_market_listings(status)",
+  // ── Vault marketplace listings ────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS vault_market_listings (
+    id SERIAL PRIMARY KEY,
+    seller_id INTEGER NOT NULL REFERENCES users(id),
+    vault_entry_id INTEGER,
+    title TEXT NOT NULL,
+    description TEXT,
+    price REAL NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'AZN',
+    category TEXT DEFAULT 'Social',
+    tier TEXT DEFAULT 'basic',
+    preview_data TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    buyer_id INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    sold_at TIMESTAMP
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_vault_market_status ON vault_market_listings(status)",
+  // ── Marketplace transactions log ──────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS marketplace_transactions (
+    id SERIAL PRIMARY KEY,
+    market_type TEXT NOT NULL,
+    listing_id INTEGER NOT NULL,
+    buyer_id INTEGER NOT NULL REFERENCES users(id),
+    seller_id INTEGER NOT NULL REFERENCES users(id),
+    amount REAL NOT NULL,
+    fee REAL NOT NULL DEFAULT 0,
+    net_amount REAL NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'completed',
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_mktx_buyer ON marketplace_transactions(buyer_id)",
+  "CREATE INDEX IF NOT EXISTS idx_mktx_seller ON marketplace_transactions(seller_id)",
+  // ── AI Agent settings (single row) ───────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS ai_agent_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    router TEXT NOT NULL DEFAULT 'openai',
+    model TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+    system_prompt TEXT DEFAULT 'You are AYZEN AI, an autonomous agent with access to the database, shell, and logs. Help the admin manage and develop the AYZEN platform.',
+    temperature REAL DEFAULT 0.7,
+    max_tokens INTEGER DEFAULT 4096,
+    tools_enabled TEXT DEFAULT '{"shell":true,"database":true,"console":true}',
+    workflow TEXT DEFAULT '{}',
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "INSERT INTO ai_agent_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING",
+  // ── AI Agent chat sessions ────────────────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS ai_agent_messages (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL DEFAULT 'default',
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    tool_name TEXT,
+    tool_input TEXT,
+    tool_output TEXT,
+    tokens_used INTEGER DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_ai_msgs_session ON ai_agent_messages(session_id, created_at DESC)",
+  // ── NFT listings: liked_by JSON array ────────────────────────────────────────
+  "ALTER TABLE nft_market_listings ADD COLUMN IF NOT EXISTS liked_by TEXT DEFAULT '[]'",
   // Task steps guide (JSON array of {title, description})
   "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS steps TEXT",
   // Cost entries JSON array on submissions (multiple line items)
