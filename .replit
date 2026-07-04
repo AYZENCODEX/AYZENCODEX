@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "python-base-3.13", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 
 [deployment]
 router = "application"
@@ -59,7 +59,7 @@ externalPort = 3000
 [userenv.shared]
 FIREBASE_PROJECT_ID = "ayzenworkspacex01"
 AYZEN_API_PORT = "8080"
-AYZEN_FRONTEND_PORT = "8080"
+AYZEN_FRONTEND_PORT = "8000"
 NODE_ENV = "development"
 PORT = "23325"
 LOG_LEVEL = "info"
