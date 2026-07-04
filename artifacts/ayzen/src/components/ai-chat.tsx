@@ -208,7 +208,8 @@ export function AiChat() {
         body: JSON.stringify({ messages: newMsgs.map(m => ({ role: m.role, content: m.content })), model: selectedModel }),
       });
       const data = await res.json();
-      const reply: string = data.choices?.[0]?.message?.content ?? data.error ?? "No response from AI.";
+      const errText = typeof data.error === "string" ? data.error : (data.error?.message ?? null);
+      const reply: string = data.choices?.[0]?.message?.content ?? errText ?? "No response from AI.";
       const model: string = data._model ?? selectedModel;
       const action = parseActionBlock(reply);
 

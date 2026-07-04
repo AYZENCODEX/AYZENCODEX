@@ -12,6 +12,7 @@ import {
   Activity, Star, Zap, Shield, Medal, Target, CheckCircle2,
   KeyRound, Clock, Check, X, Lock, Wallet, Swords, ListTodo,
   Bell, ChevronDown, ChevronUp, ArrowLeft, LayoutDashboard,
+  Smartphone, Mail,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -90,20 +91,39 @@ function PendingInvitesBanner({ onAccepted }: { onAccepted: () => void }) {
 // ─── Team Dashboard ───────────────────────────────────────────────────────────
 function TeamDashboard({ team }: { team: TeamDetail }) {
   const [stats, setStats] = useState<TeamStats | null>(null);
+  const [board, setBoard] = useState<LeaderboardEntry[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    customFetch<TeamStats>(`/api/teams/${team.id}/stats`)
-      .then(d => setStats(d)).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      customFetch<TeamStats>(`/api/teams/${team.id}/stats`).catch(() => null),
+      customFetch<LeaderboardEntry[]>(`/api/teams/${team.id}/leaderboard`).catch(() => []),
+      customFetch<Mission[]>(`/api/teams/${team.id}/missions`).catch(() => []),
+    ]).then(([s, b, m]) => {
+      setStats(s as TeamStats | null);
+      setBoard(Array.isArray(b) ? b : []);
+      setMissions(Array.isArray(m) ? m : []);
+    }).finally(() => setLoading(false));
   }, [team.id]);
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
 
+  const topStreak = board.length ? Math.max(...board.map(m => m.streak || 0)) : 0;
+  const totalTasks = board.reduce((a, m) => a + (m.tasks_completed || 0), 0);
+  const activeMissions = missions.filter(m => m.status === "active");
+  const avgProgress = activeMissions.length
+    ? Math.round(activeMissions.reduce((a, m) => a + (m.current_value / m.target_value) * 100, 0) / activeMissions.length)
+    : 0;
+  const highEffortUsers = [...board].sort((a, b) => (b.tasks_completed || 0) - (a.tasks_completed || 0)).slice(0, 3);
+
   const statCards = [
-    { label: "Members",  value: stats?.memberCount ?? team.member_count, icon: Users,      color: "text-cyan-400",   bg: "bg-cyan-400/10" },
-    { label: "Messages", value: stats?.messageCount ?? 0,               icon: MessageCircle, color: "text-violet-400", bg: "bg-violet-400/10" },
-    { label: "Projects", value: stats?.projectCount ?? 0,               icon: FolderGit2,  color: "text-emerald-400", bg: "bg-emerald-400/10" },
-    { label: "Team ROI", value: `$${(stats?.totalRoi ?? 0).toFixed(2)}`, icon: TrendingUp,  color: "text-amber-400",  bg: "bg-amber-400/10" },
+    { label: "Members",     value: stats?.memberCount ?? team.member_count,        icon: Users,        color: "text-cyan-400",    bg: "bg-cyan-400/10" },
+    { label: "Team ROI",    value: `$${(stats?.totalRoi ?? 0).toFixed(2)}`,        icon: TrendingUp,   color: "text-amber-400",   bg: "bg-amber-400/10" },
+    { label: "Top Streak",  value: topStreak > 0 ? `${topStreak}d 🔥` : "—",      icon: Zap,          color: "text-orange-400",  bg: "bg-orange-400/10" },
+    { label: "Total Tasks", value: totalTasks,                                      icon: CheckCircle2, color: "text-emerald-400", bg: "bg-emerald-400/10" },
+    { label: "Projects",    value: stats?.projectCount ?? 0,                        icon: FolderGit2,   color: "text-violet-400",  bg: "bg-violet-400/10" },
+    { label: "Avg Progress", value: activeMissions.length ? `${avgProgress}%` : "—", icon: Target,    color: "text-primary",     bg: "bg-primary/10" },
   ];
 
   return (
@@ -117,7 +137,9 @@ function TeamDashboard({ team }: { team: TeamDetail }) {
           </div>
         </div>
       )}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+
+      {/* Stat Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {statCards.map((s, i) => (
           <div key={s.label} className="bg-card/60 border border-border/40 rounded-xl p-4 flex items-start gap-3 animate-pop-in" style={{ animationDelay: `${i * 60}ms` }}>
             <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", s.bg)}>
@@ -130,22 +152,43 @@ function TeamDashboard({ team }: { team: TeamDetail }) {
           </div>
         ))}
       </div>
-      <div className="bg-card/60 border border-border/40 rounded-xl p-5">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold font-mono text-lg">
-            {team.name[0].toUpperCase()}
+
+      {/* Team Info + High Effort Users */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Team Info + Mission Progress */}
+        <div className="bg-card/60 border border-border/40 rounded-xl p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold font-mono text-lg flex-shrink-0">
+              {team.name[0].toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="font-bold text-foreground truncate">{team.name}</h3>
+              {team.description && <p className="text-xs text-muted-foreground font-mono truncate">{team.description}</p>}
+              <p className="text-xs text-muted-foreground/60 font-mono">Created {new Date(team.created_at).toLocaleDateString()}</p>
+            </div>
+            <Badge variant="outline" className="text-[10px] capitalize flex-shrink-0">{team.myRole}</Badge>
           </div>
-          <div>
-            <h3 className="font-bold text-foreground">{team.name}</h3>
-            {team.description && <p className="text-xs text-muted-foreground font-mono">{team.description}</p>}
-            <p className="text-xs text-muted-foreground/60 font-mono">Created {new Date(team.created_at).toLocaleDateString()}</p>
-          </div>
-          <Badge variant="outline" className="ml-auto text-[10px] capitalize">{team.myRole}</Badge>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div className="rounded-lg border border-border/30 p-3">
-            <p className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-2">Top Members</p>
-            <div className="space-y-2">
+          {activeMissions.length > 0 ? (
+            <div className="space-y-2.5 mt-2">
+              <p className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-widest">Active Mission Progress</p>
+              {activeMissions.slice(0, 2).map(m => {
+                const pct = Math.round((m.current_value / m.target_value) * 100);
+                return (
+                  <div key={m.id} className="space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+                      <span className="truncate pr-2">{m.title}</span>
+                      <span className="shrink-0 font-bold">{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${pct}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              <p className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-widest">Top Members</p>
               {team.members.filter(m => m.status === "active").slice(0, 4).map(m => (
                 <div key={m.id} className="flex items-center gap-2">
                   <Avatar name={m.username || m.email || "?"} size="sm" role={m.role} />
@@ -154,22 +197,55 @@ function TeamDashboard({ team }: { team: TeamDetail }) {
                 </div>
               ))}
             </div>
-          </div>
-          <div className="rounded-lg border border-border/30 p-3">
-            <p className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-2">Activity</p>
-            <div className="space-y-2">
-              {(stats?.recentActivity ?? []).length === 0 ? (
-                <p className="text-xs text-muted-foreground/40 font-mono">No recent activity</p>
-              ) : (
-                (stats?.recentActivity ?? []).slice(0, 4).map((a: any, i: number) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <Activity className="w-3 h-3 text-primary/50 flex-shrink-0" />
-                    <span className="text-xs font-mono text-muted-foreground truncate">{a.username} sent a message</span>
+          )}
+        </div>
+
+        {/* High Effort Operators */}
+        <div className="bg-card/60 border border-border/40 rounded-xl p-5">
+          <p className="text-[10px] text-muted-foreground/60 font-mono uppercase tracking-widest mb-3 flex items-center gap-1.5">
+            <Star className="w-3 h-3 text-amber-400" /> High Effort Operators
+          </p>
+          {highEffortUsers.length === 0 ? (
+            <p className="text-xs text-muted-foreground/40 font-mono">No activity recorded yet.</p>
+          ) : (
+            <div className="space-y-3">
+              {highEffortUsers.map((u, i) => (
+                <div key={u.user_id} className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-6 h-6 rounded-full flex items-center justify-center font-mono text-[10px] font-bold flex-shrink-0",
+                    i === 0 ? "bg-yellow-500/20 text-yellow-400" : i === 1 ? "bg-slate-400/20 text-slate-300" : "bg-amber-700/20 text-amber-600"
+                  )}>
+                    {i + 1}
                   </div>
-                ))
-              )}
+                  <Avatar name={u.username || "?"} size="sm" role={u.role} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-foreground truncate">{u.username}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <span className="text-[9px] font-mono text-muted-foreground">{u.tasks_completed} tasks</span>
+                      {u.streak > 0 && <span className="text-[9px] font-mono text-orange-400">{u.streak}d 🔥</span>}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-mono font-bold text-amber-400">${u.total_roi.toFixed(2)}</p>
+                    <p className="text-[9px] text-muted-foreground font-mono">{u.azn_balance.toFixed(1)} AZN</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
+
+          {/* Recent Activity */}
+          {(stats?.recentActivity ?? []).length > 0 && (
+            <div className="mt-4 pt-3 border-t border-border/30 space-y-1.5">
+              <p className="text-[9px] text-muted-foreground/50 font-mono uppercase tracking-widest mb-2">Recent Activity</p>
+              {(stats?.recentActivity ?? []).slice(0, 3).map((a: any, i: number) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <Activity className="w-2.5 h-2.5 text-primary/40 flex-shrink-0" />
+                  <span className="text-[10px] font-mono text-muted-foreground/60 truncate">{a.username} sent a message</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -255,61 +331,159 @@ function TeamMembers({ team, onRefresh }: { team: TeamDetail; onRefresh: () => v
   );
 }
 
-// ─── Team Vault ───────────────────────────────────────────────────────────────
+// ─── Team Vault (Tabbed) ──────────────────────────────────────────────────────
+type VaultTab2 = "entity" | "local" | "2fa" | "wallet" | "mail";
+const SPECIAL_VAULT_CATS = ["local_account", "2fa", "wallet_address", "mail"];
+
 function TeamVault({ team }: { team: TeamDetail }) {
+  const [vaultTab, setVaultTab] = useState<VaultTab2>("entity");
   const [entries, setEntries] = useState<VaultEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ category: "defi", projectName: "", email: "", twitterUsername: "", discordUsername: "", telegramUsername: "", notes: "" });
+  const [form, setForm] = useState<Record<string, string>>({
+    category: "defi", projectName: "", email: "", twitterUsername: "",
+    discordUsername: "", telegramUsername: "", notes: "",
+  });
   const { toast } = useToast();
 
   const loadEntries = () => {
+    setLoading(true);
     customFetch<VaultEntry[]>(`/api/teams/${team.id}/vault`)
       .then(d => setEntries(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
   };
   useEffect(() => { loadEntries(); }, [team.id]);
 
-  const createEntity = async () => {
+  const filterForTab = (all: VaultEntry[], t: VaultTab2) => {
+    if (t === "entity") return all.filter(e => !SPECIAL_VAULT_CATS.includes(e.category));
+    if (t === "local")  return all.filter(e => e.category === "local_account");
+    if (t === "2fa")    return all.filter(e => e.category === "2fa");
+    if (t === "wallet") return all.filter(e => e.category === "wallet_address");
+    if (t === "mail")   return all.filter(e => e.category === "mail");
+    return all;
+  };
+
+  const defaultCatForTab = (t: VaultTab2) =>
+    t === "local" ? "local_account" : t === "2fa" ? "2fa" : t === "wallet" ? "wallet_address" : t === "mail" ? "mail" : "defi";
+
+  const openCreate = () => {
+    setForm({ category: defaultCatForTab(vaultTab), projectName: "", email: "", twitterUsername: "", discordUsername: "", telegramUsername: "", notes: "" });
+    setCreateOpen(true);
+  };
+
+  const createEntry = async () => {
     if (!form.projectName.trim()) return;
     setSaving(true);
     try {
       await customFetch(`/api/teams/${team.id}/vault`, { method: "POST", body: JSON.stringify(form) });
-      toast({ title: "Team entity created!" });
+      toast({ title: "Entry created!" });
       setCreateOpen(false);
-      setForm({ category: "defi", projectName: "", email: "", twitterUsername: "", discordUsername: "", telegramUsername: "", notes: "" });
-      setLoading(true);
       loadEntries();
-    } catch { toast({ title: "Failed to create entity", variant: "destructive" }); } finally { setSaving(false); }
+    } catch { toast({ title: "Failed", variant: "destructive" }); } finally { setSaving(false); }
   };
 
-  if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+  const VAULT_TABS: { id: VaultTab2; label: string; icon: React.ElementType }[] = [
+    { id: "entity", label: "Entity",  icon: Shield },
+    { id: "local",  label: "Local",   icon: Smartphone },
+    { id: "2fa",    label: "2FA",     icon: KeyRound },
+    { id: "wallet", label: "Wallet",  icon: Wallet },
+    { id: "mail",   label: "Mail",    icon: Mail },
+  ];
+
+  const getFormFields = () => {
+    if (vaultTab === "entity") return [
+      { label: "Project Name", key: "projectName", ph: "e.g. Blast" },
+      { label: "Email", key: "email", ph: "shared@team.com" },
+      { label: "Twitter", key: "twitterUsername", ph: "@handle" },
+      { label: "Discord", key: "discordUsername", ph: "handle" },
+      { label: "Telegram", key: "telegramUsername", ph: "@handle" },
+      { label: "Notes", key: "notes", ph: "Optional" },
+    ];
+    if (vaultTab === "local") return [
+      { label: "Account Name", key: "projectName", ph: "e.g. Local Account #1" },
+      { label: "Username / Email", key: "email", ph: "user@example.com" },
+      { label: "Password / Hint", key: "notes", ph: "Password or hint" },
+    ];
+    if (vaultTab === "2fa") return [
+      { label: "Service Name", key: "projectName", ph: "e.g. Binance" },
+      { label: "Account Email", key: "email", ph: "account@email.com" },
+      { label: "Secret / Backup Code", key: "notes", ph: "TOTP secret or backup code" },
+    ];
+    if (vaultTab === "wallet") return [
+      { label: "Chain / Protocol", key: "projectName", ph: "e.g. Ethereum" },
+      { label: "Wallet Address", key: "notes", ph: "0x..." },
+      { label: "Label", key: "email", ph: "Hot wallet, Cold wallet..." },
+    ];
+    if (vaultTab === "mail") return [
+      { label: "Email Address", key: "projectName", ph: "team@example.com" },
+      { label: "Password / Hint", key: "notes", ph: "Password or hint" },
+      { label: "Recovery", key: "email", ph: "Recovery email or phone" },
+    ];
+    return [];
+  };
 
   const CAT_COLORS: Record<string, string> = {
     defi: "text-violet-400 border-violet-500/30", nft: "text-pink-400 border-pink-500/30",
     gaming: "text-emerald-400 border-emerald-500/30", layer2: "text-blue-400 border-blue-500/30",
     dao: "text-amber-400 border-amber-500/30", exchange: "text-cyan-400 border-cyan-500/30",
+    local_account: "text-violet-400 border-violet-500/30",
+    "2fa": "text-amber-400 border-amber-500/30",
+    wallet_address: "text-cyan-400 border-cyan-500/30",
+    mail: "text-rose-400 border-rose-500/30",
   };
 
+  const visible = filterForTab(entries, vaultTab);
+  const currentTabInfo = VAULT_TABS.find(t => t.id === vaultTab)!;
+
   return (
-    <div className="space-y-3 animate-fade-up">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-primary" /> Team Vault</p>
-        <div className="flex items-center gap-2">
-          <p className="text-xs text-muted-foreground font-mono">{entries.length} entries</p>
-          {team.myRole === "leader" && (
-            <Button size="sm" onClick={() => setCreateOpen(true)} className="h-8 text-xs gap-1"><Plus className="w-3.5 h-3.5" /> New Entity</Button>
-          )}
-        </div>
+    <div className="space-y-4 animate-fade-up">
+      {/* Vault Tab Bar */}
+      <div className="flex gap-1 bg-muted/30 rounded-lg p-1 overflow-x-auto">
+        {VAULT_TABS.map(t => {
+          const count = filterForTab(entries, t.id).length;
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setVaultTab(t.id)}
+              className={cn("flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-mono font-bold transition-all whitespace-nowrap flex-shrink-0",
+                vaultTab === t.id ? "bg-card text-primary shadow-sm border border-primary/20" : "text-muted-foreground hover:text-foreground")}>
+              <Icon className="w-3 h-3" />
+              {t.label}
+              {count > 0 && <span className="text-[9px] bg-primary/10 text-primary rounded-full px-1.5 py-0.5">{count}</span>}
+            </button>
+          );
+        })}
       </div>
-      {entries.length === 0 ? (
+
+      {/* Tab Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <Lock className="w-3.5 h-3.5 text-primary" />
+          Team {currentTabInfo.label}
+          <span className="text-xs text-muted-foreground font-mono">({visible.length})</span>
+        </p>
+        {team.myRole === "leader" && (
+          <Button size="sm" onClick={openCreate} className="h-8 text-xs gap-1">
+            <Plus className="w-3.5 h-3.5" /> Add
+          </Button>
+        )}
+      </div>
+
+      {/* Entries */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+      ) : visible.length === 0 ? (
         <div className="text-center py-16 space-y-3">
           <KeyRound className="w-10 h-10 text-muted-foreground/20 mx-auto" />
-          <p className="text-sm text-muted-foreground font-mono">No vault entries shared yet</p>
+          <p className="text-sm text-muted-foreground font-mono">No {currentTabInfo.label.toLowerCase()} entries yet</p>
+          {team.myRole === "leader" && (
+            <Button size="sm" variant="outline" onClick={openCreate} className="text-xs gap-1 mt-1">
+              <Plus className="w-3.5 h-3.5" /> Add First Entry
+            </Button>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
-          {entries.map((e, i) => (
+          {visible.map((e, i) => (
             <div key={e.id} className="bg-card/60 border border-border/40 rounded-xl p-4 flex items-start gap-3 hover:border-primary/30 transition-colors animate-pop-in" style={{ animationDelay: `${i * 40}ms` }}>
               <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold font-mono text-xs flex-shrink-0">
                 {(e.project_name || "?")[0].toUpperCase()}
@@ -317,7 +491,11 @@ function TeamVault({ team }: { team: TeamDetail }) {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-sm text-foreground">{e.project_name}</p>
-                  {e.category && <Badge variant="outline" className={cn("text-[9px] capitalize", CAT_COLORS[e.category] ?? "")}>{e.category}</Badge>}
+                  {e.category && (
+                    <Badge variant="outline" className={cn("text-[9px] capitalize", CAT_COLORS[e.category] ?? "")}>
+                      {e.category.replace(/_/g, " ")}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   {e.twitter_username && <span className="text-[10px] text-muted-foreground font-mono">🐦 @{e.twitter_username}</span>}
@@ -326,7 +504,7 @@ function TeamVault({ team }: { team: TeamDetail }) {
                   {e.entity_serial && <span className="text-[10px] text-primary/60 font-mono">#{e.entity_serial}</span>}
                 </div>
               </div>
-              <div className="shrink-0 text-right">
+              <div className="shrink-0">
                 <div className="flex items-center gap-1">
                   <Avatar name={e.username || "?"} size="sm" />
                   <p className="text-[10px] text-muted-foreground font-mono">{e.username}</p>
@@ -336,36 +514,37 @@ function TeamVault({ team }: { team: TeamDetail }) {
           ))}
         </div>
       )}
+
+      {/* Create Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-sm bg-card border-border">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Lock className="w-4 h-4 text-primary" /> New Team Entity</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-primary" /> Add {currentTabInfo.label} Entry
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground font-mono">Category</label>
-              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
-                className="w-full h-9 text-sm bg-background/50 border border-border rounded-md px-2">
-                {["defi", "nft", "gaming", "layer2", "dao", "exchange"].map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            {[
-              { label: "Project Name", key: "projectName", ph: "e.g. Blast" },
-              { label: "Email", key: "email", ph: "shared@team.com" },
-              { label: "Twitter Username", key: "twitterUsername", ph: "@handle" },
-              { label: "Discord Username", key: "discordUsername", ph: "handle" },
-              { label: "Telegram Username", key: "telegramUsername", ph: "@handle" },
-              { label: "Notes", key: "notes", ph: "Optional" },
-            ].map(f => (
+            {vaultTab === "entity" && (
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground font-mono">Category</label>
+                <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                  className="w-full h-9 text-sm bg-background/50 border border-border rounded-md px-2">
+                  {["defi", "nft", "gaming", "layer2", "dao", "exchange"].map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            {getFormFields().map(f => (
               <div key={f.key} className="space-y-1">
                 <label className="text-xs text-muted-foreground font-mono">{f.label}</label>
-                <Input value={(form as any)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                <Input value={form[f.key] ?? ""} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
                   placeholder={f.ph} className="h-9 text-sm bg-background/50" />
               </div>
             ))}
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button size="sm" onClick={createEntity} disabled={saving || !form.projectName.trim()}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Create
+            <Button size="sm" onClick={createEntry} disabled={saving || !form.projectName.trim()}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Add Entry
             </Button>
           </DialogFooter>
         </DialogContent>

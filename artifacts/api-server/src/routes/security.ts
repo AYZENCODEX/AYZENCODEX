@@ -2,7 +2,8 @@ import { Router } from "express";
 import { pool } from "@workspace/db";
 import { requireAuth } from "../middlewares/auth";
 import crypto from "crypto";
-import QRCode from "qrcode";
+let QRCode: any = null;
+try { QRCode = (await import("qrcode" as any)).default; } catch { /* qrcode not installed */ }
 
 const router = Router();
 

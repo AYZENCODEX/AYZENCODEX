@@ -171,7 +171,7 @@ function Router() {
       <Route path="/teams">{() => <ProtectedRoute component={TeamsPage} />}</Route>
       <Route path="/content">{() => <ProtectedRoute component={ContentPage} />}</Route>
       <Route path="/wallet">{() => <ProtectedRoute component={WalletHub} />}</Route>
-      <Route path="/nft-marketplace">{() => <ProtectedRoute component={NftMarketplace} />}</Route>
+      <Route path="/nft-marketplace">{() => { window.location.replace("/marketplace?tab=nft"); return null; }}</Route>
       <Route path="/marketplace">{() => <ProtectedRoute component={Marketplace} />}</Route>
       <Route path="/checkin">{() => <ProtectedRoute component={CheckinPage} />}</Route>
       <Route path="/watchlist">{() => <ProtectedRoute component={WatchlistPage} />}</Route>

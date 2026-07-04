@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useSearch, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+const NftMarketplaceLazy = lazy(() => import("@/pages/user/nft-marketplace"));
 
 type ListingType = "entity" | "local_account" | "nft" | "azn" | "";
 
@@ -469,7 +471,22 @@ function OrdersPanel({ token }: { token: string }) {
 export default function Marketplace() {
   const { user, token } = useAuth() as any;
   const { toast } = useToast();
-  const [tab, setTab] = useState<"browse" | "chart" | "orders" | "sell">("browse");
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlTab = new URLSearchParams(search).get("tab");
+  const VALID_TABS = ["browse", "chart", "orders", "sell", "nft"] as const;
+  type MarketTab = typeof VALID_TABS[number];
+  const [tab, setTabState] = useState<MarketTab>(
+    (VALID_TABS.includes(urlTab as any) ? urlTab : "browse") as MarketTab
+  );
+  const setTab = (t: MarketTab) => {
+    setTabState(t);
+    navigate(t === "browse" ? "/marketplace" : `/marketplace?tab=${t}`, { replace: true });
+  };
+  useEffect(() => {
+    if (urlTab && VALID_TABS.includes(urlTab as any) && urlTab !== tab) setTabState(urlTab as MarketTab);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [filterType, setFilterType] = useState<ListingType>("");
   const [loading, setLoading] = useState(true);
@@ -496,9 +513,10 @@ export default function Marketplace() {
   useEffect(() => { loadListings(); loadStats(); }, [loadListings, loadStats]);
 
   const TABS = [
-    { id: "browse", label: "Browse", icon: Store },
-    { id: "chart",  label: "AZN Chart", icon: BarChart2 },
-    { id: "orders", label: "Orders", icon: ShoppingCart },
+    { id: "browse", label: "Browse",      icon: Store },
+    { id: "nft",    label: "NFT Market",  icon: Gem },
+    { id: "chart",  label: "AZN Chart",   icon: BarChart2 },
+    { id: "orders", label: "Orders",      icon: ShoppingCart },
     { id: "sell",   label: "My Listings", icon: Tag },
   ] as const;
 
@@ -618,6 +636,13 @@ export default function Marketplace() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* NFT Market */}
+      {tab === "nft" && (
+        <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary/30" /></div>}>
+          <NftMarketplaceLazy />
+        </Suspense>
       )}
 
       {/* Orders */}

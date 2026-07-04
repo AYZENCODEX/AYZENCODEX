@@ -143,7 +143,7 @@ const USER_NAV: NavGroup[] = [
     label: "Market", icon: Store,
     items: [
       { href: "/marketplace",      label: "P2P Market",  icon: Store },
-      { href: "/nft-marketplace",  label: "NFT Market",  icon: Zap },
+      { href: "/marketplace?tab=nft", label: "NFT Market",  icon: Zap },
     ],
   },
   {
