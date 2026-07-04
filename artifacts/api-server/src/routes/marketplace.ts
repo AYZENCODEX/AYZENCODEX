@@ -73,25 +73,36 @@ router.get("/marketplace/my-listings", requireAuth, async (req, res): Promise<vo
 // ─── POST /marketplace/listings — create a listing ───────────────────────────
 router.post("/marketplace/listings", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
-  const { listing_type, item_id, title, description, price_azn, metadata } = req.body;
+  const { listing_type, item_id, title, description, price_azn, metadata, image_url, condition, tags } = req.body;
 
   if (!listing_type || !title || !price_azn) {
     res.status(400).json({ error: "listing_type, title, price_azn required" }); return;
   }
 
-  const validTypes = ["entity", "local_account", "nft", "azn"];
+  const validTypes = ["entity", "local_account", "nft", "azn", "username_nft", "badge_nft"];
   if (!validTypes.includes(listing_type)) {
     res.status(400).json({ error: `listing_type must be one of: ${validTypes.join(", ")}` }); return;
   }
 
   try {
+    const userRow = await pool.query("SELECT username FROM users WHERE id=$1", [userId]);
+    const username = userRow.rows[0]?.username ?? "user";
+
     const r = await pool.query(
       `INSERT INTO marketplace_listings
-        (seller_id, listing_type, item_id, title, description, price_azn, metadata, status, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'active',NOW(),NOW())
+        (seller_id, listing_type, item_id, title, description, price_azn, metadata, status, image_url, condition, tags, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8,$9,$10,NOW(),NOW())
        RETURNING *`,
-      [userId, listing_type, item_id || null, title, description || null, Number(price_azn), JSON.stringify(metadata || {})]
+      [userId, listing_type, item_id || null, title, description || null, Number(price_azn),
+        JSON.stringify(metadata || {}), image_url || null, condition || "good", tags || null]
     );
+
+    await pool.query(
+      `INSERT INTO marketplace_activity_log (event_type, actor_id, actor_username, target_id, target_type, title, amount_azn, status)
+       VALUES ('listing_created', $1, $2, $3, $4, $5, $6, 'active')`,
+      [userId, username, r.rows[0].id, listing_type, title, Number(price_azn)]
+    ).catch(() => {});
+
     res.status(201).json(r.rows[0]);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
@@ -302,6 +313,46 @@ router.patch("/admin/marketplace/orders/:id", requireAuth, requireAdmin, async (
   } finally {
     client.release();
   }
+});
+
+// ─── GET /marketplace/vault-items — user's vault items available to sell ─────
+router.get("/marketplace/vault-items", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  try {
+    const [entities, localAccounts] = await Promise.all([
+      pool.query(
+        `SELECT id, name, 'entity' as item_type, platform_type, notes FROM vault_entries WHERE user_id = $1 ORDER BY name`,
+        [userId]
+      ).catch(() => ({ rows: [] })),
+      pool.query(
+        `SELECT id, username, 'local_account' as item_type, platform_name, notes FROM local_accounts WHERE user_id = $1 ORDER BY username`,
+        [userId]
+      ).catch(() => ({ rows: [] })),
+    ]);
+    res.json({
+      entities: entities.rows,
+      local_accounts: localAccounts.rows,
+    });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── POST /marketplace/listings — create a listing (with image support) ───────
+// (override the existing one below this comment — the existing route will be removed)
+
+// ─── GET /admin/marketplace/activity — marketplace activity log ───────────────
+router.get("/admin/marketplace/activity", requireAuth, requireAdmin, async (req, res): Promise<void> => {
+  const { event_type, limit = 50, offset = 0 } = req.query as any;
+  try {
+    let q = `SELECT * FROM marketplace_activity_log`;
+    const params: any[] = [];
+    if (event_type) { q += ` WHERE event_type = $${params.length + 1}`; params.push(event_type); }
+    q += ` ORDER BY created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    params.push(Number(limit), Number(offset));
+    const r = await pool.query(q, params);
+    const countQ = `SELECT COUNT(*) FROM marketplace_activity_log${event_type ? " WHERE event_type=$1" : ""}`;
+    const countR = await pool.query(countQ, event_type ? [event_type] : []);
+    res.json({ entries: r.rows, total: Number(countR.rows[0].count) });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
 // ─── GET /marketplace/stats — public stats ────────────────────────────────────

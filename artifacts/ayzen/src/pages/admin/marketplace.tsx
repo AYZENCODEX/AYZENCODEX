@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   Store, CheckCircle2, XCircle, Clock, RefreshCw, Loader2,
   DollarSign, Tag, Coins, Shield, Smartphone, Gem, Package,
-  Settings, TrendingUp, Users, ShoppingCart, Filter,
+  Settings, TrendingUp, ShoppingCart, User, Award, Activity,
+  Zap, Crown, Star, ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
@@ -15,47 +16,41 @@ import { useAuth } from "@/hooks/use-auth";
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
 interface Order {
-  id: number;
-  listing_id: number;
-  title: string;
-  listing_type: string;
-  metadata?: any;
-  buyer_id: number;
-  seller_id: number;
-  buyer_username: string;
-  seller_username: string;
-  price_azn: number;
-  fee_pct: number;
-  fee_azn?: number;
-  seller_receives?: number;
-  status: string;
-  message?: string;
-  admin_note?: string;
-  created_at: string;
-  resolved_at?: string;
+  id: number; listing_id: number; title: string; listing_type: string; metadata?: any;
+  buyer_id: number; seller_id: number; buyer_username: string; seller_username: string;
+  price_azn: number; fee_pct: number; fee_azn?: number; seller_receives?: number;
+  status: string; message?: string; admin_note?: string; created_at: string; resolved_at?: string;
 }
 
 interface Listing {
-  id: number;
-  seller_id: number;
-  seller_username: string;
-  listing_type: string;
-  title: string;
-  description?: string;
-  price_azn: number;
-  status: string;
-  created_at: string;
+  id: number; seller_id: number; seller_username: string; listing_type: string;
+  title: string; description?: string; price_azn: number; status: string; created_at: string; image_url?: string;
 }
+
+interface NftItem {
+  id: number; token_id: string; plan: string; nft_type: string; nft_category: string;
+  image_url?: string; badge_name?: string; owner_username: string; original_owner_username: string;
+  is_listed: boolean; list_price?: number; transfer_count: number; is_burned: boolean; minted_at: string;
+}
+
+interface ActivityEntry {
+  id: number; event_type: string; actor_id?: number; actor_username?: string;
+  target_id?: number; target_type?: string; title: string; details?: string;
+  amount_azn?: number; status?: string; created_at: string;
+}
+
+// ── Badge components ──────────────────────────────────────────────────────────
 
 const TYPE_ICON: Record<string, React.ElementType> = {
   entity: Shield, local_account: Smartphone, nft: Gem, azn: Coins,
+  username_nft: User, badge_nft: Award, subscription_pass: Zap, lifetime_pass: Star,
 };
 
 function TypeBadge({ type }: { type: string }) {
   const Icon = TYPE_ICON[type] ?? Package;
   return (
     <Badge variant="outline" className="font-mono text-[10px] gap-1 text-cyan-400 border-cyan-400/30">
-      <Icon className="w-3 h-3" /> {type.replace("_", " ")}
+      <Icon className="w-3 h-3" /> {type.replace(/_/g, " ")}
     </Badge>
   );
 }
@@ -68,12 +63,14 @@ function StatusBadge({ status }: { status: string }) {
     active:    { label: "Active",    cls: "text-cyan-400 border-cyan-400/30" },
     sold:      { label: "Sold",      cls: "text-muted-foreground border-border" },
     cancelled: { label: "Cancelled", cls: "text-muted-foreground border-border" },
+    completed: { label: "Completed", cls: "text-emerald-400 border-emerald-400/30" },
   };
   const s = cfg[status] ?? { label: status, cls: "text-muted-foreground" };
   return <Badge variant="outline" className={cn("font-mono text-[10px]", s.cls)}>{s.label}</Badge>;
 }
 
-// ─── Order Action Modal ───────────────────────────────────────────────────────
+// ── Order Action Modal ────────────────────────────────────────────────────────
+
 function OrderActionModal({ order, action, onClose, onDone }: {
   order: Order; action: "approve" | "reject"; onClose: () => void; onDone: () => void;
 }) {
@@ -129,13 +126,12 @@ function OrderActionModal({ order, action, onClose, onDone }: {
           </div>
           {order.message && (
             <div className="bg-muted/20 rounded-lg p-2 text-xs">
-              <span className="text-muted-foreground">Buyer note: </span>
-              <span>{order.message}</span>
+              <span className="text-muted-foreground">Buyer note: </span><span>{order.message}</span>
             </div>
           )}
           <div>
             <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Admin Note (shown to user)</label>
-            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Reason or comment..." className="font-mono text-xs h-8" />
+            <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Reason or comment…" className="font-mono text-xs h-8" />
           </div>
         </div>
         <DialogFooter>
@@ -151,7 +147,8 @@ function OrderActionModal({ order, action, onClose, onDone }: {
   );
 }
 
-// ─── Settings Panel ───────────────────────────────────────────────────────────
+// ── Settings Panel ────────────────────────────────────────────────────────────
+
 function SettingsPanel({ token }: { token: string }) {
   const { toast } = useToast();
   const [feePct, setFeePct] = useState("5");
@@ -160,9 +157,7 @@ function SettingsPanel({ token }: { token: string }) {
 
   useEffect(() => {
     fetch(`${BASE}/api/marketplace/settings`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(d => { setFeePct(String(d.fee_pct ?? 5)); setEnabled(d.enabled ?? true); })
-      .catch(() => {});
+      .then(r => r.json()).then(d => { setFeePct(String(d.fee_pct ?? 5)); setEnabled(d.enabled ?? true); }).catch(() => {});
   }, [token]);
 
   const save = async () => {
@@ -203,10 +198,245 @@ function SettingsPanel({ token }: { token: string }) {
   );
 }
 
-// ─── Main Admin Marketplace ────────────────────────────────────────────────────
+// ── NFT Subscriptions Panel ───────────────────────────────────────────────────
+
+const PLAN_COLOR: Record<string, string> = {
+  pro: "text-cyan-400 border-cyan-400/30",
+  enterprise: "text-violet-400 border-violet-400/30",
+  lifetime_pro: "text-teal-400 border-teal-400/30",
+  lifetime_enterprise: "text-rose-400 border-rose-400/30",
+  username: "text-cyan-300 border-cyan-300/30",
+  achievement_badge: "text-amber-400 border-amber-400/30",
+};
+const PLAN_ICON: Record<string, React.ElementType> = {
+  pro: Zap, enterprise: Crown, lifetime_pro: Star, lifetime_enterprise: Shield,
+  username: User, achievement_badge: Award,
+};
+
+function NftPanel({ token }: { token: string }) {
+  const [nfts, setNfts] = useState<NftItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [planFilter, setPlanFilter] = useState("all");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/admin/nft-subscriptions`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setNfts(await r.json());
+    } catch { } finally { setLoading(false); }
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = planFilter === "all" ? nfts : nfts.filter(n => n.plan === planFilter);
+  const plans = ["all", ...Array.from(new Set(nfts.map(n => n.plan)))];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex flex-wrap gap-1.5">
+          {plans.map(p => {
+            const Icon = p === "all" ? Gem : (PLAN_ICON[p] ?? Package);
+            const color = p === "all" ? "text-primary border-primary/40 bg-primary/10" : "";
+            return (
+              <button key={p} onClick={() => setPlanFilter(p)}
+                className={cn("flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono rounded-full border transition-all",
+                  planFilter === p
+                    ? (p === "all" ? color : cn(PLAN_COLOR[p] ?? "text-primary border-primary/40", "bg-card"))
+                    : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+                <Icon className="w-3 h-3" /> {p === "all" ? "All" : p.replace(/_/g, " ")}
+              </button>
+            );
+          })}
+        </div>
+        <Button variant="ghost" size="sm" onClick={load} className="h-8 text-xs gap-1">
+          <RefreshCw className="w-3.5 h-3.5" /> Refresh
+        </Button>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Total Minted", val: nfts.length, color: "text-primary" },
+          { label: "Listed",       val: nfts.filter(n => n.is_listed).length, color: "text-emerald-400" },
+          { label: "Transferred",  val: nfts.filter(n => n.transfer_count > 0).length, color: "text-amber-400" },
+        ].map(s => (
+          <div key={s.label} className="bg-card/60 border border-border/40 rounded-xl p-3 text-center">
+            <div className={cn("font-mono text-xl font-bold", s.color)}>{s.val}</div>
+            <div className="text-[10px] text-muted-foreground/60 font-mono">{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-primary/30" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12">
+          <Gem className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="font-mono text-sm text-muted-foreground/40">No NFTs found</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(nft => {
+            const Icon = PLAN_ICON[nft.plan] ?? Gem;
+            const planColor = PLAN_COLOR[nft.plan] ?? "text-muted-foreground border-border";
+            return (
+              <div key={nft.id} className="flex items-center gap-3 bg-card/60 border border-border/40 rounded-xl p-3 hover:border-primary/20 transition-all">
+                {nft.image_url ? (
+                  <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                    <img src={nft.image_url} alt={nft.plan} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 bg-muted/20 border", planColor)}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                    <span className="font-mono text-sm font-bold text-foreground">{nft.token_id}</span>
+                    <Badge variant="outline" className={cn("font-mono text-[9px] gap-1", planColor)}>
+                      <Icon className="w-2.5 h-2.5" /> {nft.plan.replace(/_/g, " ")}
+                    </Badge>
+                    {nft.is_listed && <Badge variant="outline" className="font-mono text-[9px] text-amber-400 border-amber-400/30">Listed {nft.list_price} AZN</Badge>}
+                    {nft.badge_name && <Badge variant="outline" className="font-mono text-[9px] text-amber-300 border-amber-300/20">{nft.badge_name}</Badge>}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground/60">
+                    Owner: <span className="text-foreground">{nft.owner_username}</span>
+                    {nft.transfer_count > 0 && <span className="ml-2">· {nft.transfer_count} transfer{nft.transfer_count !== 1 ? "s" : ""}</span>}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0 text-[10px] font-mono text-muted-foreground/60">
+                  {new Date(nft.minted_at).toLocaleDateString()}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Activity Log Panel ────────────────────────────────────────────────────────
+
+const EVENT_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
+  nft_mint:        { label: "NFT Minted",     icon: Gem,         color: "text-primary" },
+  nft_listed:      { label: "NFT Listed",     icon: Tag,         color: "text-cyan-400" },
+  nft_sold:        { label: "NFT Sold",       icon: ShoppingCart, color: "text-emerald-400" },
+  listing_created: { label: "Listing Created", icon: Plus,        color: "text-violet-400" },
+  order_placed:    { label: "Order Placed",   icon: Clock,       color: "text-amber-400" },
+  order_approved:  { label: "Order Approved", icon: CheckCircle2, color: "text-emerald-400" },
+  order_rejected:  { label: "Order Rejected", icon: XCircle,     color: "text-red-400" },
+};
+
+// Inline Plus for the import
+function Plus({ className }: { className?: string }) { return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>; }
+
+function ActivityPanel({ token }: { token: string }) {
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [eventFilter, setEventFilter] = useState("");
+  const [page, setPage] = useState(0);
+  const limit = 20;
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = new URLSearchParams({ limit: String(limit), offset: String(page * limit) });
+      if (eventFilter) q.set("event_type", eventFilter);
+      const r = await fetch(`${BASE}/api/admin/marketplace/activity?${q}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { const d = await r.json(); setEntries(d.entries ?? []); setTotal(d.total ?? 0); }
+    } catch { } finally { setLoading(false); }
+  }, [token, eventFilter, page]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const eventTypes = ["", "nft_mint", "nft_listed", "nft_sold", "listing_created", "order_placed", "order_approved", "order_rejected"];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex flex-wrap gap-1.5">
+          {eventTypes.map(et => {
+            const cfg = et ? (EVENT_CONFIG[et] ?? { label: et, icon: Activity, color: "" }) : { label: "All Events", icon: Activity, color: "" };
+            const Icon = cfg.icon;
+            return (
+              <button key={et} onClick={() => { setEventFilter(et); setPage(0); }}
+                className={cn("flex items-center gap-1 px-2.5 py-1 text-[10px] font-mono rounded-full border transition-all",
+                  eventFilter === et ? "bg-primary/10 border-primary/40 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+                <Icon className="w-3 h-3" /> {cfg.label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-muted-foreground/60">{total} events</span>
+          <Button variant="ghost" size="sm" onClick={load} className="h-8 text-xs gap-1">
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </Button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-12"><Loader2 className="w-5 h-5 animate-spin text-primary/30" /></div>
+      ) : entries.length === 0 ? (
+        <div className="text-center py-12">
+          <Activity className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+          <p className="font-mono text-sm text-muted-foreground/40">No activity yet</p>
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {entries.map(e => {
+            const cfg = EVENT_CONFIG[e.event_type] ?? { label: e.event_type, icon: Activity, color: "text-muted-foreground" };
+            const Icon = cfg.icon;
+            return (
+              <div key={e.id} className="flex items-center gap-3 bg-card/50 border border-border/30 rounded-lg px-4 py-2.5 hover:border-primary/15 transition-all">
+                <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-muted/20", cfg.color)}>
+                  <Icon className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-xs font-bold text-foreground">{e.title}</span>
+                    <Badge variant="outline" className={cn("font-mono text-[9px]", cfg.color, "border-current/30")}>
+                      {cfg.label}
+                    </Badge>
+                    {e.status && <StatusBadge status={e.status} />}
+                  </div>
+                  <div className="text-[10px] font-mono text-muted-foreground/60 mt-0.5">
+                    {e.actor_username && <span>by <span className="text-foreground">{e.actor_username}</span></span>}
+                    {e.details && <span className="ml-2">{e.details}</span>}
+                  </div>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  {e.amount_azn != null && e.amount_azn > 0 && (
+                    <div className="font-mono text-sm font-bold text-primary">{e.amount_azn} AZN</div>
+                  )}
+                  <div className="text-[9px] font-mono text-muted-foreground/50">{new Date(e.created_at).toLocaleString()}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {total > limit && (
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0} className="text-xs h-7">Prev</Button>
+          <span className="font-mono text-xs text-muted-foreground">{page + 1} / {Math.ceil(total / limit)}</span>
+          <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={(page + 1) * limit >= total} className="text-xs h-7">Next</Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Admin Marketplace ────────────────────────────────────────────────────
+
 export default function AdminMarketplace() {
   const { token } = useAuth() as any;
-  const [tab, setTab] = useState<"orders" | "listings" | "settings">("orders");
+  const [tab, setTab] = useState<"orders" | "listings" | "nfts" | "activity" | "settings">("orders");
   const [orders, setOrders] = useState<Order[]>([]);
   const [listings, setListings] = useState<Listing[]>([]);
   const [statusFilter, setStatusFilter] = useState("pending");
@@ -247,9 +477,11 @@ export default function AdminMarketplace() {
   useEffect(() => { if (tab === "orders") loadOrders(); }, [statusFilter, loadOrders, tab]);
 
   const TABS = [
-    { id: "orders",   label: "Orders",   icon: ShoppingCart },
-    { id: "listings", label: "Listings", icon: Tag },
-    { id: "settings", label: "Settings", icon: Settings },
+    { id: "orders",   label: "Orders",     icon: ShoppingCart },
+    { id: "listings", label: "Listings",   icon: Tag },
+    { id: "nfts",     label: "NFTs",       icon: Gem },
+    { id: "activity", label: "Activity",   icon: Activity },
+    { id: "settings", label: "Settings",   icon: Settings },
   ] as const;
 
   const pendingCount = orders.filter(o => o.status === "pending").length;
@@ -260,9 +492,9 @@ export default function AdminMarketplace() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-mono font-bold text-xl text-foreground flex items-center gap-2">
-            <Store className="w-5 h-5 text-primary" /> P2P Marketplace Admin
+            <Store className="w-5 h-5 text-primary" /> Marketplace Admin
           </h1>
-          <p className="text-xs text-muted-foreground font-mono mt-1">Approve trades, manage listings, configure fees</p>
+          <p className="text-xs text-muted-foreground font-mono mt-1">Monitor orders, listings, NFTs and platform activity</p>
         </div>
       </div>
 
@@ -270,10 +502,10 @@ export default function AdminMarketplace() {
       {stats && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: "Active Listings",   val: stats.active_listings,    icon: Tag,          color: "text-cyan-400" },
-            { label: "Completed Trades",  val: stats.completed_trades,   icon: CheckCircle2, color: "text-emerald-400" },
-            { label: "Total Volume",      val: `${Number(stats.total_volume_azn ?? 0).toFixed(0)} AZN`, icon: Coins, color: "text-amber-400" },
-            { label: "Fees Collected",    val: `${Number(stats.total_fees_azn ?? 0).toFixed(0)} AZN`,  icon: DollarSign, color: "text-violet-400" },
+            { label: "Active Listings",  val: stats.active_listings,   icon: Tag,          color: "text-cyan-400" },
+            { label: "Completed Trades", val: stats.completed_trades,  icon: CheckCircle2, color: "text-emerald-400" },
+            { label: "Total Volume",     val: `${Number(stats.total_volume_azn ?? 0).toFixed(0)} AZN`, icon: Coins, color: "text-amber-400" },
+            { label: "Fees Collected",   val: `${Number(stats.total_fees_azn ?? 0).toFixed(0)} AZN`,  icon: DollarSign, color: "text-violet-400" },
           ].map(s => (
             <div key={s.label} className="bg-card/60 border border-border/40 rounded-xl p-3 flex items-center gap-3">
               <s.icon className={cn("w-4 h-4 flex-shrink-0", s.color)} />
@@ -287,25 +519,23 @@ export default function AdminMarketplace() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-muted/30 rounded-lg p-1">
+      <div className="flex gap-1 bg-muted/30 rounded-lg p-1 overflow-x-auto">
         {TABS.map(t => {
           const Icon = t.icon;
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              className={cn("flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-mono font-bold transition-all relative flex-1 justify-center",
+              className={cn("flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-mono font-bold transition-all relative whitespace-nowrap flex-shrink-0",
                 tab === t.id ? "bg-card text-primary shadow-sm border border-primary/20" : "text-muted-foreground hover:text-foreground")}>
               <Icon className="w-3.5 h-3.5" /> {t.label}
               {t.id === "orders" && pendingCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center">
-                  {pendingCount}
-                </span>
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center">{pendingCount}</span>
               )}
             </button>
           );
         })}
       </div>
 
-      {/* Orders Tab */}
+      {/* ── Orders Tab ── */}
       {tab === "orders" && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-2">
@@ -333,10 +563,7 @@ export default function AdminMarketplace() {
           ) : (
             <div className="space-y-3">
               {orders.map(o => (
-                <div key={o.id} className={cn(
-                  "bg-card/60 border rounded-xl p-4 transition-all",
-                  o.status === "pending" ? "border-amber-500/30 bg-amber-500/3" : "border-border/40"
-                )}>
+                <div key={o.id} className={cn("bg-card/60 border rounded-xl p-4 transition-all", o.status === "pending" ? "border-amber-500/30" : "border-border/40")}>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -349,12 +576,8 @@ export default function AdminMarketplace() {
                         <span>Seller: <span className="text-foreground">{o.seller_username}</span></span>
                         <span>{new Date(o.created_at).toLocaleDateString()}</span>
                       </div>
-                      {o.message && (
-                        <div className="text-[11px] font-mono text-muted-foreground italic">&quot;{o.message}&quot;</div>
-                      )}
-                      {o.admin_note && (
-                        <div className="text-[11px] font-mono text-amber-400">Admin: {o.admin_note}</div>
-                      )}
+                      {o.message && <div className="text-[11px] font-mono text-muted-foreground italic">&quot;{o.message}&quot;</div>}
+                      {o.admin_note && <div className="text-[11px] font-mono text-amber-400">Admin: {o.admin_note}</div>}
                     </div>
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
                       <div className="font-mono text-lg font-bold text-primary">{o.price_azn} AZN</div>
@@ -380,7 +603,7 @@ export default function AdminMarketplace() {
         </div>
       )}
 
-      {/* Listings Tab */}
+      {/* ── Listings Tab ── */}
       {tab === "listings" && (
         <div className="space-y-3">
           <div className="flex justify-end">
@@ -398,7 +621,12 @@ export default function AdminMarketplace() {
           ) : (
             <div className="space-y-2">
               {listings.map(l => (
-                <div key={l.id} className="flex items-center gap-3 bg-card/60 border border-border/40 rounded-xl p-4">
+                <div key={l.id} className="flex items-center gap-3 bg-card/60 border border-border/40 rounded-xl p-3.5 hover:border-primary/20 transition-all">
+                  {l.image_url ? (
+                    <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                      <img src={l.image_url} alt={l.title} className="w-full h-full object-cover" />
+                    </div>
+                  ) : null}
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1">
                       <span className="font-mono text-sm font-bold text-foreground">{l.title}</span>
@@ -420,7 +648,13 @@ export default function AdminMarketplace() {
         </div>
       )}
 
-      {/* Settings Tab */}
+      {/* ── NFTs Tab ── */}
+      {tab === "nfts" && <NftPanel token={token ?? ""} />}
+
+      {/* ── Activity Log Tab ── */}
+      {tab === "activity" && <ActivityPanel token={token ?? ""} />}
+
+      {/* ── Settings Tab ── */}
       {tab === "settings" && <SettingsPanel token={token ?? ""} />}
 
       {/* Action Modal */}

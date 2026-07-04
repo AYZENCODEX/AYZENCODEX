@@ -591,6 +591,31 @@ const MIGRATIONS = [
     UNIQUE(user_id, project_id)
   )`,
   "CREATE INDEX IF NOT EXISTS idx_watchlist_user ON user_watchlist(user_id)",
+  // ── Phase 19: NFT extended columns ────────────────────────────────────────
+  "ALTER TABLE nft_subscriptions ADD COLUMN IF NOT EXISTS nft_type TEXT DEFAULT 'subscription'",
+  "ALTER TABLE nft_subscriptions ADD COLUMN IF NOT EXISTS image_url TEXT",
+  "ALTER TABLE nft_subscriptions ADD COLUMN IF NOT EXISTS nft_category TEXT DEFAULT 'pass'",
+  "ALTER TABLE nft_subscriptions ADD COLUMN IF NOT EXISTS badge_name TEXT",
+  // ── Phase 19: Marketplace extended columns ────────────────────────────────
+  "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS image_url TEXT",
+  "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS condition TEXT DEFAULT 'good'",
+  "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS tags TEXT",
+  // ── Phase 19: Marketplace Activity Log ────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS marketplace_activity_log (
+    id SERIAL PRIMARY KEY,
+    event_type TEXT NOT NULL,
+    actor_id INTEGER,
+    actor_username TEXT,
+    target_id INTEGER,
+    target_type TEXT,
+    title TEXT NOT NULL,
+    details TEXT,
+    amount_azn REAL,
+    status TEXT,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_mkt_activity_created ON marketplace_activity_log(created_at DESC)",
+  "CREATE INDEX IF NOT EXISTS idx_mkt_activity_event ON marketplace_activity_log(event_type)",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

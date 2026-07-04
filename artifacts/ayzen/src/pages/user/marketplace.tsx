@@ -8,9 +8,9 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Store, ShoppingCart, Tag, Plus, X, RefreshCw, Loader2, TrendingUp,
-  TrendingDown, BarChart2, Coins, Shield, Smartphone, Gem, ArrowUpDown,
-  CheckCircle2, Clock, XCircle, ChevronRight, Package, Filter,
-  DollarSign, Zap, Users, Star, Eye, ArrowRight, Wallet,
+  TrendingDown, BarChart2, Coins, Shield, Smartphone, Gem, Award,
+  CheckCircle2, Clock, XCircle, Package, DollarSign, Zap, User,
+  ChevronDown, Wallet,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
@@ -18,7 +18,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 const NftMarketplaceLazy = lazy(() => import("@/pages/user/nft-marketplace"));
 
-type ListingType = "entity" | "local_account" | "nft" | "azn" | "";
+type ListingType = "entity" | "local_account" | "nft" | "azn" | "username_nft" | "badge_nft" | "";
 
 interface Listing {
   id: number;
@@ -30,6 +30,7 @@ interface Listing {
   description?: string;
   price_azn: number;
   metadata?: any;
+  image_url?: string | null;
   status: string;
   created_at: string;
 }
@@ -54,13 +55,18 @@ interface Order {
   resolved_at?: string;
 }
 
-interface ChartPoint { date: string; close: number; volume: number; }
+interface VaultItem { id: number; name?: string; username?: string; item_type: string; platform_type?: string; platform_name?: string; notes?: string; }
+interface ChartPoint { date: string; close: number; volume: number; azn_per_usd?: number; }
+
+// ── Type config ────────────────────────────────────────────────────────────────
 
 const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   entity:        { label: "Entity",        icon: Shield,      color: "text-cyan-400",    bg: "bg-cyan-400/10" },
   local_account: { label: "Local Account", icon: Smartphone,  color: "text-violet-400",  bg: "bg-violet-400/10" },
   nft:           { label: "NFT Pass",      icon: Gem,         color: "text-amber-400",   bg: "bg-amber-400/10" },
   azn:           { label: "AZN Token",     icon: Coins,       color: "text-emerald-400", bg: "bg-emerald-400/10" },
+  username_nft:  { label: "Username NFT",  icon: User,        color: "text-cyan-300",    bg: "bg-cyan-300/10" },
+  badge_nft:     { label: "Badge NFT",     icon: Award,       color: "text-amber-300",   bg: "bg-amber-300/10" },
 };
 
 function TypeBadge({ type }: { type: string }) {
@@ -75,12 +81,12 @@ function TypeBadge({ type }: { type: string }) {
 
 function StatusBadge({ status }: { status: string }) {
   const cfg: Record<string, { label: string; cls: string; icon: React.ElementType }> = {
-    pending:   { label: "Pending",   cls: "text-amber-400 border-amber-400/30",  icon: Clock },
+    pending:   { label: "Pending",   cls: "text-amber-400 border-amber-400/30",   icon: Clock },
     approved:  { label: "Approved",  cls: "text-emerald-400 border-emerald-400/30", icon: CheckCircle2 },
-    rejected:  { label: "Rejected",  cls: "text-red-400 border-red-400/30",      icon: XCircle },
-    active:    { label: "Active",    cls: "text-cyan-400 border-cyan-400/30",    icon: Zap },
-    sold:      { label: "Sold",      cls: "text-muted-foreground border-border", icon: CheckCircle2 },
-    cancelled: { label: "Cancelled", cls: "text-muted-foreground border-border", icon: X },
+    rejected:  { label: "Rejected",  cls: "text-red-400 border-red-400/30",       icon: XCircle },
+    active:    { label: "Active",    cls: "text-cyan-400 border-cyan-400/30",     icon: Zap },
+    sold:      { label: "Sold",      cls: "text-muted-foreground border-border",  icon: CheckCircle2 },
+    cancelled: { label: "Cancelled", cls: "text-muted-foreground border-border",  icon: X },
   };
   const s = cfg[status] ?? { label: status, cls: "text-muted-foreground", icon: Package };
   const Icon = s.icon;
@@ -91,17 +97,17 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-// ─── AZN Price Chart ──────────────────────────────────────────────────────────
+// ── AZN Chart ─────────────────────────────────────────────────────────────────
+
 function AznChart() {
   const [data, setData] = useState<ChartPoint[]>([]);
   const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
 
   useEffect(() => {
     const token = localStorage.getItem("ayzen_token") ?? "";
     fetch(`${BASE}/api/marketplace/azn/chart`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
-      .then(d => { setData(d.data ?? []); setStats(d); })
+      .then(d => setData(d.data ?? []))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -121,9 +127,7 @@ function AznChart() {
               <div className="h-8 w-24 bg-muted/40 rounded animate-pulse" />
             ) : (
               <>
-                <span className="text-2xl font-mono font-bold text-foreground">
-                  ${last?.close.toFixed(5) ?? "0.01000"}
-                </span>
+                <span className="text-2xl font-mono font-bold text-foreground">${last?.close.toFixed(5) ?? "0.01000"}</span>
                 <span className={cn("text-xs font-mono mb-0.5 flex items-center gap-0.5", isUp ? "text-emerald-400" : "text-red-400")}>
                   {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                   {change.toFixed(2)}%
@@ -131,28 +135,12 @@ function AznChart() {
               </>
             )}
           </div>
-          <div className="text-[10px] font-mono text-muted-foreground/50 mt-1">
-            100 AZN = $1.00 USD &bull; Rate: {last?.azn_per_usd ?? 100} AZN/$
-          </div>
-        </div>
-        <div className="flex gap-4">
-          {[
-            { label: "24h High", val: data.length ? Math.max(...data.slice(-1).map(d => d.close)).toFixed(5) : "--" },
-            { label: "24h Low",  val: data.length ? Math.min(...data.slice(-1).map(d => d.close)).toFixed(5) : "--" },
-          ].map(s => (
-            <div key={s.label} className="text-center">
-              <div className="text-[9px] font-mono text-muted-foreground/50 uppercase">{s.label}</div>
-              <div className="text-xs font-mono text-foreground">${s.val}</div>
-            </div>
-          ))}
+          <div className="text-[10px] font-mono text-muted-foreground/50 mt-1">100 AZN = $1.00 USD · Rate: {last?.azn_per_usd ?? 100} AZN/$</div>
         </div>
       </div>
-
-      <div className="h-36 sm:h-48">
+      <div className="h-40">
         {loading ? (
-          <div className="h-full flex items-center justify-center">
-            <Loader2 className="w-5 h-5 animate-spin text-primary/30" />
-          </div>
+          <div className="h-full flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin text-primary/30" /></div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data.slice(-14)} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
@@ -165,21 +153,30 @@ function AznChart() {
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
               <XAxis dataKey="date" tick={{ fontSize: 9, fontFamily: "monospace", fill: "#555" }} tickLine={false} axisLine={false} />
               <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "#555" }} tickLine={false} axisLine={false} domain={["auto", "auto"]} tickFormatter={v => `$${v.toFixed(4)}`} width={56} />
-              <Tooltip
-                contentStyle={{ background: "#0d1117", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, fontSize: 11, fontFamily: "monospace" }}
-                formatter={(v: any) => [`$${Number(v).toFixed(5)}`, "AZN"]}
-                labelStyle={{ color: "#888" }}
-              />
+              <Tooltip contentStyle={{ background: "#0d1117", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, fontSize: 11, fontFamily: "monospace" }} formatter={(v: any) => [`$${Number(v).toFixed(5)}`, "AZN"]} labelStyle={{ color: "#888" }} />
               <Area type="monotone" dataKey="close" stroke={isUp ? "#22d3ee" : "#f87171"} strokeWidth={2} fill="url(#aznGrad)" dot={false} />
             </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
+      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+        {[
+          { k: "Base Rate",     v: "100 AZN = $1 USD" },
+          { k: "Platform Fee",  v: "5% per P2P trade" },
+          { k: "Earn Methods",  v: "Tasks, Referrals, Airdrops" },
+        ].map(i => (
+          <div key={i.k} className="bg-muted/20 border border-border/30 rounded-lg p-2">
+            <div className="text-[9px] text-muted-foreground/50 uppercase tracking-widest mb-0.5">{i.k}</div>
+            <div className="text-foreground font-bold text-[10px]">{i.v}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-// ─── Create Listing Modal ─────────────────────────────────────────────────────
+// ── Create Listing Modal ───────────────────────────────────────────────────────
+
 function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const { token } = useAuth() as any;
   const { toast } = useToast();
@@ -187,60 +184,143 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState("");
-  const [metaKey, setMetaKey] = useState("");
-  const [metaVal, setMetaVal] = useState("");
   const [saving, setSaving] = useState(false);
+  const [vaultItems, setVaultItems] = useState<{ entities: VaultItem[]; local_accounts: VaultItem[] }>({ entities: [], local_accounts: [] });
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
+  const [vaultOpen, setVaultOpen] = useState(false);
 
-  const reset = () => { setType("entity"); setTitle(""); setDesc(""); setPrice(""); setMetaKey(""); setMetaVal(""); };
+  useEffect(() => {
+    if (!open) return;
+    fetch(`${BASE}/api/marketplace/vault-items`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setVaultItems({ entities: d.entities ?? [], local_accounts: d.local_accounts ?? [] }))
+      .catch(() => {});
+  }, [open, token]);
+
+  const reset = () => { setType("entity"); setTitle(""); setDesc(""); setPrice(""); setSelectedItemId(null); setVaultOpen(false); };
+
+  const availableVaultItems = type === "entity" ? vaultItems.entities : type === "local_account" ? vaultItems.local_accounts : [];
+
+  const handleVaultSelect = (item: VaultItem) => {
+    setSelectedItemId(item.id);
+    setTitle((item.name ?? item.username ?? "") + (item.platform_type ?? item.platform_name ? ` (${item.platform_type ?? item.platform_name})` : ""));
+    setDesc(item.notes ?? "");
+    setVaultOpen(false);
+  };
 
   const submit = async () => {
     if (!title || !price || Number(price) <= 0) { toast({ title: "Fill all fields", variant: "destructive" }); return; }
     setSaving(true);
     try {
+      const body: any = { listing_type: type, title, description: desc, price_azn: Number(price) };
+      if (selectedItemId && (type === "entity" || type === "local_account")) body.item_id = selectedItemId;
       const r = await fetch(`${BASE}/api/marketplace/listings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ listing_type: type, title, description: desc, price_azn: Number(price), metadata: metaKey ? { [metaKey]: metaVal } : {} }),
+        body: JSON.stringify(body),
       });
       if (!r.ok) { const d = await r.json(); throw new Error(d.error); }
-      toast({ title: "Listing created! Buyers can now purchase it." });
+      toast({ title: "Listing created!" });
       reset(); onClose(); onCreated();
     } catch (e: any) { toast({ title: e.message, variant: "destructive" }); }
     setSaving(false);
   };
 
+  const listingTypeGroups = [
+    {
+      label: "Vault Assets",
+      types: [
+        { id: "entity" as ListingType,        ...TYPE_CONFIG.entity },
+        { id: "local_account" as ListingType,  ...TYPE_CONFIG.local_account },
+      ],
+    },
+    {
+      label: "Digital Assets",
+      types: [
+        { id: "nft" as ListingType,          ...TYPE_CONFIG.nft },
+        { id: "username_nft" as ListingType,  ...TYPE_CONFIG.username_nft },
+        { id: "badge_nft" as ListingType,     ...TYPE_CONFIG.badge_nft },
+        { id: "azn" as ListingType,           ...TYPE_CONFIG.azn },
+      ],
+    },
+  ];
+
   return (
     <Dialog open={open} onOpenChange={v => { if (!v) { reset(); onClose(); } }}>
-      <DialogContent className="max-w-md bg-card border border-border font-mono">
+      <DialogContent className="max-w-md bg-card border border-border font-mono max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="font-mono text-sm text-foreground flex items-center gap-2">
             <Plus className="w-4 h-4 text-primary" /> Create Listing
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-4 py-2">
-          <div>
-            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-2">Listing Type</div>
-            <div className="grid grid-cols-2 gap-2">
-              {(["entity", "local_account", "nft", "azn"] as const).map(t => {
-                const cfg = TYPE_CONFIG[t];
-                const Icon = cfg.icon;
-                return (
-                  <button key={t} onClick={() => setType(t)}
-                    className={cn("flex items-center gap-2 p-2.5 rounded-lg border text-xs transition-all", type === t ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
-                    <Icon className="w-3.5 h-3.5" /> {cfg.label}
-                  </button>
-                );
-              })}
-            </div>
+        <div className="space-y-4 py-1">
+          {/* Type selector */}
+          <div className="space-y-3">
+            {listingTypeGroups.map(group => (
+              <div key={group.label}>
+                <div className="text-[10px] text-muted-foreground/60 uppercase tracking-widest mb-1.5">{group.label}</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {group.types.map(t => {
+                    const Icon = t.icon;
+                    return (
+                      <button key={t.id} onClick={() => { setType(t.id); setSelectedItemId(null); setTitle(""); setDesc(""); }}
+                        className={cn("flex items-center gap-2 p-2 rounded-lg border text-xs transition-all text-left",
+                          type === t.id ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+                        <Icon className="w-3.5 h-3.5 flex-shrink-0" /> <span className="truncate">{t.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
+
+          {/* Vault item picker */}
+          {(type === "entity" || type === "local_account") && availableVaultItems.length > 0 && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">
+                Pick from Vault <span className="text-muted-foreground/40">(optional)</span>
+              </div>
+              <button onClick={() => setVaultOpen(v => !v)}
+                className="w-full flex items-center justify-between p-2.5 rounded-lg border border-border/40 text-xs text-muted-foreground hover:border-primary/20 transition-all">
+                <div className="flex items-center gap-2">
+                  <Wallet className="w-3.5 h-3.5" />
+                  {selectedItemId
+                    ? availableVaultItems.find(v => v.id === selectedItemId)?.name ?? availableVaultItems.find(v => v.id === selectedItemId)?.username ?? "Selected"
+                    : `${availableVaultItems.length} items in vault`}
+                </div>
+                <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", vaultOpen && "rotate-180")} />
+              </button>
+              {vaultOpen && (
+                <div className="mt-1 border border-border/40 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
+                  {availableVaultItems.map(item => (
+                    <button key={item.id} onClick={() => handleVaultSelect(item)}
+                      className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-all border-b border-border/20 last:border-0",
+                        selectedItemId === item.id ? "bg-primary/10 text-primary" : "hover:bg-muted/30 text-muted-foreground")}>
+                      <span className="font-bold truncate">{item.name ?? item.username}</span>
+                      {(item.platform_type ?? item.platform_name) && (
+                        <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">{item.platform_type ?? item.platform_name}</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Title */}
           <div>
             <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Title *</label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Twitter Account - 5k followers" className="font-mono text-xs h-8" />
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Twitter Account — 5k followers" className="font-mono text-xs h-8" />
           </div>
+
+          {/* Description */}
           <div>
             <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Description</label>
-            <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional details..." className="font-mono text-xs h-8" />
+            <Input value={desc} onChange={e => setDesc(e.target.value)} placeholder="Optional details about this listing…" className="font-mono text-xs h-8" />
           </div>
+
+          {/* Price */}
           <div>
             <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Price (AZN) *</label>
             <div className="relative">
@@ -249,25 +329,13 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
                 ≈ ${price ? (Number(price) / 100).toFixed(2) : "0.00"}
               </span>
             </div>
-            <p className="text-[10px] text-muted-foreground/50 mt-1">100 AZN = $1 USD. 5% platform fee on sale.</p>
+            <p className="text-[10px] text-muted-foreground/50 mt-1">100 AZN = $1 USD. 5% platform fee deducted from seller on approval.</p>
           </div>
-          {(type === "entity" || type === "local_account") && (
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Info Key</label>
-                <Input value={metaKey} onChange={e => setMetaKey(e.target.value)} placeholder="e.g. category" className="font-mono text-xs h-8" />
-              </div>
-              <div>
-                <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Info Value</label>
-                <Input value={metaVal} onChange={e => setMetaVal(e.target.value)} placeholder="e.g. Twitter" className="font-mono text-xs h-8" />
-              </div>
-            </div>
-          )}
         </div>
         <DialogFooter>
           <Button variant="ghost" size="sm" onClick={() => { reset(); onClose(); }} className="text-xs">Cancel</Button>
           <Button size="sm" onClick={submit} disabled={saving} className="text-xs gap-1">
-            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Create
+            {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Create Listing
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -275,7 +343,8 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
   );
 }
 
-// ─── Buy Modal ───────────────────────────────────────────────────────────────
+// ── Buy Modal ─────────────────────────────────────────────────────────────────
+
 function BuyModal({ listing, onClose, onDone }: { listing: Listing; onClose: () => void; onDone: () => void }) {
   const { token } = useAuth() as any;
   const { toast } = useToast();
@@ -310,6 +379,11 @@ function BuyModal({ listing, onClose, onDone }: { listing: Listing; onClose: () 
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
+          {listing.image_url && (
+            <div className="w-full aspect-video rounded-lg overflow-hidden">
+              <img src={listing.image_url} alt={listing.title} className="w-full h-full object-cover" />
+            </div>
+          )}
           <div className="bg-muted/30 rounded-lg p-3 border border-border/40">
             <div className="flex items-center gap-2 mb-2">
               <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", cfg.bg)}>
@@ -322,27 +396,18 @@ function BuyModal({ listing, onClose, onDone }: { listing: Listing; onClose: () 
             </div>
             {listing.description && <p className="text-xs text-muted-foreground">{listing.description}</p>}
           </div>
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Price</span>
-              <span className="font-bold text-foreground">{listing.price_azn.toLocaleString()} AZN</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Fee (5%)</span>
-              <span className="text-muted-foreground">Paid by seller</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">USD value</span>
-              <span className="text-muted-foreground">${(listing.price_azn / 100).toFixed(2)}</span>
-            </div>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex justify-between"><span className="text-muted-foreground">Price</span><span className="font-bold text-foreground">{listing.price_azn.toLocaleString()} AZN</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Fee (5%)</span><span className="text-muted-foreground">Paid by seller</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">USD value</span><span className="text-muted-foreground">${(listing.price_azn / 100).toFixed(2)}</span></div>
           </div>
           <div>
             <label className="text-[10px] text-muted-foreground uppercase tracking-widest block mb-1">Message to seller (optional)</label>
-            <Input value={msg} onChange={e => setMsg(e.target.value)} placeholder="Any specific request..." className="font-mono text-xs h-8" />
+            <Input value={msg} onChange={e => setMsg(e.target.value)} placeholder="Any specific request…" className="font-mono text-xs h-8" />
           </div>
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-xs text-amber-400 flex items-start gap-2">
             <Clock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-            <span>AZN will be reserved until admin approves or rejects this order.</span>
+            <span>AZN reserved until admin approves or rejects this order.</span>
           </div>
         </div>
         <DialogFooter>
@@ -357,54 +422,61 @@ function BuyModal({ listing, onClose, onDone }: { listing: Listing; onClose: () 
   );
 }
 
-// ─── Listing Card ──────────────────────────────────────────────────────────────
+// ── Listing Card ───────────────────────────────────────────────────────────────
+
 function ListingCard({ listing, onBuy, isOwn }: { listing: Listing; onBuy: () => void; isOwn: boolean }) {
   const cfg = TYPE_CONFIG[listing.listing_type] ?? TYPE_CONFIG.entity;
   const Icon = cfg.icon;
   return (
-    <div className="bg-card/60 border border-border/40 rounded-xl p-4 hover:border-primary/20 transition-all flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2.5 flex-1 min-w-0">
-          <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0", cfg.bg)}>
-            <Icon className={cn("w-4 h-4", cfg.color)} />
-          </div>
+    <div className="bg-card/60 border border-border/40 rounded-xl overflow-hidden hover:border-primary/20 transition-all flex flex-col">
+      {/* Image or icon header */}
+      {listing.image_url ? (
+        <div className="aspect-video overflow-hidden">
+          <img src={listing.image_url} alt={listing.title} className="w-full h-full object-cover" />
+        </div>
+      ) : (
+        <div className={cn("h-16 flex items-center justify-center", cfg.bg)}>
+          <Icon className={cn("w-7 h-7 opacity-40", cfg.color)} />
+        </div>
+      )}
+      <div className="p-3 flex flex-col gap-2.5 flex-1">
+        <div className="flex items-start justify-between gap-1">
           <div className="flex-1 min-w-0">
             <div className="font-mono text-sm font-bold text-foreground truncate">{listing.title}</div>
             <div className="text-[10px] font-mono text-muted-foreground/60">by {listing.seller_username}</div>
           </div>
+          <TypeBadge type={listing.listing_type} />
         </div>
-        <TypeBadge type={listing.listing_type} />
-      </div>
-      {listing.description && (
-        <p className="text-xs text-muted-foreground font-mono line-clamp-2">{listing.description}</p>
-      )}
-      {listing.metadata && Object.keys(listing.metadata).length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {Object.entries(listing.metadata).slice(0, 3).map(([k, v]) => (
-            <span key={k} className="text-[9px] font-mono bg-muted/40 border border-border/30 rounded px-1.5 py-0.5 text-muted-foreground">
-              {k}: {String(v)}
-            </span>
-          ))}
-        </div>
-      )}
-      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/20">
-        <div>
-          <div className="font-mono text-base font-bold text-primary">{listing.price_azn.toLocaleString()} AZN</div>
-          <div className="text-[10px] text-muted-foreground/50 font-mono">${(listing.price_azn / 100).toFixed(2)} USD</div>
-        </div>
-        {isOwn ? (
-          <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/30">Your listing</Badge>
-        ) : (
-          <Button size="sm" onClick={onBuy} className="text-xs gap-1 h-8">
-            <ShoppingCart className="w-3 h-3" /> Buy
-          </Button>
+        {listing.description && <p className="text-xs text-muted-foreground font-mono line-clamp-2">{listing.description}</p>}
+        {listing.metadata && Object.keys(listing.metadata).length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(listing.metadata).slice(0, 2).map(([k, v]) => (
+              <span key={k} className="text-[9px] font-mono bg-muted/40 border border-border/30 rounded px-1.5 py-0.5 text-muted-foreground">
+                {k}: {String(v)}
+              </span>
+            ))}
+          </div>
         )}
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/20 mt-auto">
+          <div>
+            <div className="font-mono text-base font-bold text-primary">{listing.price_azn.toLocaleString()} AZN</div>
+            <div className="text-[10px] text-muted-foreground/50 font-mono">${(listing.price_azn / 100).toFixed(2)} USD</div>
+          </div>
+          {isOwn ? (
+            <Badge variant="outline" className="text-[10px] font-mono text-primary border-primary/30">Your listing</Badge>
+          ) : (
+            <Button size="sm" onClick={onBuy} className="text-xs gap-1 h-8">
+              <ShoppingCart className="w-3 h-3" /> Buy
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-// ─── Orders Panel ─────────────────────────────────────────────────────────────
+// ── Orders Panel ──────────────────────────────────────────────────────────────
+
 function OrdersPanel({ token }: { token: string }) {
   const [tab, setTab] = useState<"purchases" | "sales">("purchases");
   const [orders, setOrders] = useState<Order[]>([]);
@@ -426,7 +498,8 @@ function OrdersPanel({ token }: { token: string }) {
       <div className="flex border-b border-border/40">
         {(["purchases", "sales"] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
-            className={cn("flex-1 py-3 text-xs font-mono font-bold transition-colors capitalize", tab === t ? "text-primary bg-primary/5 border-b-2 border-primary" : "text-muted-foreground hover:text-foreground")}>
+            className={cn("flex-1 py-3 text-xs font-mono font-bold transition-colors capitalize",
+              tab === t ? "text-primary bg-primary/5 border-b-2 border-primary" : "text-muted-foreground hover:text-foreground")}>
             {t === "purchases" ? "My Purchases" : "My Sales"}
           </button>
         ))}
@@ -467,198 +540,8 @@ function OrdersPanel({ token }: { token: string }) {
   );
 }
 
-// ─── Main Marketplace Page ───────────────────────────────────────────────────
-export default function Marketplace() {
-  const { user, token } = useAuth() as any;
-  const { toast } = useToast();
-  const search = useSearch();
-  const [, navigate] = useLocation();
-  const urlTab = new URLSearchParams(search).get("tab");
-  const VALID_TABS = ["browse", "chart", "orders", "sell", "nft"] as const;
-  type MarketTab = typeof VALID_TABS[number];
-  const [tab, setTabState] = useState<MarketTab>(
-    (VALID_TABS.includes(urlTab as any) ? urlTab : "browse") as MarketTab
-  );
-  const setTab = (t: MarketTab) => {
-    setTabState(t);
-    navigate(t === "browse" ? "/marketplace" : `/marketplace?tab=${t}`, { replace: true });
-  };
-  useEffect(() => {
-    if (urlTab && VALID_TABS.includes(urlTab as any) && urlTab !== tab) setTabState(urlTab as MarketTab);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urlTab]);
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [filterType, setFilterType] = useState<ListingType>("");
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<any>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [buyTarget, setBuyTarget] = useState<Listing | null>(null);
+// ── My Listings Panel ─────────────────────────────────────────────────────────
 
-  const loadListings = useCallback(async () => {
-    setLoading(true);
-    try {
-      const q = filterType ? `?type=${filterType}` : "";
-      const r = await fetch(`${BASE}/api/marketplace/listings${q}`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) { const d = await r.json(); setListings(d.listings ?? []); }
-    } catch { } finally { setLoading(false); }
-  }, [token, filterType]);
-
-  const loadStats = useCallback(async () => {
-    try {
-      const r = await fetch(`${BASE}/api/marketplace/stats`, { headers: { Authorization: `Bearer ${token}` } });
-      if (r.ok) setStats(await r.json());
-    } catch { }
-  }, [token]);
-
-  useEffect(() => { loadListings(); loadStats(); }, [loadListings, loadStats]);
-
-  const TABS = [
-    { id: "browse", label: "Browse",      icon: Store },
-    { id: "nft",    label: "NFT Market",  icon: Gem },
-    { id: "chart",  label: "AZN Chart",   icon: BarChart2 },
-    { id: "orders", label: "Orders",      icon: ShoppingCart },
-    { id: "sell",   label: "My Listings", icon: Tag },
-  ] as const;
-
-  return (
-    <div className="max-w-5xl mx-auto space-y-5 pb-24">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="font-mono font-bold text-xl text-foreground flex items-center gap-2">
-            <Store className="w-5 h-5 text-primary" /> P2P Marketplace
-          </h1>
-          <p className="text-xs text-muted-foreground font-mono mt-1">Trade entities, accounts, NFT passes &amp; AZN tokens</p>
-        </div>
-        <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1 text-xs self-start sm:self-auto">
-          <Plus className="w-3.5 h-3.5" /> Create Listing
-        </Button>
-      </div>
-
-      {/* Stats bar */}
-      {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Active Listings", val: stats.active_listings,     icon: Tag,        color: "text-cyan-400" },
-            { label: "Completed Trades",val: stats.completed_trades,    icon: CheckCircle2, color: "text-emerald-400" },
-            { label: "Total Volume",    val: `${Number(stats.total_volume_azn ?? 0).toFixed(0)} AZN`, icon: Coins, color: "text-amber-400" },
-            { label: "Platform Fees",   val: `${Number(stats.total_fees_azn ?? 0).toFixed(0)} AZN`,  icon: DollarSign, color: "text-violet-400" },
-          ].map((s, i) => (
-            <div key={s.label} className="bg-card/60 border border-border/40 rounded-xl p-3 flex items-center gap-3 animate-pop-in" style={{ animationDelay: `${i * 50}ms` }}>
-              <s.icon className={cn("w-4 h-4 flex-shrink-0", s.color)} />
-              <div>
-                <div className={cn("text-sm font-mono font-bold", s.color)}>{s.val}</div>
-                <div className="text-[9px] text-muted-foreground/50 font-mono">{s.label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted/30 rounded-lg p-1 overflow-x-auto">
-        {TABS.map(t => {
-          const Icon = t.icon;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={cn("flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-mono font-bold transition-all whitespace-nowrap flex-shrink-0",
-                tab === t.id ? "bg-card text-primary shadow-sm border border-primary/20" : "text-muted-foreground hover:text-foreground")}>
-              <Icon className="w-3.5 h-3.5" /> {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Browse */}
-      {tab === "browse" && (
-        <div className="space-y-4">
-          {/* Type filter */}
-          <div className="flex flex-wrap gap-2">
-            {([{ val: "", label: "All Types", icon: Store }, ...Object.entries(TYPE_CONFIG).map(([k, v]) => ({ val: k, label: v.label, icon: v.icon }))] as any[]).map(f => {
-              const Icon = f.icon;
-              return (
-                <button key={f.val} onClick={() => setFilterType(f.val as ListingType)}
-                  className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all",
-                    filterType === f.val ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
-                  <Icon className="w-3 h-3" /> {f.label}
-                </button>
-              );
-            })}
-          </div>
-
-          {loading ? (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-5 h-5 animate-spin text-primary/30" />
-            </div>
-          ) : listings.length === 0 ? (
-            <div className="text-center py-16">
-              <Store className="w-8 h-8 text-muted-foreground/20 mx-auto mb-3" />
-              <p className="font-mono text-sm text-muted-foreground/40">No listings yet</p>
-              <Button size="sm" variant="outline" onClick={() => setShowCreate(true)} className="mt-4 text-xs gap-1">
-                <Plus className="w-3.5 h-3.5" /> Be the first to sell
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {listings.map(l => (
-                <ListingCard
-                  key={l.id}
-                  listing={l}
-                  isOwn={l.seller_id === user?.id}
-                  onBuy={() => setBuyTarget(l)}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* AZN Chart */}
-      {tab === "chart" && (
-        <div className="space-y-4">
-          <AznChart />
-          <div className="bg-card/60 border border-border/40 rounded-xl p-4">
-            <h3 className="font-mono text-xs font-bold text-foreground mb-3">AZN Token Info</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono">
-              {[
-                { k: "Base Rate",      v: "100 AZN = $1 USD" },
-                { k: "Total Supply",   v: "Unlimited (earned)" },
-                { k: "Platform Fee",   v: "5% per P2P trade" },
-                { k: "Earn Methods",   v: "Tasks, Referrals, Airdrops" },
-                { k: "Use Cases",      v: "Subscriptions, NFTs, P2P" },
-                { k: "Daily Volatility", v: "±8% intraday, stable close" },
-              ].map(i => (
-                <div key={i.k} className="bg-muted/20 border border-border/30 rounded-lg p-3">
-                  <div className="text-[9px] text-muted-foreground/50 uppercase tracking-widest mb-1">{i.k}</div>
-                  <div className="text-foreground font-bold text-xs">{i.v}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* NFT Market */}
-      {tab === "nft" && (
-        <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary/30" /></div>}>
-          <NftMarketplaceLazy />
-        </Suspense>
-      )}
-
-      {/* Orders */}
-      {tab === "orders" && <OrdersPanel token={token ?? ""} />}
-
-      {/* My Listings */}
-      {tab === "sell" && <MyListingsPanel token={token ?? ""} onCreateNew={() => setShowCreate(true)} onRefresh={loadListings} />}
-
-      {/* Modals */}
-      <CreateListingModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={() => { loadListings(); loadStats(); }} />
-      {buyTarget && <BuyModal listing={buyTarget} onClose={() => setBuyTarget(null)} onDone={() => { loadListings(); loadStats(); }} />}
-    </div>
-  );
-}
-
-// ─── My Listings Panel ─────────────────────────────────────────────────────────
 function MyListingsPanel({ token, onCreateNew, onRefresh }: { token: string; onCreateNew: () => void; onRefresh: () => void }) {
   const { toast } = useToast();
   const [listings, setListings] = useState<Listing[]>([]);
@@ -696,16 +579,33 @@ function MyListingsPanel({ token, onCreateNew, onRefresh }: { token: string; onC
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-xs font-mono text-muted-foreground">{listings.length} listing{listings.length !== 1 ? "s" : ""}</span>
+        <Button size="sm" variant="outline" onClick={onCreateNew} className="h-7 text-xs gap-1">
+          <Plus className="w-3 h-3" /> New Listing
+        </Button>
+      </div>
       {listings.map(l => (
-        <div key={l.id} className="flex items-center gap-3 bg-card/60 border border-border/40 rounded-xl p-4">
+        <div key={l.id} className="flex items-center gap-3 bg-card/60 border border-border/40 rounded-xl p-3.5 hover:border-primary/20 transition-all">
+          {l.image_url ? (
+            <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+              <img src={l.image_url} alt={l.title} className="w-full h-full object-cover" />
+            </div>
+          ) : (
+            (() => {
+              const cfg = TYPE_CONFIG[l.listing_type] ?? TYPE_CONFIG.entity;
+              const Icon = cfg.icon;
+              return <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", cfg.bg)}><Icon className={cn("w-4 h-4", cfg.color)} /></div>;
+            })()
+          )}
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap mb-1">
-              <span className="font-mono text-sm font-bold text-foreground">{l.title}</span>
+            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <span className="font-mono text-sm font-bold text-foreground truncate">{l.title}</span>
               <TypeBadge type={l.listing_type} />
               <StatusBadge status={l.status} />
             </div>
-            {l.description && <p className="text-xs text-muted-foreground font-mono">{l.description}</p>}
+            {l.description && <p className="text-[10px] text-muted-foreground font-mono truncate">{l.description}</p>}
           </div>
           <div className="text-right flex-shrink-0">
             <div className="font-mono text-base font-bold text-primary">{l.price_azn} AZN</div>
@@ -718,6 +618,175 @@ function MyListingsPanel({ token, onCreateNew, onRefresh }: { token: string; onC
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Main Marketplace Page ─────────────────────────────────────────────────────
+
+export default function Marketplace() {
+  const { user, token } = useAuth() as any;
+  const { toast } = useToast();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlTab = new URLSearchParams(search).get("tab");
+  const VALID_TABS = ["browse", "nft", "chart", "orders", "sell"] as const;
+  type MarketTab = typeof VALID_TABS[number];
+  const [tab, setTabState] = useState<MarketTab>(
+    (VALID_TABS.includes(urlTab as any) ? urlTab : "browse") as MarketTab
+  );
+  const setTab = (t: MarketTab) => {
+    setTabState(t);
+    navigate(t === "browse" ? "/marketplace" : `/marketplace?tab=${t}`, { replace: true });
+  };
+  useEffect(() => {
+    if (urlTab && VALID_TABS.includes(urlTab as any) && urlTab !== tab) setTabState(urlTab as MarketTab);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlTab]);
+
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [filterType, setFilterType] = useState<ListingType>("");
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [buyTarget, setBuyTarget] = useState<Listing | null>(null);
+
+  const loadListings = useCallback(async () => {
+    setLoading(true);
+    try {
+      const q = filterType ? `?type=${filterType}` : "";
+      const r = await fetch(`${BASE}/api/marketplace/listings${q}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) { const d = await r.json(); setListings(d.listings ?? []); }
+    } catch { } finally { setLoading(false); }
+  }, [token, filterType]);
+
+  const loadStats = useCallback(async () => {
+    try {
+      const r = await fetch(`${BASE}/api/marketplace/stats`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setStats(await r.json());
+    } catch { }
+  }, [token]);
+
+  useEffect(() => { loadListings(); loadStats(); }, [loadListings, loadStats]);
+
+  const TABS = [
+    { id: "browse", label: "Browse",      icon: Store },
+    { id: "nft",    label: "NFT Market",  icon: Gem },
+    { id: "chart",  label: "AZN Chart",   icon: BarChart2 },
+    { id: "orders", label: "Orders",      icon: ShoppingCart },
+    { id: "sell",   label: "My Listings", icon: Tag },
+  ] as const;
+
+  const FILTER_TYPES = [
+    { val: "" as ListingType, label: "All Types", icon: Store },
+    ...Object.entries(TYPE_CONFIG).map(([k, v]) => ({ val: k as ListingType, label: v.label, icon: v.icon })),
+  ];
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-5 pb-24">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="font-mono font-bold text-xl text-foreground flex items-center gap-2">
+            <Store className="w-5 h-5 text-primary" /> P2P Marketplace
+          </h1>
+          <p className="text-xs text-muted-foreground font-mono mt-1">Trade entities, accounts, NFT passes &amp; AZN tokens</p>
+        </div>
+        <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1 text-xs self-start sm:self-auto">
+          <Plus className="w-3.5 h-3.5" /> Create Listing
+        </Button>
+      </div>
+
+      {/* Stats bar */}
+      {stats && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[
+            { label: "Active Listings",  val: stats.active_listings,  icon: Tag,          color: "text-cyan-400" },
+            { label: "Completed Trades", val: stats.completed_trades, icon: CheckCircle2, color: "text-emerald-400" },
+            { label: "Total Volume",     val: `${Number(stats.total_volume_azn ?? 0).toFixed(0)} AZN`, icon: Coins, color: "text-amber-400" },
+            { label: "Platform Fees",    val: `${Number(stats.total_fees_azn ?? 0).toFixed(0)} AZN`,   icon: DollarSign, color: "text-violet-400" },
+          ].map((s, i) => (
+            <div key={s.label} className="bg-card/60 border border-border/40 rounded-xl p-3 flex items-center gap-3 animate-pop-in" style={{ animationDelay: `${i * 50}ms` }}>
+              <s.icon className={cn("w-4 h-4 flex-shrink-0", s.color)} />
+              <div>
+                <div className={cn("text-sm font-mono font-bold", s.color)}>{s.val}</div>
+                <div className="text-[9px] text-muted-foreground/50 font-mono">{s.label}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-muted/30 rounded-lg p-1 overflow-x-auto">
+        {TABS.map(t => {
+          const Icon = t.icon;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              className={cn("flex items-center gap-1.5 px-3 py-2 rounded-md text-xs font-mono font-bold transition-all whitespace-nowrap flex-shrink-0",
+                tab === t.id ? "bg-card text-primary shadow-sm border border-primary/20" : "text-muted-foreground hover:text-foreground")}>
+              <Icon className="w-3.5 h-3.5" /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Browse ── */}
+      {tab === "browse" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {FILTER_TYPES.map(f => {
+              const Icon = f.icon;
+              return (
+                <button key={String(f.val)} onClick={() => setFilterType(f.val)}
+                  className={cn("flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-mono font-bold transition-all",
+                    filterType === f.val ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+                  <Icon className="w-3 h-3" /> {f.label}
+                </button>
+              );
+            })}
+          </div>
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1, 2, 3].map(i => <div key={i} className="h-48 bg-card/60 border border-border/40 rounded-xl animate-pulse" />)}
+            </div>
+          ) : listings.length === 0 ? (
+            <div className="text-center py-16">
+              <Store className="w-8 h-8 text-muted-foreground/20 mx-auto mb-3" />
+              <p className="font-mono text-sm text-muted-foreground/40">No listings yet</p>
+              <Button size="sm" variant="outline" onClick={() => setShowCreate(true)} className="mt-4 text-xs gap-1">
+                <Plus className="w-3.5 h-3.5" /> Be the first to sell
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {listings.map(l => (
+                <ListingCard key={l.id} listing={l} isOwn={l.seller_id === user?.id} onBuy={() => setBuyTarget(l)} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── NFT Market ── */}
+      {tab === "nft" && (
+        <Suspense fallback={<div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary/30" /></div>}>
+          <NftMarketplaceLazy />
+        </Suspense>
+      )}
+
+      {/* ── AZN Chart ── */}
+      {tab === "chart" && <AznChart />}
+
+      {/* ── Orders ── */}
+      {tab === "orders" && <OrdersPanel token={token ?? ""} />}
+
+      {/* ── My Listings ── */}
+      {tab === "sell" && <MyListingsPanel token={token ?? ""} onCreateNew={() => setShowCreate(true)} onRefresh={loadListings} />}
+
+      {/* Modals */}
+      <CreateListingModal open={showCreate} onClose={() => setShowCreate(false)} onCreated={() => { loadListings(); loadStats(); }} />
+      {buyTarget && <BuyModal listing={buyTarget} onClose={() => setBuyTarget(null)} onDone={() => { loadListings(); loadStats(); }} />}
     </div>
   );
 }
