@@ -1,8 +1,10 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
-import { sql } from "drizzle-orm";
+import { db, projectsTable, userProjectsTable, projectEnrollmentsTable, vaultEntriesTable, tasksTable, taskSubmissionsTable } from "@workspace/db";
+import { sql, eq, and } from "drizzle-orm";
 import { requireAuth } from "../middlewares/auth";
-import { broadcastToUser } from "./events";
+import { broadcastToUser, broadcastEvent } from "./events";
+import { createNotification } from "./notifications";
+import { logActivity } from "../lib/activity";
 
 const router = Router();
 
@@ -357,6 +359,127 @@ router.patch("/teams/:id/missions/:missionId", requireAuth, async (req, res): Pr
     `UPDATE team_missions SET ${sets.join(", ")} WHERE id = ${missionId} AND team_id = ${teamId} RETURNING *`
   ));
   res.json(result.rows[0]);
+});
+
+// ── POST /teams/:id/enroll-project — leader enrolls whole team in a project ──
+router.post("/teams/:id/enroll-project", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const { projectId, vaultEntryId } = req.body as { projectId?: number; vaultEntryId?: number };
+  if (!projectId) { res.status(400).json({ error: "projectId is required" }); return; }
+
+  const roleRes = await db.execute(sql`SELECT role FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`);
+  const myRole = (roleRes.rows[0] as any)?.role;
+  if (!myRole) { res.status(403).json({ error: "Not a team member" }); return; }
+  if (myRole !== "leader") { res.status(403).json({ error: "Only team leader can enroll the team" }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  if (vaultEntryId) {
+    const [entity] = await db.select().from(vaultEntriesTable).where(eq(vaultEntriesTable.id, vaultEntryId));
+    if (!entity) { res.status(404).json({ error: "Vault entity not found" }); return; }
+  }
+
+  const membersRes = await db.execute(sql`SELECT user_id FROM team_members WHERE team_id = ${teamId} AND status = 'active'`);
+  const memberIds = (membersRes.rows as any[]).map(r => r.user_id as number);
+
+  let enrolledCount = 0;
+  for (const memberId of memberIds) {
+    const alreadyJoined = await db.select().from(userProjectsTable)
+      .where(and(eq(userProjectsTable.userId, memberId), eq(userProjectsTable.projectId, projectId)));
+    if (alreadyJoined.length === 0) await db.insert(userProjectsTable).values({ userId: memberId, projectId });
+
+    if (vaultEntryId) {
+      const existingEnrollment = await db.select().from(projectEnrollmentsTable)
+        .where(and(eq(projectEnrollmentsTable.projectId, projectId), eq(projectEnrollmentsTable.userId, memberId), eq(projectEnrollmentsTable.vaultEntryId, vaultEntryId)));
+      if (existingEnrollment.length === 0) {
+        await db.insert(projectEnrollmentsTable).values({ userId: memberId, projectId, vaultEntryId, status: "active" });
+        enrolledCount++;
+      }
+    }
+    if (memberId !== userId) {
+      await createNotification(memberId, "team_project_enrolled", "Team Joined a Project",
+        `Your team leader enrolled the team in "${project.name}".`, { teamId, projectId });
+    }
+  }
+
+  broadcastEvent("projects_updated", { action: "team_enrolled", projectId, teamId });
+  logActivity(userId, "team_enroll_project", "project", projectId, project.name, { teamId, memberCount: memberIds.length });
+
+  res.status(201).json({ ok: true, projectId, teamId, memberCount: memberIds.length, enrolledCount });
+});
+
+// ── POST /teams/:id/vault — create a shared vault entity for the team ────────
+router.post("/teams/:id/vault", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const memberCheck = await db.execute(sql`SELECT role FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`);
+  if (!memberCheck.rows.length) { res.status(403).json({ error: "Not a team member" }); return; }
+
+  const { category, projectName, email, emailPassword, twitterUsername, twitterPassword,
+    discordUsername, discordPassword, telegramUsername, telegramPassword, notes } = req.body;
+  if (!category || !projectName) { res.status(400).json({ error: "category and projectName are required" }); return; }
+
+  const serial = `AYZN${userId}-${Date.now()}${Math.floor(Math.random() * 900 + 100)}`;
+
+  const [entry] = await db.insert(vaultEntriesTable).values({
+    userId, entitySerial: serial, category, projectName,
+    email: email || null, emailPassword: emailPassword || null,
+    twitterUsername: twitterUsername || null, twitterPassword: twitterPassword || null,
+    discordUsername: discordUsername || null, discordPassword: discordPassword || null,
+    telegramUsername: telegramUsername || null, telegramPassword: telegramPassword || null,
+    notes: notes || null,
+  }).returning();
+
+  await db.execute(sql`UPDATE vault_entries SET team_id = ${teamId} WHERE id = ${entry.id}`);
+
+  logActivity(userId, "team_vault_create", "vault_entry", entry.id, projectName, { teamId });
+  res.status(201).json({ ...entry, teamId });
+});
+
+// ── POST /teams/:id/tasks/:taskId/enroll — enroll all active team members in a task ──
+router.post("/teams/:id/tasks/:taskId/enroll", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
+  const taskId = parseInt(Array.isArray(req.params.taskId) ? req.params.taskId[0] : req.params.taskId, 10);
+  const { vaultEntryId } = req.body as { vaultEntryId?: number };
+
+  const roleRes = await db.execute(sql`SELECT role FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active'`);
+  const myRole = (roleRes.rows[0] as any)?.role;
+  if (!myRole) { res.status(403).json({ error: "Not a team member" }); return; }
+  if (myRole !== "leader") { res.status(403).json({ error: "Only team leader can enroll the team in a task" }); return; }
+
+  const [task] = await db.select().from(tasksTable).where(eq(tasksTable.id, taskId));
+  if (!task) { res.status(404).json({ error: "Task not found" }); return; }
+
+  const membersRes = await db.execute(sql`SELECT user_id FROM team_members WHERE team_id = ${teamId} AND status = 'active'`);
+  const memberIds = (membersRes.rows as any[]).map(r => r.user_id as number);
+
+  const entityIdsJson = vaultEntryId ? JSON.stringify([vaultEntryId]) : null;
+  let enrolledCount = 0;
+  for (const memberId of memberIds) {
+    const existing = await db.select().from(taskSubmissionsTable)
+      .where(and(eq(taskSubmissionsTable.taskId, taskId), eq(taskSubmissionsTable.userId, memberId)));
+    if (existing.length > 0) continue;
+
+    await db.execute(sql`
+      INSERT INTO task_submissions (task_id, user_id, status, notes, entity_ids)
+      VALUES (${taskId}, ${memberId}, 'pending', 'Enrolled via team mission — awaiting proof submission', ${entityIdsJson})
+    `);
+    enrolledCount++;
+
+    if (memberId !== userId) {
+      await createNotification(memberId, "team_task_enrolled", "Team Task Assigned",
+        `Your team leader enrolled the team in task "${task.name}". Submit your proof to complete it.`,
+        { teamId, taskId });
+    }
+  }
+
+  broadcastEvent("tasks_updated", { action: "team_enrolled", taskId, teamId });
+  logActivity(userId, "team_enroll_task", "task", taskId, task.name, { teamId, memberCount: memberIds.length });
+
+  res.status(201).json({ ok: true, taskId, teamId, memberCount: memberIds.length, enrolledCount });
 });
 
 // ── PATCH /teams/:id/invites/respond — accept or reject invite ────────────────

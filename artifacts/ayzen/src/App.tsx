@@ -63,6 +63,7 @@ const EmailAccounts     = lazy(() => import("@/pages/user/email-accounts"));
 const UserSupport       = lazy(() => import("@/pages/user/support"));
 const UserReferrals     = lazy(() => import("@/pages/user/referrals"));
 const UserSettings      = lazy(() => import("@/pages/user/settings"));
+const UserSecurity      = lazy(() => import("@/pages/user/security"));
 const UserWallets       = lazy(() => import("@/pages/user/wallets"));
 const SubscriptionPage  = lazy(() => import("@/pages/user/subscription"));
 const CreditsPage       = lazy(() => import("@/pages/user/credits"));
@@ -160,6 +161,7 @@ function Router() {
       <Route path="/support">{() => <ProtectedRoute component={UserSupport} />}</Route>
       <Route path="/referrals">{() => <ProtectedRoute component={UserReferrals} />}</Route>
       <Route path="/settings">{() => <ProtectedRoute component={UserSettings} />}</Route>
+      <Route path="/security">{() => <ProtectedRoute component={UserSecurity} />}</Route>
       <Route path="/wallets">{() => <ProtectedRoute component={UserWallets} />}</Route>
       <Route path="/subscription">{() => <ProtectedRoute component={SubscriptionPage} />}</Route>
       <Route path="/credits">{() => <ProtectedRoute component={CreditsPage} />}</Route>

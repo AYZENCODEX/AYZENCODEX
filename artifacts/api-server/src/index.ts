@@ -574,6 +574,9 @@ const MIGRATIONS = [
   "CREATE INDEX IF NOT EXISTS idx_magic_codes_code ON user_magic_codes(code)",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_secret TEXT",
   "ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS two_fa_secret TEXT",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS two_fa_enabled BOOLEAN NOT NULL DEFAULT FALSE",
+  "ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_email TEXT",
   "ALTER TABLE credit_transactions ADD COLUMN IF NOT EXISTS azn_amount REAL DEFAULT 0",
   // ── Phase 18: Daily Check-in ──────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS user_checkins (

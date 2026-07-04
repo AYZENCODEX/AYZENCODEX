@@ -259,25 +259,48 @@ function TeamMembers({ team, onRefresh }: { team: TeamDetail; onRefresh: () => v
 function TeamVault({ team }: { team: TeamDetail }) {
   const [entries, setEntries] = useState<VaultEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ category: "defi", projectName: "", email: "", twitterUsername: "", discordUsername: "", telegramUsername: "", notes: "" });
+  const { toast } = useToast();
 
-  useEffect(() => {
+  const loadEntries = () => {
     customFetch<VaultEntry[]>(`/api/teams/${team.id}/vault`)
       .then(d => setEntries(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  }, [team.id]);
+  };
+  useEffect(() => { loadEntries(); }, [team.id]);
+
+  const createEntity = async () => {
+    if (!form.projectName.trim()) return;
+    setSaving(true);
+    try {
+      await customFetch(`/api/teams/${team.id}/vault`, { method: "POST", body: JSON.stringify(form) });
+      toast({ title: "Team entity created!" });
+      setCreateOpen(false);
+      setForm({ category: "defi", projectName: "", email: "", twitterUsername: "", discordUsername: "", telegramUsername: "", notes: "" });
+      setLoading(true);
+      loadEntries();
+    } catch { toast({ title: "Failed to create entity", variant: "destructive" }); } finally { setSaving(false); }
+  };
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
 
   const CAT_COLORS: Record<string, string> = {
     defi: "text-violet-400 border-violet-500/30", nft: "text-pink-400 border-pink-500/30",
     gaming: "text-emerald-400 border-emerald-500/30", layer2: "text-blue-400 border-blue-500/30",
-    dao: "text-amber-400 border-amber-500/30",
+    dao: "text-amber-400 border-amber-500/30", exchange: "text-cyan-400 border-cyan-500/30",
   };
 
   return (
     <div className="space-y-3 animate-fade-up">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-primary" /> Team Vault</p>
-        <p className="text-xs text-muted-foreground font-mono">{entries.length} entries</p>
+        <div className="flex items-center gap-2">
+          <p className="text-xs text-muted-foreground font-mono">{entries.length} entries</p>
+          {team.myRole === "leader" && (
+            <Button size="sm" onClick={() => setCreateOpen(true)} className="h-8 text-xs gap-1"><Plus className="w-3.5 h-3.5" /> New Entity</Button>
+          )}
+        </div>
       </div>
       {entries.length === 0 ? (
         <div className="text-center py-16 space-y-3">
@@ -313,6 +336,40 @@ function TeamVault({ team }: { team: TeamDetail }) {
           ))}
         </div>
       )}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-sm bg-card border-border">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Lock className="w-4 h-4 text-primary" /> New Team Entity</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-mono">Category</label>
+              <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                className="w-full h-9 text-sm bg-background/50 border border-border rounded-md px-2">
+                {["defi", "nft", "gaming", "layer2", "dao", "exchange"].map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            {[
+              { label: "Project Name", key: "projectName", ph: "e.g. Blast" },
+              { label: "Email", key: "email", ph: "shared@team.com" },
+              { label: "Twitter Username", key: "twitterUsername", ph: "@handle" },
+              { label: "Discord Username", key: "discordUsername", ph: "handle" },
+              { label: "Telegram Username", key: "telegramUsername", ph: "@handle" },
+              { label: "Notes", key: "notes", ph: "Optional" },
+            ].map(f => (
+              <div key={f.key} className="space-y-1">
+                <label className="text-xs text-muted-foreground font-mono">{f.label}</label>
+                <Input value={(form as any)[f.key]} onChange={e => setForm(p => ({ ...p, [f.key]: e.target.value }))}
+                  placeholder={f.ph} className="h-9 text-sm bg-background/50" />
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setCreateOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={createEntity} disabled={saving || !form.projectName.trim()}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -494,17 +551,58 @@ function TeamLeaderboard({ team }: { team: TeamDetail }) {
 function TeamProjects({ team }: { team: TeamDetail }) {
   const [projects, setProjects] = useState<TeamProject[]>([]);
   const [loading, setLoading] = useState(true);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [allProjects, setAllProjects] = useState<{ id: number; name: string }[]>([]);
+  const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
+  const [selProjectId, setSelProjectId] = useState<string>("");
+  const [selVaultId, setSelVaultId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
+  const loadProjects = () => {
     customFetch<TeamProject[]>(`/api/teams/${team.id}/projects`)
       .then(d => setProjects(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
-  }, [team.id]);
+  };
+  useEffect(() => { loadProjects(); }, [team.id]);
+
+  const openEnroll = async () => {
+    setEnrollOpen(true);
+    try {
+      const [pRes, vRes] = await Promise.all([
+        customFetch<any>("/api/projects?limit=50"),
+        customFetch<VaultEntry[]>(`/api/teams/${team.id}/vault`),
+      ]);
+      setAllProjects(Array.isArray(pRes) ? pRes : (pRes?.projects ?? []));
+      setVaultEntries(Array.isArray(vRes) ? vRes : []);
+    } catch { /* ignore */ }
+  };
+
+  const enrollTeam = async () => {
+    if (!selProjectId) return;
+    setSaving(true);
+    try {
+      await customFetch(`/api/teams/${team.id}/enroll-project`, {
+        method: "POST",
+        body: JSON.stringify({ projectId: Number(selProjectId), vaultEntryId: selVaultId ? Number(selVaultId) : undefined }),
+      });
+      toast({ title: "Team enrolled in project!" });
+      setEnrollOpen(false);
+      setSelProjectId(""); setSelVaultId("");
+      setLoading(true);
+      loadProjects();
+    } catch { toast({ title: "Failed to enroll team", variant: "destructive" }); } finally { setSaving(false); }
+  };
 
   if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
 
   return (
     <div className="space-y-3 animate-fade-up">
-      <p className="text-sm font-semibold text-foreground flex items-center gap-2"><FolderGit2 className="w-3.5 h-3.5 text-primary" /> Projects ({projects.length})</p>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-foreground flex items-center gap-2"><FolderGit2 className="w-3.5 h-3.5 text-primary" /> Projects ({projects.length})</p>
+        {team.myRole === "leader" && (
+          <Button size="sm" onClick={openEnroll} className="h-8 text-xs gap-1"><Plus className="w-3.5 h-3.5" /> Enroll Team</Button>
+        )}
+      </div>
       {projects.length === 0 ? (
         <div className="text-center py-12 font-mono text-muted-foreground text-sm">No active projects.</div>
       ) : (
@@ -524,6 +622,140 @@ function TeamProjects({ team }: { team: TeamDetail }) {
           ))}
         </div>
       )}
+      <Dialog open={enrollOpen} onOpenChange={setEnrollOpen}>
+        <DialogContent className="sm:max-w-sm bg-card border-border">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><FolderGit2 className="w-4 h-4 text-primary" /> Enroll Team in Project</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-mono">Project</label>
+              <select value={selProjectId} onChange={e => setSelProjectId(e.target.value)}
+                className="w-full h-9 text-sm bg-background/50 border border-border rounded-md px-2">
+                <option value="">Select a project…</option>
+                {allProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-mono">Team Vault Entity (optional)</label>
+              <select value={selVaultId} onChange={e => setSelVaultId(e.target.value)}
+                className="w-full h-9 text-sm bg-background/50 border border-border rounded-md px-2">
+                <option value="">None</option>
+                {vaultEntries.map(v => <option key={v.id} value={v.id}>{v.project_name} (#{v.entity_serial})</option>)}
+              </select>
+            </div>
+            <p className="text-[10px] text-muted-foreground font-mono">All active team members will be joined into this project.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setEnrollOpen(false)}>Cancel</Button>
+            <Button size="sm" onClick={enrollTeam} disabled={saving || !selProjectId}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Enroll Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Team Tasks ─────────────────────────────────────────────────────────────
+function TeamTasks({ team }: { team: TeamDetail }) {
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [vaultEntries, setVaultEntries] = useState<VaultEntry[]>([]);
+  const [enrollTask, setEnrollTask] = useState<any | null>(null);
+  const [selVaultId, setSelVaultId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+
+  const loadTasks = () => {
+    setLoading(true);
+    customFetch<TeamProject[]>(`/api/teams/${team.id}/projects`)
+      .then(async (projects) => {
+        const list = Array.isArray(projects) ? projects : [];
+        const results = await Promise.all(list.map(p =>
+          customFetch<any[]>(`/api/tasks?projectId=${p.id}`).then(d => (Array.isArray(d) ? d : []).map(t => ({ ...t, project_name: p.name }))).catch(() => [])
+        ));
+        setTasks(results.flat());
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { loadTasks(); }, [team.id]);
+
+  const openEnroll = async (task: any) => {
+    setEnrollTask(task);
+    setSelVaultId("");
+    try {
+      const v = await customFetch<VaultEntry[]>(`/api/teams/${team.id}/vault`);
+      setVaultEntries(Array.isArray(v) ? v : []);
+    } catch { /* ignore */ }
+  };
+
+  const enrollTeamInTask = async () => {
+    if (!enrollTask) return;
+    setSaving(true);
+    try {
+      await customFetch(`/api/teams/${team.id}/tasks/${enrollTask.id}/enroll`, {
+        method: "POST",
+        body: JSON.stringify({ vaultEntryId: selVaultId ? Number(selVaultId) : undefined }),
+      });
+      toast({ title: "Team enrolled in task!" });
+      setEnrollTask(null);
+    } catch { toast({ title: "Failed to enroll team", variant: "destructive" }); } finally { setSaving(false); }
+  };
+
+  if (loading) return <div className="flex items-center justify-center py-16"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>;
+
+  return (
+    <div className="space-y-3 animate-fade-up">
+      <p className="text-sm font-semibold text-foreground flex items-center gap-2"><ListTodo className="w-3.5 h-3.5 text-primary" /> Team Tasks ({tasks.length})</p>
+      {tasks.length === 0 ? (
+        <div className="text-center py-12 space-y-2">
+          <ListTodo className="w-10 h-10 text-muted-foreground/20 mx-auto" />
+          <p className="text-sm text-muted-foreground font-mono">No tasks yet — enroll the team in a project first.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {tasks.map((t, i) => (
+            <div key={t.id} className="bg-card/60 border border-border/40 rounded-xl p-4 flex items-center gap-3 animate-pop-in" style={{ animationDelay: `${i * 30}ms` }}>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-sm text-foreground truncate">{t.name}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <span className="text-[10px] text-muted-foreground font-mono">{t.project_name}</span>
+                  <Badge variant="outline" className="text-[9px]">{t.verificationType || t.verification_type}</Badge>
+                </div>
+              </div>
+              {team.myRole === "leader" && (
+                <Button size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={() => openEnroll(t)}>
+                  Enroll Team
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <Dialog open={!!enrollTask} onOpenChange={(o) => !o && setEnrollTask(null)}>
+        <DialogContent className="sm:max-w-sm bg-card border-border">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><ListTodo className="w-4 h-4 text-primary" /> Enroll Team in Task</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-foreground font-semibold">{enrollTask?.name}</p>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground font-mono">Team Vault Entity (optional)</label>
+              <select value={selVaultId} onChange={e => setSelVaultId(e.target.value)}
+                className="w-full h-9 text-sm bg-background/50 border border-border rounded-md px-2">
+                <option value="">None</option>
+                {vaultEntries.map(v => <option key={v.id} value={v.id}>{v.project_name} (#{v.entity_serial})</option>)}
+              </select>
+            </div>
+            <p className="text-[10px] text-muted-foreground font-mono">Each active team member will get a pending submission to complete.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setEnrollTask(null)}>Cancel</Button>
+            <Button size="sm" onClick={enrollTeamInTask} disabled={saving}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null} Enroll Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -931,13 +1163,7 @@ export default function TeamsPage() {
           {tab === "members"     && <TeamMembers team={selectedTeam} onRefresh={() => loadTeamDetail(selectedTeam.id)} />}
           {tab === "chat"        && <TeamChat team={selectedTeam} currentUserId={user?.id ?? 0} />}
           {tab === "vault"       && <TeamVault team={selectedTeam} />}
-          {tab === "tasks"       && (
-            <div className="text-center py-16 space-y-3">
-              <ListTodo className="w-10 h-10 text-muted-foreground/20 mx-auto" />
-              <p className="text-sm text-muted-foreground font-mono">Team tasks are tracked via Projects.</p>
-              <Button size="sm" variant="outline" onClick={() => setTab("projects")}>View Projects</Button>
-            </div>
-          )}
+          {tab === "tasks"       && <TeamTasks team={selectedTeam} />}
           {tab === "missions"    && <TeamMissions team={selectedTeam} />}
           {tab === "leaderboard" && <TeamLeaderboard team={selectedTeam} />}
           {tab === "projects"    && <TeamProjects team={selectedTeam} />}

@@ -130,19 +130,19 @@ router.post("/checkin", requireAuth, async (req, res): Promise<void> => {
       [userId, todayStr, streakDay, xpEarned, aznEarned]
     );
 
-    // Award XP (update users table xp column if exists)
+    // Update streak counters on users table (best-effort; columns are optional)
     await client.query(
-      `UPDATE users SET xp = COALESCE(xp, 0) + $1 WHERE id = $2`,
-      [xpEarned, userId]
-    ).catch(() => {}); // ignore if xp column doesn't exist
+      `UPDATE users SET streak = $1, longest_streak = GREATEST(COALESCE(longest_streak, 0), $1) WHERE id = $2`,
+      [streakDay, userId]
+    );
 
-    // Award AZN via credits table
-    const creditDesc = `Daily check-in (Day ${streakDay}${milestone ? ` · ${milestone}` : ""})`;
+    // Award AZN via credits table (upsert on user_id)
     await client.query(
-      `INSERT INTO credits (user_id, amount, status, description, approved_at, approved_by)
-       VALUES ($1, $2, 'approved', $3, NOW(), 0)`,
-      [userId, aznEarned, creditDesc]
-    ).catch(() => {}); // ignore if table shape differs
+      `INSERT INTO credits (user_id, balance, azn_balance, total_purchased, total_spent, created_at, updated_at)
+       VALUES ($1, 0, $2, 0, 0, NOW(), NOW())
+       ON CONFLICT (user_id) DO UPDATE SET azn_balance = credits.azn_balance + $2, updated_at = NOW()`,
+      [userId, aznEarned]
+    );
 
     await client.query("COMMIT");
 

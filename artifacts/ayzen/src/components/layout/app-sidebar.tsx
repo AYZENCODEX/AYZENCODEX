@@ -185,6 +185,7 @@ const USER_NAV: NavGroup[] = [
     items: [
       { href: "/subscription",  label: "Subscription",  icon: Star },
       { href: "/settings",      label: "Settings",      icon: Settings },
+      { href: "/security",      label: "Security",      icon: ShieldCheck },
     ],
   },
 ];
