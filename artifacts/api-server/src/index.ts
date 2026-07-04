@@ -5,18 +5,10 @@ import { initTelegramBot, stopTelegramBot } from "./lib/telegram";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
-const rawPort = process.env["PORT"];
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
+const rawPort = process.env["AYZEN_API_PORT"] ?? process.env["PORT"] ?? "8080";
 const port = Number(rawPort);
-
 if (Number.isNaN(port) || port <= 0) {
-  throw new Error(`Invalid PORT value: "${rawPort}"`);
+  throw new Error(`Invalid port value: "${rawPort}"`);
 }
 
 const MIGRATIONS = [
