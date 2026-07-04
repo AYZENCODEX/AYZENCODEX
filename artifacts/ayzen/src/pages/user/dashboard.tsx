@@ -261,10 +261,10 @@ export default function UserDashboard() {
   }));
 
   return (
-    <div className="space-y-6 page-enter">
+    <div className="space-y-5 page-enter">
       <StatsBar />
 
-      {/* Compact header */}
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           {userLoading ? <Skeleton className="h-6 w-40 mb-1" /> : (
@@ -278,99 +278,104 @@ export default function UserDashboard() {
         <LiveDot />
       </div>
 
-      {/* Primary stat cards — top row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
-        <StatCard label="Total ROI" value={`$${(stats?.totalRoi ?? 0).toLocaleString()}`}
+      {/* ── Row 1: 2 featured stats ── */}
+      <div className="grid grid-cols-2 gap-4">
+        <StatCard label="Total ROI" value={`${(stats?.totalRoi ?? 0).toLocaleString()}`}
           numericValue={stats?.totalRoi ?? 0}
           icon={Zap} color="text-primary" sub="Cumulative earnings" loading={statsLoading} />
-        <StatCard label="Tasks Completed" value={(stats?.tasksCompleted ?? 0).toLocaleString()}
-          numericValue={stats?.tasksCompleted ?? 0}
-          icon={CheckSquare} color="text-emerald-400"
-          sub={pendingTasks > 0 ? `${pendingTasks} pending` : "All caught up"} loading={statsLoading} />
-        <StatCard label="Current Rank" value={stats?.rank ? `#${stats.rank.toLocaleString()}` : "—"}
-          icon={Trophy} color="text-amber-400"
-          sub={`of ${stats?.totalUsers ?? "?"} operators`} loading={statsLoading} />
-        <StatCard label="Streak" value={`${stats?.streak ?? 0}d`}
-          numericValue={stats?.streak ?? 0}
-          icon={Activity} color="text-violet-400"
-          sub="Consecutive days active" loading={statsLoading} />
-      </div>
-
-      {/* Secondary stat cards — bottom row */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
-        <StatCard label="Active Protocols" value={activeProjects.toLocaleString()}
-          numericValue={activeProjects}
-          icon={FolderGit2} color="text-cyan-400" sub={`of ${projectList.length} total`} loading={projLoading} />
-        <StatCard label="Wallet Balance" value={walletUsd !== null ? `$${walletUsd.toFixed(2)}` : "—"}
-          numericValue={walletUsd ?? 0}
-          icon={Wallet} color="text-emerald-400" sub={`${walletCount} wallet${walletCount !== 1 ? "s" : ""} tracked`} loading={statsLoading} />
-        <StatCard label="Pending Tasks" value={pendingTasks.toLocaleString()}
-          numericValue={pendingTasks}
-          icon={ListTodo} color="text-amber-400" sub="Awaiting completion" loading={tasksLoading} />
         <StatCard label="AZN Earned" value={`${Math.round((stats?.totalRoi ?? 0) * 1.5).toLocaleString()}`}
           numericValue={Math.round((stats?.totalRoi ?? 0) * 1.5)}
           icon={Coins} color="text-violet-400" sub="Lifetime token rewards" loading={statsLoading} />
       </div>
 
-      {/* Graph — ROI Trend */}
-      <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-card-border flex items-center justify-between">
-          <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
-            <TrendingUp className="w-3.5 h-3.5" /> ROI Trend
-          </div>
-          <span className="text-[10px] font-mono text-muted-foreground/50">weekly</span>
-        </div>
-        <div className="px-2 py-3 h-48">
-          {roiData.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <Skeleton className="h-24 w-full mx-4" />
+      {/* ── Row 2: 3 secondary stats ── */}
+      <div className="grid grid-cols-3 gap-3">
+        <StatCard label="Tasks Done" value={(stats?.tasksCompleted ?? 0).toLocaleString()}
+          numericValue={stats?.tasksCompleted ?? 0}
+          icon={CheckSquare} color="text-emerald-400"
+          sub={pendingTasks > 0 ? `${pendingTasks} pending` : "All caught up"} loading={statsLoading} />
+        <StatCard label="Rank" value={stats?.rank ? `#${stats.rank.toLocaleString()}` : "—"}
+          icon={Trophy} color="text-amber-400"
+          sub={`of ${stats?.totalUsers ?? "?"}`} loading={statsLoading} />
+        <StatCard label="Streak" value={`${stats?.streak ?? 0}d`}
+          numericValue={stats?.streak ?? 0}
+          icon={Activity} color="text-violet-400"
+          sub="Days active" loading={statsLoading} />
+      </div>
+
+      {/* ── Row 3: ROI chart + Activity bar side by side ── */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* ROI Trend */}
+        <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-card-border flex items-center justify-between">
+            <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
+              <TrendingUp className="w-3.5 h-3.5" /> ROI Trend
             </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={roiData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="roiGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(174 100% 42%)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="hsl(174 100% 42%)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.3)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="roi" name="ROI" stroke="hsl(174 100% 42%)" strokeWidth={2} fill="url(#roiGrad)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
+            <span className="text-[10px] font-mono text-muted-foreground/50">weekly</span>
+          </div>
+          <div className="px-2 py-3 h-44">
+            {roiData.length === 0 ? (
+              <div className="h-full flex items-center justify-center"><Skeleton className="h-20 w-full mx-4" /></div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={roiData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="roiGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(174 100% 42%)" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="hsl(174 100% 42%)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.3)" vertical={false} />
+                  <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Area type="monotone" dataKey="roi" name="ROI" stroke="hsl(174 100% 42%)" strokeWidth={2} fill="url(#roiGrad)" dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
+
+        {/* Weekly Activity bar */}
+        <div className="bg-card border border-card-border rounded-xl overflow-hidden">
+          <div className="px-5 py-3 border-b border-card-border flex items-center justify-between">
+            <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
+              <CheckSquare className="w-3.5 h-3.5" /> Weekly Activity
+            </div>
+            <span className="text-[10px] font-mono text-muted-foreground/50">last 8 weeks</span>
+          </div>
+          <div className="px-2 py-3 h-44">
+            {chartData.length === 0 ? (
+              <div className="h-full flex items-center justify-center"><Skeleton className="h-20 w-full mx-4" /></div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.3)" vertical={false} />
+                  <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(174 100% 42% / 0.05)" }} />
+                  <Bar dataKey="submitted" name="Submitted" fill="hsl(174 100% 42% / 0.4)" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="approved" name="Approved" fill="hsl(174 100% 42%)" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Bar chart — Weekly Activity */}
-      <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-        <div className="px-5 py-3.5 border-b border-card-border flex items-center justify-between">
-          <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
-            <CheckSquare className="w-3.5 h-3.5" /> Weekly Activity
-          </div>
-          <span className="text-[10px] font-mono text-muted-foreground/50">last 8 weeks</span>
-        </div>
-        <div className="px-2 py-3 h-48">
-          {chartData.length === 0 ? (
-            <div className="h-full flex items-center justify-center">
-              <Skeleton className="h-24 w-full mx-4" />
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.3)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(174 100% 42% / 0.05)" }} />
-                <Bar dataKey="submitted" name="Submitted" fill="hsl(174 100% 42% / 0.4)" radius={[2, 2, 0, 0]} />
-                <Bar dataKey="approved" name="Approved" fill="hsl(174 100% 42%)" radius={[2, 2, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
+      {/* ── Row 4: extra stats row ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <StatCard label="Active Protocols" value={activeProjects.toLocaleString()}
+          numericValue={activeProjects}
+          icon={FolderGit2} color="text-cyan-400" sub={`of ${projectList.length} total`} loading={projLoading} />
+        <StatCard label="Wallet Balance" value={walletUsd !== null ? `${walletUsd.toFixed(2)}` : "—"}
+          numericValue={walletUsd ?? 0}
+          icon={Wallet} color="text-emerald-400" sub={`${walletCount} tracked`} loading={statsLoading} />
+        <StatCard label="Pending Tasks" value={pendingTasks.toLocaleString()}
+          numericValue={pendingTasks}
+          icon={ListTodo} color="text-amber-400" sub="Awaiting completion" loading={tasksLoading} />
+        <StatCard label="Radio" value="Online"
+          icon={Radio} color="text-primary" sub="Sync active" loading={false} />
       </div>
 
       {/* Info panels — Tasks + Protocols */}

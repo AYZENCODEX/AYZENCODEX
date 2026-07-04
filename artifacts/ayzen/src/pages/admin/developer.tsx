@@ -1001,9 +1001,28 @@ export default function AdminDeveloper() {
         <p className="text-muted-foreground font-mono text-sm">AI assistant, live logs, telemetry, and model registry</p>
       </div>
 
-      <div className="flex border border-card-border rounded-xl overflow-hidden min-h-[640px] bg-card">
-        {/* ── Left Sidebar ─────────────────────────────────────────────── */}
-        <nav className="w-48 shrink-0 border-r border-card-border bg-card/60 flex flex-col py-2">
+      <div className="flex flex-col md:flex-row border border-card-border rounded-xl overflow-hidden min-h-[640px] bg-card">
+        {/* ── Mobile nav: scrollable pill bar ──────────────────────────── */}
+        <div className="md:hidden flex gap-1 overflow-x-auto border-b border-card-border bg-card/60 px-3 py-2 shrink-0 no-scrollbar">
+          {DEV_SIDEBAR.map(item => (
+            <button
+              key={item.id}
+              onClick={() => setSection(item.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-mono font-medium whitespace-nowrap transition-all shrink-0",
+                section === item.id
+                  ? "bg-primary/15 text-primary border border-primary/30"
+                  : "text-muted-foreground border border-transparent hover:bg-muted/30 hover:text-foreground"
+              )}
+            >
+              <item.icon className="w-3.5 h-3.5 shrink-0" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Desktop sidebar ───────────────────────────────────────────── */}
+        <nav className="hidden md:flex w-48 shrink-0 border-r border-card-border bg-card/60 flex-col py-2">
           {DEV_SIDEBAR.map(item => (
             <button
               key={item.id}
@@ -1022,7 +1041,7 @@ export default function AdminDeveloper() {
         </nav>
 
         {/* ── Content Area ─────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-auto p-5 min-w-0">
+        <div className="flex-1 overflow-auto p-4 md:p-5 min-w-0">
 
           {section === "ai" && <AiChatTab token={token} />}
 

@@ -110,7 +110,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/">
-        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/home" />) : <Landing />}
+        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/dashboard" />) : <Landing />}
       </Route>
 
       <Route path="/login" component={Login} />
