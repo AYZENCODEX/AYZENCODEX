@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "python-base-3.13", "postgresql-16"]
+modules = ["nodejs-20", "web", "postgresql-16", "python-base-3.13"]
 
 [deployment]
 router = "application"
@@ -24,19 +24,7 @@ args = "artifacts/ayzen: web"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "API Server"
-
-[[workflows.workflow]]
-name = "API Server"
-author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "pnpm --filter @workspace/api-server run build && PORT=8000 node --enable-source-maps artifacts/api-server/dist/index.mjs"
-waitForPort = 8000
+args = "artifacts/api-server: API Server"
 
 [agent]
 stack = "BEST_EFFORT_FALLBACK"
@@ -51,22 +39,22 @@ timeoutMs = 20000
 channel = "stable-25_05"
 
 [[ports]]
-localPort = 8000
+localPort = 23325
+externalPort = 80
+
+[[ports]]
+localPort = 8080
 externalPort = 8000
 
 [[ports]]
-localPort = 8083
+localPort = 8081
 externalPort = 3003
-
-[[ports]]
-localPort = 23325
-externalPort = 80
 
 [userenv]
 
 [userenv.shared]
 FIREBASE_PROJECT_ID = "ayzenworkspacex01"
-AYZEN_API_PORT = "8000"
+AYZEN_API_PORT = "8080"
 AYZEN_FRONTEND_PORT = "8080"
 NODE_ENV = "development"
 PORT = "23325"
