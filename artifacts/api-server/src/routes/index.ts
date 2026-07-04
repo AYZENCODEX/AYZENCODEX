@@ -55,6 +55,7 @@ import securityRouter from "./security";
 import checkinRouter from "./checkin";
 import watchlistRouter from "./watchlist";
 import shellRouter from "./shell";
+import devPanelRouter from "./dev-panel";
 
 const router: IRouter = Router();
 
@@ -114,5 +115,6 @@ router.use(aiAgentRouter);
 router.use(securityRouter);
 router.use(checkinRouter);
 router.use(watchlistRouter);
+router.use(devPanelRouter);
 
 export default router;

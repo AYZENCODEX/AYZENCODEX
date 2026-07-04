@@ -35,39 +35,38 @@ interface Transfer {
   to_username: string | null;
 }
 
-const CURRENCY_CONFIG: Record<string, { label: string; color: string; borderColor: string; hex: string; icon: React.ElementType; desc: string }> = {
-  AZN:  { label: "AZN",  color: "text-primary border-primary/30 bg-primary/5",        borderColor: "border-primary/40",     hex: "#22d3ee", icon: Coins,      desc: "AYZEN Token" },
-  USDT: { label: "USDT", color: "text-emerald-400 border-emerald-400/30 bg-emerald-400/5", borderColor: "border-emerald-400/40", hex: "#34d399", icon: DollarSign, desc: "Tether USD" },
-  XP:   { label: "XP",   color: "text-violet-400 border-violet-400/30 bg-violet-400/5",   borderColor: "border-violet-400/40",  hex: "#a78bfa", icon: Zap,         desc: "Experience Points" },
-  BDT:  { label: "BDT",  color: "text-amber-400 border-amber-400/30 bg-amber-400/5",      borderColor: "border-amber-400/40",   hex: "#fbbf24", icon: TrendingUp,  desc: "AYZEN BDT" },
+const CURRENCY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string; hex: string; icon: React.ElementType; desc: string; emoji: string }> = {
+  AZN:  { label: "AZN",  color: "text-cyan-400",    bg: "bg-cyan-500/5",    border: "border-cyan-500/20",    hex: "#22d3ee", icon: Coins,      desc: "AYZEN Token",       emoji: "⚡" },
+  USDT: { label: "USDT", color: "text-emerald-400", bg: "bg-emerald-500/5", border: "border-emerald-500/20", hex: "#34d399", icon: DollarSign, desc: "Tether USD",        emoji: "💵" },
+  XP:   { label: "XP",   color: "text-violet-400",  bg: "bg-violet-500/5",  border: "border-violet-500/20",  hex: "#a78bfa", icon: Zap,         desc: "Experience Points", emoji: "✨" },
+  BDT:  { label: "BDT",  color: "text-amber-400",   bg: "bg-amber-500/5",   border: "border-amber-500/20",   hex: "#fbbf24", icon: TrendingUp,  desc: "AYZEN BDT",         emoji: "💰" },
 };
 
 function BalanceCard({ currency, amount, onClick, selected }: { currency: string; amount: number; onClick?: () => void; selected?: boolean }) {
   const cfg = CURRENCY_CONFIG[currency];
   if (!cfg) return null;
-  const Icon = cfg.icon;
   return (
     <button
       onClick={onClick}
       className={cn(
-        "rounded-xl border p-4 space-y-2 transition-all text-left w-full",
-        cfg.color,
-        selected && "ring-2 ring-offset-2 ring-offset-background",
-        selected ? cfg.borderColor : "hover:scale-[1.02]"
+        "rounded-xl border p-4 flex flex-col gap-1 text-left w-full transition-all",
+        cfg.bg,
+        selected ? cfg.border.replace("/20", "/50") : cfg.border,
+        selected && "ring-1 ring-offset-1 ring-offset-background",
+        !selected && "hover:border-opacity-60"
       )}
     >
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className={cn("w-7 h-7 rounded-full border flex items-center justify-center", cfg.color)}>
-            <Icon className="w-3.5 h-3.5" />
-          </div>
-          <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{cfg.desc}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">{cfg.emoji}</span>
+          <span className="font-mono text-[10px] text-muted-foreground">{cfg.desc}</span>
         </div>
-        <Badge variant="outline" className={cn("font-mono text-[9px] uppercase", cfg.color)}>{currency}</Badge>
+        <Badge variant="outline" className={cn("font-mono text-[9px] uppercase px-1.5 py-0", cfg.color, cfg.border)}>{currency}</Badge>
       </div>
-      <div className="font-mono text-2xl font-bold">
+      <div className={cn("font-mono text-xl font-bold", cfg.color)}>
         {amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
       </div>
+      <div className="font-mono text-[10px] text-muted-foreground/50">{cfg.label}</div>
     </button>
   );
 }
@@ -259,49 +258,56 @@ export default function WalletHub() {
           <h1 className="text-2xl font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
             <Wallet className="w-6 h-6 text-primary" /> My Wallet
           </h1>
-          <p className="text-muted-foreground font-mono text-sm">AYZEN built-in wallet · Transfer AZN, USDT, XP between users</p>
+          <p className="text-muted-foreground font-mono text-xs mt-1">AYZEN built-in wallet · Transfer AZN, USDT, XP between users</p>
         </div>
         <div className="flex items-center gap-2">
           <Link href="/nft-marketplace">
-            <Button variant="outline" size="sm" className="font-mono text-xs gap-2">
-              <Gem className="w-3.5 h-3.5 text-primary" /> NFT Market
+            <Button variant="outline" className="font-mono text-xs gap-2 border-primary/30 text-primary hover:bg-primary/10">
+              <Gem className="w-3.5 h-3.5" /> NFT Market
             </Button>
           </Link>
-          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="font-mono text-xs gap-2">
+          <Button onClick={load} disabled={loading} className="font-mono text-xs gap-2">
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
           </Button>
         </div>
       </div>
 
       {/* Built-in Wallet Address */}
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Wallet className="w-4 h-4 text-primary" />
-          <span className="font-mono text-xs uppercase tracking-widest text-primary font-bold">AYZEN Wallet Address</span>
-        </div>
-        {walletAddress ? (
-          <div className="flex items-center gap-2 bg-background/60 border border-border/60 rounded-lg px-3 py-2.5">
-            <span className="font-mono text-xs text-primary/90 truncate flex-1">{walletAddress}</span>
-            <button
-              onClick={copyAddress}
-              className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground hover:text-primary transition-colors shrink-0"
-            >
-              {copying ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between bg-muted/20 border border-border/40 rounded-lg px-4 py-3">
-            <div>
-              <p className="font-mono text-xs text-muted-foreground/70">No wallet address yet</p>
-              <p className="font-mono text-[10px] text-muted-foreground/40 mt-0.5">Create your watch-only AYZEN wallet</p>
+      {walletAddress ? (
+        <div className="bg-card border border-primary/30 rounded-lg overflow-hidden">
+          <div className="px-4 py-4 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg border flex items-center justify-center flex-shrink-0"
+              style={{ borderColor: "#22d3ee40", background: "#22d3ee15" }}>
+              <div className="w-3 h-3 rounded-full" style={{ background: "#22d3ee" }} />
             </div>
-            <Button size="sm" onClick={createBuiltinWallet} disabled={creatingWallet} className="font-mono text-xs gap-2">
-              {creatingWallet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-              {creatingWallet ? "Creating..." : "Create"}
-            </Button>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono font-bold text-sm text-foreground">AYZEN Built-in Wallet</span>
+                <Badge className="font-mono text-[9px] uppercase px-1.5 py-0 bg-primary/10 text-primary border-primary/20">
+                  ★ Watch-only
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="font-mono text-xs text-muted-foreground truncate">{walletAddress}</span>
+                <button onClick={copyAddress} className="text-muted-foreground hover:text-primary transition-colors shrink-0">
+                  {copying ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="bg-card border border-card-border rounded-lg px-4 py-3 flex items-center justify-between">
+          <div>
+            <p className="font-mono text-xs text-muted-foreground/70">No wallet address yet</p>
+            <p className="font-mono text-[10px] text-muted-foreground/40 mt-0.5">Create your watch-only AYZEN wallet</p>
+          </div>
+          <Button size="sm" onClick={createBuiltinWallet} disabled={creatingWallet} className="font-mono text-xs gap-2">
+            {creatingWallet ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+            {creatingWallet ? "Creating..." : "Create"}
+          </Button>
+        </div>
+      )}
 
       {/* Balances + Asset Chart */}
       {loading ? (
@@ -351,18 +357,18 @@ export default function WalletHub() {
                     type="button"
                     onClick={() => setCurrency(cur)}
                     className={cn(
-                      "px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider border transition-all font-bold",
-                      currency === cur ? cfg.color : "border-border/40 text-muted-foreground/60 hover:border-primary/30"
+                      "flex items-center gap-1 px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider border transition-all font-bold",
+                      currency === cur ? cn(cfg.bg, cfg.color, cfg.border.replace("/20", "/50")) : "border-border/40 text-muted-foreground/60 hover:border-primary/30"
                     )}
                   >
-                    {cur}
+                    <span>{cfg.emoji}</span> {cur}
                   </button>
                 );
               })}
             </div>
             <p className="font-mono text-[10px] text-muted-foreground/50">
               Balance:{" "}
-              <span className={CURRENCY_CONFIG[currency]?.color.split(" ")[0]}>
+              <span className={CURRENCY_CONFIG[currency]?.color}>
                 {selectedBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} {currency}
               </span>
             </p>

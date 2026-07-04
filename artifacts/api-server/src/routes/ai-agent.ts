@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { requireAdmin } from "../middlewares/auth";
+import { requireRoles } from "../middlewares/auth";
 import { exec } from "child_process";
 import { promisify } from "util";
 
 const router = Router();
+const requireAdmin = requireRoles("admin", "dev");
 const execAsync = promisify(exec);
 
 // ── Model catalogues ──────────────────────────────────────────────────────────

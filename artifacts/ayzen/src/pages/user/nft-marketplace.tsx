@@ -116,110 +116,6 @@ function PlanBadge({ plan }: { plan: string }) {
   );
 }
 
-// ── Mint Modal ─────────────────────────────────────────────────────────────────
-
-function MintModal({ onClose, onSuccess, token }: { onClose: () => void; onSuccess: () => void; token: string }) {
-  const { toast } = useToast();
-  const [plan, setPlan] = useState("pro");
-  const [badgeName, setBadgeName] = useState("Pioneer");
-  const [minting, setMinting] = useState(false);
-
-  const cfg = PLAN_CONFIG[plan];
-
-  const handleMint = async () => {
-    setMinting(true);
-    try {
-      const r = await fetch(`${BASE}/api/nft-subscriptions/mint`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ plan, badge_name: plan === "achievement_badge" ? badgeName : undefined }),
-      });
-      const d = await r.json();
-      if (r.ok) {
-        toast({
-          title: `🎉 NFT Minted!`,
-          description: `${cfg.label} — Token: ${d.nft?.token_id}`,
-        });
-        onSuccess(); onClose();
-      } else {
-        toast({ variant: "destructive", title: d.error ?? "Minting failed" });
-      }
-    } catch {
-      toast({ variant: "destructive", title: "Connection error" });
-    }
-    setMinting(false);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-card border border-primary/20 rounded-xl w-full max-w-lg mx-4 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
-          <div className="flex items-center gap-2">
-            <Gem className="w-4 h-4 text-primary" />
-            <span className="font-mono font-bold text-sm">Mint NFT</span>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-        </div>
-        <div className="px-5 py-4 space-y-4">
-          <div className="bg-primary/5 border border-primary/15 rounded-lg p-3 font-mono text-[11px] text-muted-foreground leading-relaxed">
-            Choose an NFT type to mint. Subscription passes grant platform access and can be resold. Username and badge NFTs are permanent collectibles.
-          </div>
-
-          {/* Category groups */}
-          {[
-            { heading: "Subscription Passes", plans: ["pro", "enterprise"] },
-            { heading: "Lifetime Passes", plans: ["lifetime_pro", "lifetime_enterprise"] },
-            { heading: "Username NFT", plans: ["username"] },
-          ].map(group => (
-            <div key={group.heading}>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-2">{group.heading}</div>
-              <div className="space-y-1.5">
-                {group.plans.map(key => {
-                  const c = PLAN_CONFIG[key];
-                  const Icon = c.icon;
-                  return (
-                    <button key={key} onClick={() => setPlan(key)}
-                      className={cn("w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left",
-                        plan === key ? `${c.color} ${c.bg} ${c.border}` : "border-border/40 hover:border-primary/20")}>
-                      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0", c.bg)}>
-                        <Icon className={cn("w-4 h-4", c.color)} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-mono font-bold text-sm">{c.label}</div>
-                        <div className="font-mono text-[10px] text-muted-foreground truncate">{c.description}</div>
-                      </div>
-                      <div className="font-mono text-sm font-bold text-primary flex-shrink-0">
-                        {c.aznCost === 0 ? "FREE" : `${c.aznCost} AZN`}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-
-          {/* Selected plan preview */}
-          <div className={cn("rounded-lg border p-3 flex items-center gap-3", cfg.bg, cfg.border)}>
-            <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", cfg.bg)}>
-              <cfg.icon className={cn("w-5 h-5", cfg.color)} />
-            </div>
-            <div className="flex-1">
-              <div className="font-mono font-bold text-sm">{cfg.label}</div>
-              <div className="font-mono text-[10px] text-muted-foreground">{cfg.durationLabel}</div>
-            </div>
-            <div className={cn("font-mono text-lg font-bold", cfg.color)}>{cfg.aznCost === 0 ? "FREE" : `${cfg.aznCost} AZN`}</div>
-          </div>
-
-          <Button onClick={handleMint} disabled={minting} className="w-full font-mono text-xs gap-2">
-            {minting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gem className="w-3.5 h-3.5" />}
-            {minting ? "Minting…" : `Mint NFT${cfg.aznCost > 0 ? ` — ${cfg.aznCost} AZN` : " (Free)"}`}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── List Modal ─────────────────────────────────────────────────────────────────
 
 function ListModal({ nft, onClose, onSuccess, token }: {
@@ -388,7 +284,6 @@ export default function NftMarketplace() {
   const [loading, setLoading] = useState(true);
   const [buying, setBuying] = useState<number | null>(null);
   const [tab, setTab] = useState<"marketplace" | "my-nfts">("marketplace");
-  const [showMint, setShowMint] = useState(false);
   const [listNft, setListNft] = useState<NftSubscription | null>(null);
   const [catFilter, setCatFilter] = useState("all");
 
@@ -438,7 +333,6 @@ export default function NftMarketplace() {
 
   return (
     <div className="space-y-5 page-enter">
-      {showMint && <MintModal onClose={() => setShowMint(false)} onSuccess={load} token={token ?? ""} />}
       {listNft && <ListModal nft={listNft} onClose={() => setListNft(null)} onSuccess={load} token={token ?? ""} />}
 
       {/* Header */}
@@ -447,14 +341,16 @@ export default function NftMarketplace() {
           <h2 className="text-lg font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
             <Gem className="w-5 h-5 text-primary" /> NFT Market
           </h2>
-          <p className="text-muted-foreground font-mono text-[11px] mt-0.5">Mint, buy, and trade AYZEN NFTs</p>
+          <p className="text-muted-foreground font-mono text-[11px] mt-0.5">Buy and trade AYZEN NFTs — new NFTs are minted automatically when you purchase a subscription</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} className="font-mono text-xs gap-1.5 h-8">
             <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
           </Button>
-          <Button size="sm" onClick={() => setShowMint(true)} className="font-mono text-xs gap-1.5 h-8">
-            <Gem className="w-3.5 h-3.5" /> Mint NFT
+          <Button asChild size="sm" className="font-mono text-xs gap-1.5 h-8">
+            <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/subscription`}>
+              <Gem className="w-3.5 h-3.5" /> Get a Subscription NFT
+            </a>
           </Button>
         </div>
       </div>
@@ -529,9 +425,11 @@ export default function NftMarketplace() {
           <div className="py-12 text-center bg-card border border-border/30 rounded-xl">
             <ShoppingCart className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
             <p className="font-mono text-sm text-muted-foreground">No NFTs listed for sale</p>
-            <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">Mint an NFT and list it to earn AZN</p>
-            <Button size="sm" onClick={() => setShowMint(true)} className="mt-4 font-mono text-xs gap-1.5">
-              <Gem className="w-3.5 h-3.5" /> Mint First NFT
+            <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">Buy a subscription to get an NFT, then list it to earn AZN</p>
+            <Button asChild size="sm" className="mt-4 font-mono text-xs gap-1.5">
+              <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/subscription`}>
+                <Gem className="w-3.5 h-3.5" /> View Subscriptions
+              </a>
             </Button>
           </div>
         ) : (
@@ -553,8 +451,11 @@ export default function NftMarketplace() {
           <div className="py-12 text-center bg-card border border-border/30 rounded-xl">
             <Lock className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
             <p className="font-mono text-sm text-muted-foreground">No NFTs in your wallet</p>
-            <Button size="sm" onClick={() => setShowMint(true)} className="mt-4 font-mono text-xs gap-1.5">
-              <Gem className="w-3.5 h-3.5" /> Mint Your First NFT
+            <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">NFTs are minted automatically when you purchase a subscription</p>
+            <Button asChild size="sm" className="mt-4 font-mono text-xs gap-1.5">
+              <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/subscription`}>
+                <Gem className="w-3.5 h-3.5" /> View Subscriptions
+              </a>
             </Button>
           </div>
         ) : (

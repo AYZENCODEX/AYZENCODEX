@@ -148,7 +148,12 @@ function AznBuyButton({ plan, aznCost, isActive, token, onSuccess, btnClass }: {
       });
       const d = await r.json();
       if (r.ok) {
-        toast({ title: `✅ ${plan.charAt(0).toUpperCase() + plan.slice(1)} activated!`, description: `Spent ${aznCost} AZN. Expires ${new Date(d.expiresAt).toLocaleDateString()}.` });
+        toast({
+          title: `✅ ${plan.charAt(0).toUpperCase() + plan.slice(1)} activated!`,
+          description: d.nft
+            ? `Spent ${aznCost} AZN. NFT auto-minted: ${d.nft.token_id}. Expires ${new Date(d.expiresAt).toLocaleDateString()}.`
+            : `Spent ${aznCost} AZN. Expires ${new Date(d.expiresAt).toLocaleDateString()}.`,
+        });
         onSuccess();
       } else {
         toast({ variant: "destructive", title: d.error ?? "Purchase failed" });

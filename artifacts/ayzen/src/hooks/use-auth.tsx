@@ -8,6 +8,8 @@ interface AuthContextType {
   login: (user: User, token: string, keepSignedIn?: boolean) => void;
   logout: () => void;
   isAdmin: boolean;
+  isDev: boolean;
+  isModerator: boolean;
   isLoading: boolean;
 }
 
@@ -66,7 +68,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [doLogout]);
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isAdmin: user?.role === "admin", isLoading }}>
+    <AuthContext.Provider value={{
+      user, token, login, logout,
+      isAdmin: user?.role === "admin",
+      isDev: user?.role === "dev",
+      isModerator: user?.role === "moderator",
+      isLoading,
+    }}>
       {children}
     </AuthContext.Provider>
   );

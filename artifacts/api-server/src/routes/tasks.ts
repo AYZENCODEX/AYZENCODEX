@@ -5,7 +5,7 @@ import { broadcastEvent, broadcastToUser } from "./events";
 import { notifyTaskVerified } from "../lib/telegram";
 import { createNotification } from "./notifications";
 import { logActivity } from "../lib/activity";
-import { requireAdmin, requireAuth } from "../middlewares/auth";
+import { requireAdmin, requireAuth, requireRoles } from "../middlewares/auth";
 
 const router = Router();
 
@@ -100,7 +100,7 @@ router.get("/tasks", async (req, res): Promise<void> => {
 });
 
 // ── POST /tasks — create task ───────────────────────────────────────────────
-router.post("/tasks", requireAdmin, async (req, res): Promise<void> => {
+router.post("/tasks", requireRoles("admin", "moderator"), async (req, res): Promise<void> => {
   const { projectId, name, description, rewardAmount, verificationType, taskType, cost, profit, category, taskCategory, deadline, timeLimitMinutes, xpAmount, steps, priority, difficultyLevel, estimatedCost, estimatedProfit } = req.body;
   if (!name) { res.status(400).json({ error: "name is required" }); return; }
   const projIdSql = projectId ? `${Number(projectId)}` : "NULL";

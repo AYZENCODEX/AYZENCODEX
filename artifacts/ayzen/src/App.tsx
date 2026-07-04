@@ -48,6 +48,7 @@ const AdminHealthRules  = lazy(() => import("@/pages/admin/health-rules"));
 const AdminTeams        = lazy(() => import("@/pages/admin/teams"));
 const AdminTeamVault    = lazy(() => import("@/pages/admin/team-vault"));
 const AdminAiAgent      = lazy(() => import("@/pages/admin/ai-agent"));
+const DevAznDeploy      = lazy(() => import("@/pages/dev/azn-deploy"));
 
 const UserHome          = lazy(() => import("@/pages/user/home"));
 const UserDashboard     = lazy(() => import("@/pages/user/dashboard"));
@@ -94,12 +95,16 @@ function PageLoader() {
   );
 }
 
-function ProtectedRoute({ component: Component, adminOnly = false, ...rest }: any) {
-  const { user, isAdmin, isLoading } = useAuth();
+function ProtectedRoute({ component: Component, adminOnly = false, allowedRoles, ...rest }: any) {
+  const { user, isAdmin, isDev, isModerator, isLoading } = useAuth();
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono">INITIALIZING...</div>;
   if (!user) return <Redirect to="/login" />;
-  if (adminOnly && !isAdmin) return <Redirect to="/dashboard" />;
+  if (adminOnly && !isAdmin && !isDev) return <Redirect to="/dashboard" />;
+  if (allowedRoles) {
+    const roleOk = allowedRoles.includes(user.role);
+    if (!roleOk) return <Redirect to="/dashboard" />;
+  }
 
   return (
     <AppLayout>
@@ -111,12 +116,18 @@ function ProtectedRoute({ component: Component, adminOnly = false, ...rest }: an
 }
 
 function Router() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, isDev, isModerator } = useAuth();
 
   return (
     <Switch>
       <Route path="/">
-        {user ? (isAdmin ? <Redirect to="/admin/dashboard" /> : <Redirect to="/home" />) : <Landing />}
+        {user
+          ? (isAdmin || isDev)
+            ? <Redirect to="/admin/dashboard" />
+            : isModerator
+              ? <Redirect to="/admin/projects" />
+              : <Redirect to="/home" />
+          : <Landing />}
       </Route>
 
       <Route path="/login" component={Login} />
@@ -126,9 +137,9 @@ function Router() {
       {/* Admin Routes */}
       <Route path="/admin/dashboard">{() => <ProtectedRoute component={AdminDashboard} adminOnly />}</Route>
       <Route path="/admin/users">{() => <ProtectedRoute component={AdminUsers} adminOnly />}</Route>
-      <Route path="/admin/projects">{() => <ProtectedRoute component={AdminProjects} adminOnly />}</Route>
+      <Route path="/admin/projects">{() => <ProtectedRoute component={AdminProjects} allowedRoles={["admin", "dev", "moderator"]} />}</Route>
       <Route path="/admin/projects/:id">{() => <ProtectedRoute component={AdminProjectDetail} adminOnly />}</Route>
-      <Route path="/admin/tasks">{() => <ProtectedRoute component={AdminTasks} adminOnly />}</Route>
+      <Route path="/admin/tasks">{() => <ProtectedRoute component={AdminTasks} allowedRoles={["admin", "dev", "moderator"]} />}</Route>
       <Route path="/admin/tools/gas">{() => <ProtectedRoute component={AdminGas} adminOnly />}</Route>
       <Route path="/admin/tools/wallet">{() => <ProtectedRoute component={AdminWallet} adminOnly />}</Route>
       <Route path="/admin/tools/streak">{() => <ProtectedRoute component={AdminStreak} adminOnly />}</Route>
@@ -137,7 +148,7 @@ function Router() {
       <Route path="/admin/vault">{() => <ProtectedRoute component={AdminVault} adminOnly />}</Route>
       <Route path="/admin/plugins">{() => <ProtectedRoute component={AdminPlugins} adminOnly />}</Route>
       <Route path="/admin/settings">{() => <ProtectedRoute component={AdminSettings} adminOnly />}</Route>
-      <Route path="/admin/developer">{() => <ProtectedRoute component={AdminDeveloper} adminOnly />}</Route>
+      <Route path="/admin/developer">{() => <ProtectedRoute component={AdminDeveloper} allowedRoles={["admin", "dev"]} />}</Route>
       <Route path="/admin/support">{() => <ProtectedRoute component={AdminSupport} adminOnly />}</Route>
       <Route path="/admin/referrals">{() => <ProtectedRoute component={AdminReferrals} adminOnly />}</Route>
       <Route path="/admin/credits">{() => <ProtectedRoute component={AdminCreditsPage} adminOnly />}</Route>
@@ -146,10 +157,13 @@ function Router() {
       <Route path="/admin/categories">{() => <ProtectedRoute component={AdminCategories} adminOnly />}</Route>
       <Route path="/admin/tools/networks">{() => <ProtectedRoute component={AdminNetworks} adminOnly />}</Route>
       <Route path="/admin/health-rules">{() => <ProtectedRoute component={AdminHealthRules} adminOnly />}</Route>
-      <Route path="/admin/teams">{() => <ProtectedRoute component={AdminTeams} adminOnly />}</Route>
+      <Route path="/admin/teams">{() => <ProtectedRoute component={AdminTeams} allowedRoles={["admin", "dev", "moderator"]} />}</Route>
       <Route path="/admin/team-vault">{() => <ProtectedRoute component={AdminTeamVault} adminOnly />}</Route>
-      <Route path="/admin/marketplace">{() => <ProtectedRoute component={AdminMarketplace} adminOnly />}</Route>
-      <Route path="/admin/ai-agent">{() => <ProtectedRoute component={AdminAiAgent} adminOnly />}</Route>
+      <Route path="/admin/marketplace">{() => <ProtectedRoute component={AdminMarketplace} allowedRoles={["admin", "dev"]} />}</Route>
+      <Route path="/admin/ai-agent">{() => <ProtectedRoute component={AdminAiAgent} allowedRoles={["admin", "dev"]} />}</Route>
+
+      {/* Dev-only Routes */}
+      <Route path="/dev/azn-deploy">{() => <ProtectedRoute component={DevAznDeploy} allowedRoles={["dev", "admin"]} />}</Route>
 
       {/* User Routes */}
       <Route path="/home">{() => <ProtectedRoute component={UserHome} />}</Route>

@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, creditsTable, creditTransactionsTable, subscriptionsTable } from "@workspace/db";
 import { eq, desc, and } from "drizzle-orm";
 import { broadcastEvent } from "./events";
+import { mintNftForUser } from "./nft-subscriptions";
 
 const router = Router();
 
@@ -145,7 +146,7 @@ router.post("/credits/buy-subscription", async (req, res): Promise<void> => {
   const authUser = getAuthUser(req);
   if (!authUser) { res.status(401).json({ error: "Unauthorized" }); return; }
 
-  const { plan } = req.body as { plan?: string };
+  const { plan, username } = req.body as { plan?: string; username?: string };
   if (!plan || !["pro", "enterprise"].includes(plan)) {
     res.status(400).json({ error: "Invalid plan. Choose pro or enterprise" }); return;
   }
@@ -185,7 +186,20 @@ router.post("/credits/buy-subscription", async (req, res): Promise<void> => {
   });
 
   broadcastEvent("subscription_updated", { userId: authUser.id, plan });
-  res.json({ success: true, plan, expiresAt, aznSpent: aznCost, newAznBalance: creditRow.aznBalance - aznCost });
+
+  // Auto-mint the subscription-pass NFT — AZN was already charged above, so skip re-deducting.
+  let nft = null;
+  try {
+    const minted = await mintNftForUser({ userId: authUser.id, plan, username, deductAzn: false });
+    nft = minted.nft;
+  } catch (err) {
+    // Subscription purchase itself succeeded — NFT mint failure shouldn't block the response,
+    // but it is surfaced so the frontend/user knows the collectible wasn't issued.
+    res.json({ success: true, plan, expiresAt, aznSpent: aznCost, newAznBalance: creditRow.aznBalance - aznCost, nft: null, nftError: (err as Error).message });
+    return;
+  }
+
+  res.json({ success: true, plan, expiresAt, aznSpent: aznCost, newAznBalance: creditRow.aznBalance - aznCost, nft });
 });
 
 // ─── ADMIN: GET /api/admin/credits — pending purchases ────────────────────────

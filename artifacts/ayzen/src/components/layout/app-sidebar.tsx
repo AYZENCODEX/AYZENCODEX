@@ -109,6 +109,63 @@ const ADMIN_NAV: NavGroup[] = [
   },
 ];
 
+const DEV_NAV: NavGroup[] = [
+  {
+    label: "Developer", icon: Code2,
+    items: [
+      { href: "/admin/developer?tab=console",   label: "Live Console", icon: Terminal },
+      { href: "/admin/developer?tab=telemetry", label: "Telemetry",    icon: Activity },
+      { href: "/admin/developer?tab=ping",      label: "Ping Test",    icon: RefreshCwIcon },
+      { href: "/admin/developer?tab=functions", label: "Functions",    icon: Server },
+      { href: "/admin/developer?tab=errors",    label: "Error Log",    icon: XCircle },
+      { href: "/admin/developer?tab=shell",     label: "Shell",        icon: TerminalSquare },
+      { href: "/admin/developer?tab=db",        label: "Database",     icon: Database },
+    ],
+  },
+  {
+    label: "AI Agent", icon: BotIcon,
+    items: [
+      { href: "/admin/ai-agent",              label: "AI Assistant",  icon: BotIcon },
+      { href: "/admin/ai-agent?tab=models",   label: "AI Models",     icon: Cpu },
+      { href: "/admin/ai-agent?tab=settings", label: "AI Settings",   icon: Settings },
+    ],
+  },
+  {
+    label: "NFT System", icon: Image,
+    items: [
+      { href: "/admin/marketplace?tab=nft", label: "NFT Admin", icon: Image },
+    ],
+  },
+  {
+    label: "AZN Tools", icon: Coins,
+    items: [
+      { href: "/dev/azn-deploy", label: "AZN Deploy", icon: DollarSign },
+    ],
+  },
+  {
+    label: "Overview", icon: LayoutDashboard,
+    items: [
+      { href: "/admin/dashboard", label: "Global Dashboard", icon: LayoutDashboard },
+    ],
+  },
+];
+
+const MODERATOR_NAV: NavGroup[] = [
+  {
+    label: "Protocols", icon: FolderGit2,
+    items: [
+      { href: "/admin/projects", label: "Create Projects", icon: FolderGit2 },
+      { href: "/admin/tasks",    label: "Create Tasks",    icon: CheckSquare },
+    ],
+  },
+  {
+    label: "Teams", icon: Users,
+    items: [
+      { href: "/admin/teams", label: "Approve Teams", icon: ShieldCheck },
+    ],
+  },
+];
+
 const USER_NAV: NavGroup[] = [
   {
     label: "Command", icon: LayoutDashboard,
@@ -437,10 +494,10 @@ function useThemeToggle() {
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
   const [location, navigate] = useLocation();
   const search = useSearch();
-  const { isAdmin, logout, user } = useAuth();
+  const { isAdmin, isDev, isModerator, logout, user } = useAuth();
   const { isEnabled } = usePlugins();
   const { isDark, toggle: toggleTheme } = useThemeToggle();
-  const groups = isAdmin ? ADMIN_NAV : USER_NAV;
+  const groups = isAdmin ? ADMIN_NAV : isDev ? DEV_NAV : isModerator ? MODERATOR_NAV : USER_NAV;
 
   const openSearch = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
   const openShortcuts = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));

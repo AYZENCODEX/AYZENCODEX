@@ -501,7 +501,7 @@ router.patch("/teams/:id/invites/respond", requireAuth, async (req, res): Promis
 
 // ── Admin: GET /admin/teams — all teams with status ───────────────────────────
 router.get("/admin/teams", requireAuth, async (req, res): Promise<void> => {
-  if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
+  if (req.user!.role !== "admin" && req.user!.role !== "operator" && req.user!.role !== "moderator") { res.status(403).json({ error: "Admin only" }); return; }
   const { status } = req.query as Record<string, string>;
   let q = `SELECT t.*, u.username as owner_username,
     (SELECT COUNT(*) FROM team_members WHERE team_id = t.id AND status = 'active') as member_count,
@@ -530,9 +530,12 @@ router.get("/admin/team-vault", requireAuth, async (req, res): Promise<void> => 
 
 // ── Admin: PATCH /admin/teams/:id — approve/reject/update team ────────────────
 router.patch("/admin/teams/:id", requireAuth, async (req, res): Promise<void> => {
-  if (req.user!.role !== "admin" && req.user!.role !== "operator") { res.status(403).json({ error: "Admin only" }); return; }
+  const role = req.user!.role;
+  const isModerator = role === "moderator";
+  if (role !== "admin" && role !== "operator" && !isModerator) { res.status(403).json({ error: "Admin only" }); return; }
   const teamId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
   const { status, name, description } = req.body;
+  if (isModerator && (name || description)) { res.status(403).json({ error: "Moderators can only approve/reject teams, not edit them" }); return; }
   if (!status && !name && !description) { res.status(400).json({ error: "Nothing to update" }); return; }
   try {
     // Build update dynamically

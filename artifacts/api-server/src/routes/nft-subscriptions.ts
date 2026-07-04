@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db, pool } from "@workspace/db";
 import { sql } from "drizzle-orm";
-import { requireAuth, requireAdmin } from "../middlewares/auth";
+import { requireAuth, requireAdmin, requireRoles } from "../middlewares/auth";
 import crypto from "crypto";
 
 const router = Router();
@@ -232,25 +232,29 @@ function generateNftMetadata(plan: string, userId: number, tokenId: string, opts
   };
 }
 
-// ── POST /nft-subscriptions/mint ─────────────────────────────────────────────
+// ── Shared mint helper — used by manual /mint route AND auto-mint on subscription purchase ──
 
-router.post("/nft-subscriptions/mint", requireAuth, async (req, res): Promise<void> => {
-  const userId = req.user!.userId;
-  const { plan, badge_name } = req.body as { plan?: string; badge_name?: string };
+export async function mintNftForUser(opts: {
+  userId: number;
+  plan: string;
+  badgeName?: string;
+  username?: string;
+  deductAzn?: boolean; // false when AZN was already charged by the caller (e.g. subscription purchase)
+}): Promise<{ nft: any; aznSpent: number; expiresAt: Date }> {
+  const { userId, plan, badgeName, deductAzn = true } = opts;
 
   const validPlans = Object.keys(PLAN_AZN_COST);
-  if (!plan || !validPlans.includes(plan)) {
-    res.status(400).json({ error: `Invalid plan. Choose: ${validPlans.join(", ")}` }); return;
+  if (!validPlans.includes(plan)) {
+    throw new Error(`Invalid plan. Choose: ${validPlans.join(", ")}`);
   }
 
-  // Get username for username NFT
   const userRow = await pool.query("SELECT username FROM users WHERE id = $1", [userId]);
-  const username = userRow.rows[0]?.username ?? "user";
+  const username = opts.username ?? userRow.rows[0]?.username ?? "user";
 
-  const aznCost = PLAN_AZN_COST[plan];
+  const aznCost = deductAzn ? PLAN_AZN_COST[plan] : 0;
   const tokenId = generateTokenId();
-  const imageUrl = generateNftImage(plan, { username, badgeName: badge_name ?? "Pioneer", tokenId });
-  const metadata = generateNftMetadata(plan, userId, tokenId, { username, badgeName: badge_name ?? "Pioneer" });
+  const imageUrl = generateNftImage(plan, { username, badgeName: badgeName ?? "Pioneer", tokenId });
+  const metadata = generateNftMetadata(plan, userId, tokenId, { username, badgeName: badgeName ?? "Pioneer" });
   const durationDays = PLAN_DURATION_DAYS[plan] ?? 30;
   const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000);
   const nftType = planToNftType(plan);
@@ -268,7 +272,7 @@ router.post("/nft-subscriptions/mint", requireAuth, async (req, res): Promise<vo
       const azn = parseFloat(balResult.rows[0]?.azn_balance ?? "0");
       if (azn < aznCost) {
         await client.query("ROLLBACK");
-        res.status(400).json({ error: `Insufficient AZN. Need ${aznCost} AZN, have ${azn.toFixed(2)}` }); return;
+        throw new Error(`Insufficient AZN. Need ${aznCost} AZN, have ${azn.toFixed(2)}`);
       }
     }
 
@@ -280,7 +284,7 @@ router.post("/nft-subscriptions/mint", requireAuth, async (req, res): Promise<vo
       );
       if (dup.rows.length > 0) {
         await client.query("ROLLBACK");
-        res.status(409).json({ error: "You already own a Username NFT" }); return;
+        throw new Error("You already own a Username NFT");
       }
     }
 
@@ -298,18 +302,17 @@ router.post("/nft-subscriptions/mint", requireAuth, async (req, res): Promise<vo
         is_listed, list_price, is_burned, nft_type, nft_category, image_url, badge_name
       ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, FALSE, NULL, FALSE, $7, $8, $9, $10) RETURNING *`,
       [tokenId, userId, userId, plan, JSON.stringify(metadata), expiresAt.toISOString(),
-        nftType, nftCategory, imageUrl, badge_name ?? null]
+        nftType, nftCategory, imageUrl, badgeName ?? null]
     );
     const nft = nftResult.rows[0];
 
     // Activate subscription for subscription passes
     if (["pro", "enterprise", "lifetime_pro", "lifetime_enterprise"].includes(plan)) {
-      const subPlan = plan.startsWith("lifetime") ? plan : plan;
       await client.query(
         `INSERT INTO subscriptions (user_id, plan, status, expires_at)
          VALUES ($1, $2, 'active', $3)
          ON CONFLICT (user_id) DO UPDATE SET plan = EXCLUDED.plan, status = 'active', expires_at = EXCLUDED.expires_at, updated_at = NOW()`,
-        [userId, subPlan, expiresAt.toISOString()]
+        [userId, plan, expiresAt.toISOString()]
       );
     }
 
@@ -328,12 +331,29 @@ router.post("/nft-subscriptions/mint", requireAuth, async (req, res): Promise<vo
     ).catch(() => {});
 
     await client.query("COMMIT");
-    res.status(201).json({ success: true, nft, aznSpent: aznCost, expiresAt });
-  } catch (err: any) {
+    return { nft, aznSpent: aznCost, expiresAt };
+  } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: "Minting failed", detail: err?.message });
+    throw err;
   } finally {
     client.release();
+  }
+}
+
+// ── POST /nft-subscriptions/mint — kept for lifetime passes (one-off AZN purchase = mint) ──
+
+router.post("/nft-subscriptions/mint", requireAuth, async (req, res): Promise<void> => {
+  const userId = req.user!.userId;
+  const { plan, badge_name } = req.body as { plan?: string; badge_name?: string };
+
+  if (!plan) { res.status(400).json({ error: "plan is required" }); return; }
+
+  try {
+    const { nft, aznSpent, expiresAt } = await mintNftForUser({ userId, plan, badgeName: badge_name });
+    res.status(201).json({ success: true, nft, aznSpent, expiresAt });
+  } catch (err: any) {
+    const status = /insufficient|already own/i.test(err?.message ?? "") ? 400 : 500;
+    res.status(status).json({ error: err?.message ?? "Minting failed" });
   }
 });
 
@@ -516,7 +536,7 @@ router.get("/nft-subscriptions/stats", async (_req, res): Promise<void> => {
 
 // ── ADMIN: GET /admin/nft-subscriptions — all NFTs ──────────────────────────
 
-router.get("/admin/nft-subscriptions", requireAuth, requireAdmin, async (_req, res): Promise<void> => {
+router.get("/admin/nft-subscriptions", requireAuth, requireRoles("admin", "dev"), async (_req, res): Promise<void> => {
   try {
     const r = await pool.query(`
       SELECT ns.*, u.username as owner_username, ou.username as original_owner_username

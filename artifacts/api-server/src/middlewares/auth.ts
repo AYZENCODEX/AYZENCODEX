@@ -26,6 +26,28 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
   next();
 }
 
+export async function requireDev(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const token = getTokenFromReq(req);
+  if (!token) { res.status(401).json({ error: "Unauthorized", code: "NO_TOKEN", solution: "Include a valid Authorization: Bearer <token> header." }); return; }
+  const user = await getUserFromToken(token);
+  if (!user) { res.status(401).json({ error: "Unauthorized", code: "INVALID_TOKEN", solution: "Token is invalid or expired. Please log in again." }); return; }
+  if (user.role !== "dev" && user.role !== "admin") { res.status(403).json({ error: "Forbidden", code: "NOT_DEV", solution: "This action requires developer privileges." }); return; }
+  req.user = user;
+  next();
+}
+
+export function requireRoles(...roles: string[]) {
+  return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const token = getTokenFromReq(req);
+    if (!token) { res.status(401).json({ error: "Unauthorized", code: "NO_TOKEN", solution: "Include a valid Authorization: Bearer <token> header." }); return; }
+    const user = await getUserFromToken(token);
+    if (!user) { res.status(401).json({ error: "Unauthorized", code: "INVALID_TOKEN", solution: "Token is invalid or expired. Please log in again." }); return; }
+    if (!roles.includes(user.role)) { res.status(403).json({ error: "Forbidden", code: "NOT_ALLOWED", solution: `This action requires one of these roles: ${roles.join(", ")}.` }); return; }
+    req.user = user;
+    next();
+  };
+}
+
 export function getRequestUser(req: Request): AuthUser | null {
   if (req.user) return req.user;
   const token = getTokenFromReq(req);
