@@ -183,41 +183,78 @@ router.post("/ai/chat", async (req, res): Promise<void> => {
   const selectedModel = (model && GROQ_MODELS.find(m => m.id === model)) ? model : DEFAULT_MODEL;
   const allMessages = [{ role: "system", content: systemPrompt }, ...messages.slice(-20)];
 
-  try {
-    if (groqKey) {
+  type ProviderResult = { ok: true; data: Record<string, unknown>; label: string } | { ok: false; error: string };
+
+  async function tryGroq(): Promise<ProviderResult> {
+    if (!groqKey) return { ok: false, error: "GROQ_API_KEY not set" };
+    try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: selectedModel, messages: allMessages, max_tokens: 1024 }),
       });
       const data = await response.json() as Record<string, unknown>;
-      res.json({ ...data, _model: selectedModel });
-      return;
+      if (!response.ok || (data as any)?.error) {
+        return { ok: false, error: `Groq: ${JSON.stringify((data as any)?.error ?? data)}` };
+      }
+      return { ok: true, data, label: selectedModel };
+    } catch (err: any) {
+      return { ok: false, error: `Groq: ${err?.message ?? "request failed"}` };
     }
-    if (openRouterKey) {
+  }
+
+  async function tryOpenRouter(): Promise<ProviderResult> {
+    if (!openRouterKey) return { ok: false, error: "OPENROUTER_API_KEY not set" };
+    try {
       const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
         headers: { Authorization: `Bearer ${openRouterKey}`, "Content-Type": "application/json", "HTTP-Referer": "https://ayzen.tech" },
         body: JSON.stringify({ model: "meta-llama/llama-3.3-70b-instruct:free", messages: allMessages, max_tokens: 1024 }),
       });
       const data = await response.json() as Record<string, unknown>;
-      res.json({ ...data, _model: "llama-3.3-70b (OpenRouter)" });
-      return;
+      if (!response.ok || (data as any)?.error) {
+        return { ok: false, error: `OpenRouter: ${JSON.stringify((data as any)?.error ?? data)}` };
+      }
+      return { ok: true, data, label: "llama-3.3-70b (OpenRouter)" };
+    } catch (err: any) {
+      return { ok: false, error: `OpenRouter: ${err?.message ?? "request failed"}` };
     }
-    if (openAiKey && openAiBase) {
+  }
+
+  async function tryReplitAi(): Promise<ProviderResult> {
+    if (!openAiKey || !openAiBase) return { ok: false, error: "Replit AI integration not configured" };
+    try {
       const response = await fetch(`${openAiBase}/chat/completions`, {
         method: "POST",
         headers: { Authorization: `Bearer ${openAiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({ model: "gpt-5-mini", messages: allMessages, max_completion_tokens: 1024 }),
       });
       const data = await response.json() as Record<string, unknown>;
-      res.json({ ...data, _model: "gpt-5-mini (Replit AI)" });
+      if (!response.ok || (data as any)?.error) {
+        return { ok: false, error: `Replit AI: ${JSON.stringify((data as any)?.error ?? data)}` };
+      }
+      return { ok: true, data, label: "gpt-5-mini (Replit AI)" };
+    } catch (err: any) {
+      return { ok: false, error: `Replit AI: ${err?.message ?? "request failed"}` };
+    }
+  }
+
+  const providers = [tryGroq, tryOpenRouter, tryReplitAi];
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    const result = await provider();
+    if (result.ok) {
+      res.json({ ...result.data, _model: result.label });
       return;
     }
-    res.status(503).json({ error: "No AI provider available." });
-  } catch (err: any) {
-    res.status(502).json({ error: `AI provider error: ${err?.message ?? "Unknown error"}` });
+    errors.push(result.error);
   }
+
+  res.status(502).json({
+    error: "All AI providers failed. Check that your API keys are valid.",
+    details: errors,
+  });
 });
 
 router.get("/ai/models", (_req, res) => {
