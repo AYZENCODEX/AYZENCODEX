@@ -2,11 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useGetMe, useGetUserStats, useListProjects, useListTasks } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Link, useLocation } from "wouter";
+import { Link } from "wouter";
 import {
-  Trophy, CheckSquare, Zap, Activity, TrendingUp, Clock, Radio,
-  Wallet, Search, Vault, UserCircle, FolderGit2, LayoutDashboard,
-  ArrowRight, Star, Settings, ListTodo, Coins,
+  Trophy, CheckSquare, Zap, Activity, TrendingUp, Clock,
+  Wallet, FolderGit2, Star, ListTodo, Coins, ArrowUpRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -14,7 +13,6 @@ import {
   Tooltip, ResponsiveContainer,
 } from "recharts";
 import { useCountUp } from "@/hooks/use-count-up";
-import StatsBar from "@/components/stats-bar";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
 
@@ -35,37 +33,91 @@ function AnimatedNumber({ value, prefix = "", suffix = "" }: { value: number; pr
   return <>{prefix}{animated.toLocaleString()}{suffix}</>;
 }
 
-function StatCard({ label, value, numericValue, icon: Icon, color = "text-primary", sub, loading }: {
-  label: string; value: string | number; numericValue?: number; icon: React.ElementType;
-  color?: string; sub?: string; loading?: boolean;
+/** Large featured stat — used for ROI and AZN */
+function BigStatCard({
+  label, value, numericValue, prefix = "", suffix = "", icon: Icon, color, sub, trend, loading,
+}: {
+  label: string; value: string; numericValue?: number; prefix?: string; suffix?: string;
+  icon: React.ElementType; color: string; sub?: string; trend?: "up" | "down"; loading?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold: 0.3 });
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold: 0.2 });
     if (ref.current) obs.observe(ref.current);
     return () => obs.disconnect();
   }, []);
 
   return (
-    <div ref={ref} className="bg-card border border-card-border hover:border-primary/40 transition-all duration-300 rounded-xl p-5 relative overflow-hidden group card-lift">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/3 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="flex items-start justify-between mb-3">
-        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">{label}</span>
-        <div className={cn("w-7 h-7 rounded-lg flex items-center justify-center bg-current/10", color)}>
-          <Icon className={cn("w-3.5 h-3.5", color)} />
+    <div ref={ref} className="relative bg-card border border-card-border hover:border-primary/30 rounded-2xl p-6 overflow-hidden group transition-all duration-300 card-lift">
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/3 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      <div className={cn("absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-20", color)} />
+
+      <div className="flex items-start justify-between mb-4">
+        <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60">{label}</span>
+        <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", `bg-current/10`, color)}>
+          <Icon className={cn("w-4.5 h-4.5", color)} />
         </div>
       </div>
-      {loading ? <Skeleton className="h-8 w-24" /> : (
-        <div className={cn("text-2xl font-bold font-mono tracking-tighter", color)}>
+
+      {loading ? (
+        <Skeleton className="h-10 w-32 mb-2" />
+      ) : (
+        <div className={cn("text-4xl font-black font-mono tracking-tighter leading-none mb-2", color)}>
           {numericValue !== undefined && visible
-            ? <AnimatedNumber value={numericValue} />
+            ? <AnimatedNumber value={numericValue} prefix={prefix} suffix={suffix} />
             : value}
         </div>
       )}
-      {sub && !loading && (
-        <div className="text-[10px] font-mono text-muted-foreground/50 mt-1">{sub}</div>
-      )}
+
+      <div className="flex items-center gap-2 mt-1">
+        {sub && !loading && (
+          <span className="text-[10px] font-mono text-muted-foreground/50">{sub}</span>
+        )}
+        {trend && !loading && (
+          <span className={cn("flex items-center gap-0.5 text-[10px] font-mono font-bold", trend === "up" ? "text-emerald-400" : "text-red-400")}>
+            <ArrowUpRight className={cn("w-3 h-3", trend === "down" && "rotate-90")} />
+            {trend === "up" ? "↑" : "↓"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Compact stat — used in the 3-column row */
+function MiniStatCard({
+  label, value, numericValue, icon: Icon, color, sub, loading,
+}: {
+  label: string; value: string; numericValue?: number;
+  icon: React.ElementType; color: string; sub?: string; loading?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting) setVisible(true); }, { threshold: 0.2 });
+    if (ref.current) obs.observe(ref.current);
+    return () => obs.disconnect();
+  }, []);
+
+  return (
+    <div ref={ref} className="bg-card border border-card-border hover:border-primary/20 rounded-xl px-4 py-4 flex items-center gap-3 transition-all duration-200 group">
+      <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 bg-current/10", color)}>
+        <Icon className={cn("w-4 h-4", color)} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground/50 mb-0.5">{label}</div>
+        {loading ? <Skeleton className="h-5 w-16" /> : (
+          <div className={cn("text-lg font-bold font-mono tracking-tight leading-none", color)}>
+            {numericValue !== undefined && visible
+              ? <AnimatedNumber value={numericValue} />
+              : value}
+          </div>
+        )}
+        {sub && !loading && (
+          <div className="text-[9px] font-mono text-muted-foreground/40 mt-0.5 truncate">{sub}</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -74,9 +126,9 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-card border border-card-border rounded-lg px-3 py-2 shadow-xl font-mono text-xs">
-      <div className="text-muted-foreground mb-1">{label}</div>
+      <div className="text-muted-foreground/60 mb-1">{label}</div>
       {payload.map((p: any) => (
-        <div key={p.name} style={{ color: p.color }} className="flex items-center gap-2">
+        <div key={p.name} className="flex items-center gap-2" style={{ color: p.color }}>
           <span className="w-1.5 h-1.5 rounded-full" style={{ background: p.color }} />
           {p.name}: <strong>{p.value}</strong>
         </div>
@@ -84,129 +136,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     </div>
   );
 };
-
-const QUICK_TILES = [
-  {
-    href: "/vault?tab=entity",
-    label: "Vault",
-    sub: "Entities, Wallets, 2FA",
-    icon: Vault,
-    color: "text-cyan-400",
-    border: "hover:border-cyan-400/40 group-hover:bg-cyan-400/5",
-    glow: "from-cyan-400/20",
-  },
-  {
-    href: "/projects",
-    label: "Projects",
-    sub: "Protocols & Airdrops",
-    icon: FolderGit2,
-    color: "text-violet-400",
-    border: "hover:border-violet-400/40 group-hover:bg-violet-400/5",
-    glow: "from-violet-400/20",
-  },
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    sub: "Stats & analytics",
-    icon: LayoutDashboard,
-    color: "text-emerald-400",
-    border: "hover:border-emerald-400/40 group-hover:bg-emerald-400/5",
-    glow: "from-emerald-400/20",
-  },
-  {
-    href: "/settings",
-    label: "Settings",
-    sub: "Account & preferences",
-    icon: Settings,
-    color: "text-amber-400",
-    border: "hover:border-amber-400/40 group-hover:bg-amber-400/5",
-    glow: "from-amber-400/20",
-  },
-];
-
-function WorkspaceHero({ username }: { username?: string }) {
-  const [query, setQuery] = useState("");
-  const [, navigate] = useLocation();
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (query.trim()) navigate(`/tasks?search=${encodeURIComponent(query.trim())}`);
-  };
-
-  return (
-    <div className="relative rounded-2xl overflow-hidden border border-card-border mb-8">
-      {/* Animated gradient background */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_50%,hsl(174,100%,42%,0.08)_0%,transparent_60%),radial-gradient(ellipse_at_80%_20%,hsl(250,80%,60%,0.07)_0%,transparent_60%),radial-gradient(ellipse_at_60%_80%,hsl(174,100%,42%,0.05)_0%,transparent_50%)] animate-pulse-slow" />
-      <div className="absolute inset-0 bg-card/80" />
-
-      {/* Grid lines */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: "linear-gradient(hsl(174,100%,42%) 1px, transparent 1px), linear-gradient(90deg, hsl(174,100%,42%) 1px, transparent 1px)",
-        backgroundSize: "40px 40px",
-      }} />
-
-      <div className="relative z-10 px-6 py-10 sm:px-10 sm:py-14 text-center">
-        {/* Greeting */}
-        {username && (
-          <div className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground/60 mb-3">
-            Welcome back, <span className="text-primary">{username}</span>
-          </div>
-        )}
-
-        {/* Main heading */}
-        <h1 className="font-mono font-black text-3xl sm:text-4xl md:text-5xl tracking-tighter mb-2 select-none">
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-300 to-violet-400">
-            AYZEN
-          </span>
-          {" "}
-          <span className="text-foreground">WORKSPACE</span>
-        </h1>
-        <p className="font-mono text-xs text-muted-foreground/50 tracking-widest uppercase mb-8">
-          Crypto Airdrop Command Center
-        </p>
-
-        {/* Search bar */}
-        <form onSubmit={handleSearch} className="max-w-md mx-auto mb-8 relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-          <input
-            type="text"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            placeholder="Search tasks, protocols..."
-            className="w-full h-12 pl-11 pr-4 rounded-xl bg-background/60 border border-border/60 focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30 font-mono text-sm placeholder:text-muted-foreground/40 transition-all backdrop-blur-sm"
-          />
-          {query && (
-            <button type="submit" className="absolute right-3 top-1/2 -translate-y-1/2">
-              <ArrowRight className="w-4 h-4 text-primary" />
-            </button>
-          )}
-        </form>
-
-        {/* Quick-access tiles */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-w-2xl mx-auto">
-          {QUICK_TILES.map(tile => {
-            const Icon = tile.icon;
-            return (
-              <Link key={tile.href} href={tile.href}>
-                <div className={cn(
-                  "group relative flex flex-col items-center gap-2 p-4 rounded-xl border border-card-border transition-all duration-300 cursor-pointer card-lift",
-                  tile.border
-                )}>
-                  <div className={cn("absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-br to-transparent", tile.glow)} />
-                  <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center bg-current/10 transition-transform group-hover:scale-110", tile.color)}>
-                    <Icon className={cn("w-5 h-5", tile.color)} />
-                  </div>
-                  <div className="font-mono font-bold text-sm text-foreground">{tile.label}</div>
-                  <div className="font-mono text-[10px] text-muted-foreground/60 text-center leading-tight">{tile.sub}</div>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function UserDashboard() {
   const { data: user, isLoading: userLoading } = useGetMe({ query: { refetchInterval: 30_000 } });
@@ -234,10 +163,10 @@ export default function UserDashboard() {
           })));
         } else {
           const weeks = ["W1","W2","W3","W4","W5","W6","W7","W8"];
-          setChartData(weeks.map(w => ({
+          setChartData(weeks.map((w, i) => ({
             week: w,
-            approved: Math.floor(Math.random() * 8),
-            submitted: Math.floor(Math.random() * 12),
+            approved: Math.floor(Math.abs(Math.sin(i * 1.3)) * 8),
+            submitted: Math.floor(Math.abs(Math.sin(i * 0.9 + 1)) * 12),
           })));
         }
       }).catch(() => {});
@@ -260,215 +189,281 @@ export default function UserDashboard() {
     roi: +(d.approved * (1.2 + Math.sin(i) * 0.5)).toFixed(2),
   }));
 
+  const aznEarned = Math.round((stats?.totalRoi ?? 0) * 1.5);
+
   return (
     <div className="space-y-5 page-enter">
-      <StatsBar />
 
-      {/* Header */}
+      {/* ── Header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
           {userLoading ? <Skeleton className="h-6 w-40 mb-1" /> : (
             <h1 className="font-mono font-bold text-xl tracking-tight">
-              <span className="text-muted-foreground/50 font-normal text-sm">Gm, </span>
+              <span className="text-muted-foreground/40 font-normal text-sm">Gm, </span>
               <span className="text-foreground">{user?.username ?? user?.email?.split("@")[0] ?? "Operator"}</span>
             </h1>
           )}
-          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 mt-0.5">Airdrop Command Center</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground/40 mt-0.5">Analytics Overview</p>
         </div>
         <LiveDot />
       </div>
 
-      {/* ── Row 1: 2 featured stats ── */}
-      <div className="grid grid-cols-2 gap-4">
-        <StatCard label="Total ROI" value={`${(stats?.totalRoi ?? 0).toLocaleString()}`}
+      {/* ── Row 1: 2 big featured stats ────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <BigStatCard
+          label="Total ROI"
+          value={`$${(stats?.totalRoi ?? 0).toLocaleString()}`}
           numericValue={stats?.totalRoi ?? 0}
-          icon={Zap} color="text-primary" sub="Cumulative earnings" loading={statsLoading} />
-        <StatCard label="AZN Earned" value={`${Math.round((stats?.totalRoi ?? 0) * 1.5).toLocaleString()}`}
-          numericValue={Math.round((stats?.totalRoi ?? 0) * 1.5)}
-          icon={Coins} color="text-violet-400" sub="Lifetime token rewards" loading={statsLoading} />
+          prefix="$"
+          icon={Zap}
+          color="text-primary"
+          sub="Cumulative earnings"
+          trend="up"
+          loading={statsLoading}
+        />
+        <BigStatCard
+          label="AZN Earned"
+          value={aznEarned.toLocaleString()}
+          numericValue={aznEarned}
+          icon={Coins}
+          color="text-violet-400"
+          sub="Lifetime token rewards"
+          trend="up"
+          loading={statsLoading}
+        />
       </div>
 
-      {/* ── Row 2: 3 secondary stats ── */}
-      <div className="grid grid-cols-3 gap-3">
-        <StatCard label="Tasks Done" value={(stats?.tasksCompleted ?? 0).toLocaleString()}
+      {/* ── Row 2: 3 compact stats ──────────────────────────────────────── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <MiniStatCard
+          label="Tasks Completed"
+          value={(stats?.tasksCompleted ?? 0).toLocaleString()}
           numericValue={stats?.tasksCompleted ?? 0}
-          icon={CheckSquare} color="text-emerald-400"
-          sub={pendingTasks > 0 ? `${pendingTasks} pending` : "All caught up"} loading={statsLoading} />
-        <StatCard label="Rank" value={stats?.rank ? `#${stats.rank.toLocaleString()}` : "—"}
-          icon={Trophy} color="text-amber-400"
-          sub={`of ${stats?.totalUsers ?? "?"}`} loading={statsLoading} />
-        <StatCard label="Streak" value={`${stats?.streak ?? 0}d`}
+          icon={CheckSquare}
+          color="text-emerald-400"
+          sub={pendingTasks > 0 ? `${pendingTasks} pending` : "All caught up"}
+          loading={statsLoading}
+        />
+        <MiniStatCard
+          label="Rank"
+          value={stats?.rank ? `#${stats.rank.toLocaleString()}` : "—"}
+          icon={Trophy}
+          color="text-amber-400"
+          sub={`of ${stats?.totalUsers ?? "?"} operators`}
+          loading={statsLoading}
+        />
+        <MiniStatCard
+          label="Streak"
+          value={`${stats?.streak ?? 0}d`}
           numericValue={stats?.streak ?? 0}
-          icon={Activity} color="text-violet-400"
-          sub="Days active" loading={statsLoading} />
+          icon={Activity}
+          color="text-rose-400"
+          sub="Consecutive days active"
+          loading={statsLoading}
+        />
       </div>
 
-      {/* ── Row 3: ROI chart + Activity bar side by side ── */}
+      {/* ── Row 3: Charts side by side ──────────────────────────────────── */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* ROI Trend */}
+
+        {/* ROI Trend — Area */}
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-card-border flex items-center justify-between">
-            <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
               <TrendingUp className="w-3.5 h-3.5" /> ROI Trend
             </div>
-            <span className="text-[10px] font-mono text-muted-foreground/50">weekly</span>
+            <span className="text-[10px] font-mono text-muted-foreground/40">weekly</span>
           </div>
-          <div className="px-2 py-3 h-44">
-            {roiData.length === 0 ? (
-              <div className="h-full flex items-center justify-center"><Skeleton className="h-20 w-full mx-4" /></div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={roiData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="roiGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(174 100% 42%)" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="hsl(174 100% 42%)" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.3)" vertical={false} />
-                  <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area type="monotone" dataKey="roi" name="ROI" stroke="hsl(174 100% 42%)" strokeWidth={2} fill="url(#roiGrad)" dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
+          <div className="px-1 py-3 h-[180px]">
+            {roiData.length === 0
+              ? <div className="h-full flex items-center justify-center"><Skeleton className="h-20 w-full mx-4" /></div>
+              : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={roiData} margin={{ top: 4, right: 10, left: -28, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="roiGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="hsl(174 100% 42%)" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="hsl(174 100% 42%)" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.25)" vertical={false} />
+                    <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area type="monotone" dataKey="roi" name="ROI ($)" stroke="hsl(174 100% 42%)" strokeWidth={2} fill="url(#roiGrad)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
           </div>
         </div>
 
-        {/* Weekly Activity bar */}
+        {/* Weekly Activity — Bar */}
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
           <div className="px-5 py-3 border-b border-card-border flex items-center justify-between">
-            <div className="text-[11px] font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
+            <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest text-primary font-bold">
               <CheckSquare className="w-3.5 h-3.5" /> Weekly Activity
             </div>
-            <span className="text-[10px] font-mono text-muted-foreground/50">last 8 weeks</span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1 text-[9px] font-mono text-muted-foreground/50">
+                <span className="w-2 h-2 rounded-sm bg-primary/40 inline-block" /> Submitted
+              </span>
+              <span className="flex items-center gap-1 text-[9px] font-mono text-muted-foreground/50">
+                <span className="w-2 h-2 rounded-sm bg-primary inline-block" /> Approved
+              </span>
+            </div>
           </div>
-          <div className="px-2 py-3 h-44">
-            {chartData.length === 0 ? (
-              <div className="h-full flex items-center justify-center"><Skeleton className="h-20 w-full mx-4" /></div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 4, right: 12, left: -24, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.3)" vertical={false} />
-                  <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(174 100% 42% / 0.05)" }} />
-                  <Bar dataKey="submitted" name="Submitted" fill="hsl(174 100% 42% / 0.4)" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="approved" name="Approved" fill="hsl(174 100% 42%)" radius={[2, 2, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+          <div className="px-1 py-3 h-[180px]">
+            {chartData.length === 0
+              ? <div className="h-full flex items-center justify-center"><Skeleton className="h-20 w-full mx-4" /></div>
+              : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 4, right: 10, left: -28, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(180 80% 18% / 0.25)" vertical={false} />
+                    <XAxis dataKey="week" tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 9, fontFamily: "monospace", fill: "hsl(180 20% 40%)" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "hsl(174 100% 42% / 0.05)" }} />
+                    <Bar dataKey="submitted" name="Submitted" fill="hsl(174 100% 42% / 0.35)" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey="approved" name="Approved" fill="hsl(174 100% 42%)" radius={[3, 3, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
           </div>
         </div>
       </div>
 
-      {/* ── Row 4: extra stats row ── */}
+      {/* ── Row 4: 4 small utility stats ───────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard label="Active Protocols" value={activeProjects.toLocaleString()}
+        <MiniStatCard
+          label="Active Protocols"
+          value={activeProjects.toLocaleString()}
           numericValue={activeProjects}
-          icon={FolderGit2} color="text-cyan-400" sub={`of ${projectList.length} total`} loading={projLoading} />
-        <StatCard label="Wallet Balance" value={walletUsd !== null ? `${walletUsd.toFixed(2)}` : "—"}
+          icon={FolderGit2}
+          color="text-cyan-400"
+          sub={`of ${projectList.length} total`}
+          loading={projLoading}
+        />
+        <MiniStatCard
+          label="Wallet Balance"
+          value={walletUsd !== null ? `$${walletUsd.toFixed(2)}` : "—"}
           numericValue={walletUsd ?? 0}
-          icon={Wallet} color="text-emerald-400" sub={`${walletCount} tracked`} loading={statsLoading} />
-        <StatCard label="Pending Tasks" value={pendingTasks.toLocaleString()}
+          icon={Wallet}
+          color="text-emerald-400"
+          sub={`${walletCount} wallet${walletCount !== 1 ? "s" : ""}`}
+          loading={statsLoading}
+        />
+        <MiniStatCard
+          label="Pending Tasks"
+          value={pendingTasks.toLocaleString()}
           numericValue={pendingTasks}
-          icon={ListTodo} color="text-amber-400" sub="Awaiting completion" loading={tasksLoading} />
-        <StatCard label="Radio" value="Online"
-          icon={Radio} color="text-primary" sub="Sync active" loading={false} />
+          icon={ListTodo}
+          color="text-amber-400"
+          sub="Awaiting completion"
+          loading={tasksLoading}
+        />
+        <MiniStatCard
+          label="Win Rate"
+          value={
+            (stats?.tasksCompleted ?? 0) + pendingTasks > 0
+              ? `${Math.round(((stats?.tasksCompleted ?? 0) / ((stats?.tasksCompleted ?? 0) + pendingTasks)) * 100)}%`
+              : "—"
+          }
+          icon={Trophy}
+          color="text-violet-400"
+          sub="Tasks approved vs total"
+          loading={statsLoading}
+        />
       </div>
 
-      {/* Info panels — Tasks + Protocols */}
+      {/* ── Row 5: Tasks list + Protocols list ─────────────────────────── */}
       <div className="grid gap-4 md:grid-cols-2">
+
+        {/* Available Tasks */}
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-card-border flex items-center justify-between">
+          <div className="px-5 py-3.5 border-b border-card-border flex items-center justify-between">
             <div className="text-xs font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
               <CheckSquare className="w-3.5 h-3.5" /> Available Tasks
             </div>
             <LiveDot />
           </div>
-          <div className="divide-y divide-border/30">
-            {tasksLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="px-5 py-3 flex items-center gap-3">
-                  <Skeleton className="h-4 w-4 rounded" />
-                  <Skeleton className="h-4 flex-1" />
-                  <Skeleton className="h-5 w-12" />
-                </div>
-              ))
-            ) : recentTasks.length === 0 ? (
-              <div className="px-5 py-8 text-center text-xs font-mono text-muted-foreground/50">No tasks yet</div>
-            ) : (
-              recentTasks.map((task: any) => (
-                <div key={task.id} className="px-5 py-3 flex items-center gap-3 hover:bg-primary/3 transition-colors">
-                  <CheckSquare className={cn("w-3.5 h-3.5 flex-shrink-0", task.userStatus === "approved" ? "text-emerald-400" : "text-muted-foreground/40")} />
-                  <div className="flex-1 min-w-0">
-                    <div className="font-mono text-xs truncate">{task.name}</div>
-                    <div className="text-[10px] font-mono text-muted-foreground/50">{task.projectName ?? `Protocol #${task.projectId}`}</div>
+          <div className="divide-y divide-border/20">
+            {tasksLoading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="px-5 py-3 flex items-center gap-3">
+                    <Skeleton className="h-4 w-4 rounded" />
+                    <Skeleton className="h-4 flex-1" />
+                    <Skeleton className="h-5 w-12" />
                   </div>
-                  {task.rewardAmount && <span className="text-[10px] font-mono text-primary font-bold">${task.rewardAmount}</span>}
-                  <Badge variant="outline" className={cn(
-                    "text-[9px] font-mono uppercase border rounded-sm px-1.5 py-0.5",
-                    task.userStatus === "approved" ? "border-emerald-400/30 text-emerald-400" :
-                    task.userStatus === "pending" ? "border-amber-400/30 text-amber-400" :
-                    "border-primary/20 text-primary/60"
-                  )}>
-                    {task.userStatus ?? task.taskType}
-                  </Badge>
-                </div>
-              ))
-            )}
+                ))
+              : recentTasks.length === 0
+              ? <div className="px-5 py-8 text-center text-xs font-mono text-muted-foreground/40">No tasks yet</div>
+              : recentTasks.map((task: any) => (
+                  <div key={task.id} className="px-5 py-3 flex items-center gap-3 hover:bg-primary/[0.03] transition-colors">
+                    <CheckSquare className={cn("w-3.5 h-3.5 shrink-0", task.userStatus === "approved" ? "text-emerald-400" : "text-muted-foreground/30")} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-xs truncate">{task.name}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground/40">{task.projectName ?? `Protocol #${task.projectId}`}</div>
+                    </div>
+                    {task.rewardAmount && <span className="text-[10px] font-mono text-primary font-bold shrink-0">${task.rewardAmount}</span>}
+                    <Badge variant="outline" className={cn(
+                      "text-[9px] font-mono uppercase border rounded-sm px-1.5 py-0.5 shrink-0",
+                      task.userStatus === "approved" ? "border-emerald-400/30 text-emerald-400" :
+                      task.userStatus === "pending" ? "border-amber-400/30 text-amber-400" :
+                      "border-primary/20 text-primary/50"
+                    )}>
+                      {task.userStatus ?? task.taskType}
+                    </Badge>
+                  </div>
+                ))}
           </div>
-          <div className="px-5 py-3 border-t border-border/30">
+          <div className="px-5 py-3 border-t border-border/20">
             <Link href="/tasks">
-              <span className="font-mono text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+              <span className="font-mono text-[11px] text-primary hover:text-primary/70 flex items-center gap-1 transition-colors">
                 View all tasks <Star className="w-3 h-3" />
               </span>
             </Link>
           </div>
         </div>
 
+        {/* Active Protocols */}
         <div className="bg-card border border-card-border rounded-xl overflow-hidden">
-          <div className="px-5 py-4 border-b border-card-border flex items-center justify-between">
+          <div className="px-5 py-3.5 border-b border-card-border flex items-center justify-between">
             <div className="text-xs font-mono uppercase tracking-widest text-primary font-bold flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5" /> Active Protocols
             </div>
             <LiveDot />
           </div>
-          <div className="divide-y divide-border/30">
-            {projLoading ? (
-              Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="px-5 py-3 flex items-center gap-3">
-                  <Skeleton className="h-8 w-8 rounded" />
-                  <div className="flex-1 space-y-1">
-                    <Skeleton className="h-3 w-28" />
-                    <Skeleton className="h-3 w-20" />
+          <div className="divide-y divide-border/20">
+            {projLoading
+              ? Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="px-5 py-3 flex items-center gap-3">
+                    <Skeleton className="h-8 w-8 rounded" />
+                    <div className="flex-1 space-y-1">
+                      <Skeleton className="h-3 w-28" />
+                      <Skeleton className="h-3 w-20" />
+                    </div>
                   </div>
-                </div>
-              ))
-            ) : projectList.length === 0 ? (
-              <div className="px-5 py-8 text-center text-xs font-mono text-muted-foreground/50">No protocols yet</div>
-            ) : (
-              projectList.slice(0, 5).map((proj) => (
-                <div key={proj.id} className="px-5 py-3 flex items-center gap-3 hover:bg-primary/3 transition-colors">
-                  <div className="w-8 h-8 rounded bg-primary/10 flex items-center justify-center border border-primary/20 text-[10px] font-mono font-bold text-primary flex-shrink-0">
-                    {proj.name?.slice(0, 2).toUpperCase()}
+                ))
+              : projectList.length === 0
+              ? <div className="px-5 py-8 text-center text-xs font-mono text-muted-foreground/40">No protocols yet</div>
+              : projectList.slice(0, 5).map((proj) => (
+                  <div key={proj.id} className="px-5 py-3 flex items-center gap-3 hover:bg-primary/[0.03] transition-colors">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center border border-primary/15 text-[10px] font-mono font-bold text-primary shrink-0">
+                      {proj.name?.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-mono text-xs truncate">{proj.name}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground/40">{(proj as any).category ?? "Protocol"}</div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn("w-1.5 h-1.5 rounded-full", proj.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/30")} />
+                      <span className="text-[9px] font-mono text-muted-foreground/50">{proj.status}</span>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-mono text-xs truncate">{proj.name}</div>
-                    <div className="text-[10px] font-mono text-muted-foreground/50">{(proj as any).category ?? "Protocol"}</div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className={cn("w-1.5 h-1.5 rounded-full", proj.status === "active" ? "bg-emerald-400" : "bg-muted-foreground/30")} />
-                    <span className="text-[9px] font-mono text-muted-foreground/60">{proj.status}</span>
-                  </div>
-                </div>
-              ))
-            )}
+                ))}
           </div>
-          <div className="px-5 py-3 border-t border-border/30">
+          <div className="px-5 py-3 border-t border-border/20">
             <Link href="/projects">
-              <span className="font-mono text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors">
+              <span className="font-mono text-[11px] text-primary hover:text-primary/70 flex items-center gap-1 transition-colors">
                 View all protocols <Star className="w-3 h-3" />
               </span>
             </Link>
@@ -476,9 +471,9 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/30">
+      <div className="flex items-center gap-2 text-[10px] font-mono text-muted-foreground/25">
         <Clock className="w-3 h-3" />
-        <span>Data refreshes automatically every 10–30s via live sync</span>
+        <span>Data refreshes automatically every 10–30s</span>
       </div>
     </div>
   );
