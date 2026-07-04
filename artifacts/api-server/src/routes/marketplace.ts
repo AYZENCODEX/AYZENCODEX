@@ -40,6 +40,7 @@ router.get("/marketplace/listings", async (req, res): Promise<void> => {
       FROM marketplace_listings ml
       LEFT JOIN users u ON u.id = ml.seller_id
       WHERE ml.status = 'active'
+        AND (ml.listing_expires_at IS NULL OR ml.listing_expires_at > NOW())
     `;
     const params: any[] = [];
     if (type) { q += ` AND ml.listing_type = $${params.length + 1}`; params.push(type); }
@@ -73,7 +74,7 @@ router.get("/marketplace/my-listings", requireAuth, async (req, res): Promise<vo
 // ─── POST /marketplace/listings — create a listing ───────────────────────────
 router.post("/marketplace/listings", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
-  const { listing_type, item_id, title, description, price_azn, metadata, image_url, condition, tags } = req.body;
+  const { listing_type, item_id, title, description, price_azn, metadata, image_url, condition, tags, listing_expires_at } = req.body;
 
   if (!listing_type || !title || !price_azn) {
     res.status(400).json({ error: "listing_type, title, price_azn required" }); return;
@@ -90,11 +91,12 @@ router.post("/marketplace/listings", requireAuth, async (req, res): Promise<void
 
     const r = await pool.query(
       `INSERT INTO marketplace_listings
-        (seller_id, listing_type, item_id, title, description, price_azn, metadata, status, image_url, condition, tags, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8,$9,$10,NOW(),NOW())
+        (seller_id, listing_type, item_id, title, description, price_azn, metadata, status, image_url, condition, tags, listing_expires_at, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'active',$8,$9,$10,$11,NOW(),NOW())
        RETURNING *`,
       [userId, listing_type, item_id || null, title, description || null, Number(price_azn),
-        JSON.stringify(metadata || {}), image_url || null, condition || "good", tags || null]
+        JSON.stringify(metadata || {}), image_url || null, condition || "good", tags || null,
+        listing_expires_at || null]
     );
 
     await pool.query(

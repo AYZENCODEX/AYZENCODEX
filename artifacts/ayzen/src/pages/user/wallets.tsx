@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Wallet, Plus, Trash2, RefreshCw, Star, Copy, Check,
   ChevronDown, ChevronUp, ExternalLink, Shield, AlertCircle, Loader2,
-  Key, Send, Eye, EyeOff, ArrowUpRight, X, Zap, Link2,
+  Key, Send, Eye, EyeOff, ArrowUpRight, X, Zap, Link2, Gem,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWalletConnect } from "@/hooks/use-wallet-connect";
@@ -415,6 +415,9 @@ export default function UserWallets() {
   const [liveIndicator, setLiveIndicator] = useState(false);
   const [tokens, setTokens] = useState({ azn: 0, credits: 0, usdt: 0 });
   const [creatingBuiltin, setCreatingBuiltin] = useState(false);
+  const [activeTab, setActiveTab] = useState<"wallets" | "nfts">("wallets");
+  const [myNfts, setMyNfts] = useState<any[]>([]);
+  const [nftsLoading, setNftsLoading] = useState(false);
 
   const [form, setForm] = useState({ address: "", chain: "ETH", label: "", notes: "", phrase: "", showPhraseField: false });
   const [adding, setAdding] = useState(false);
@@ -439,6 +442,16 @@ export default function UserWallets() {
       const r = await fetch(`${BASE}/api/wallets/tokens`, { headers: { Authorization: `Bearer ${token}` } });
       if (r.ok) setTokens(await r.json());
     } catch { }
+  }, [token]);
+
+  const fetchNfts = useCallback(async () => {
+    if (!token) return;
+    setNftsLoading(true);
+    try {
+      const r = await fetch(`${BASE}/api/nft-subscriptions/my-nfts`, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) setMyNfts(await r.json());
+    } catch { }
+    setNftsLoading(false);
   }, [token]);
 
   useEffect(() => {
@@ -608,7 +621,22 @@ export default function UserWallets() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="flex items-center gap-0 border-b border-border/40">
+        {(["wallets", "nfts"] as const).map(tab => (
+          <button key={tab} onClick={() => { setActiveTab(tab); if (tab === "nfts" && myNfts.length === 0) fetchNfts(); }}
+            className={cn(
+              "flex items-center gap-1.5 px-5 py-2 text-[11px] font-mono uppercase tracking-wider border-b-2 transition-all -mb-px",
+              activeTab === tab ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"
+            )}>
+            {tab === "wallets" ? <Wallet className="w-3 h-3" /> : <Gem className="w-3 h-3" />}
+            {tab === "wallets" ? `Wallets (${wallets.length})` : "NFTs"}
+          </button>
+        ))}
+      </div>
+
       {/* AYZEN Token Balance Banner */}
+      {activeTab === "wallets" && <>
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: "AZN Balance", value: tokens.azn.toFixed(2), suffix: "AZN", color: "text-cyan-400", bg: "bg-cyan-500/5", border: "border-cyan-500/20", icon: "⚡" },
@@ -901,6 +929,70 @@ export default function UserWallets() {
         <Shield className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
         <span>Public addresses are tracked for activity monitoring. Seed phrases are encrypted with AES-256-CBC before storage.</span>
       </div>
+      </>}
+
+      {/* NFT Tab */}
+      {activeTab === "nfts" && (
+        <div className="space-y-4">
+          {nftsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : myNfts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center gap-3">
+              <Gem className="w-10 h-10 text-muted-foreground/30" />
+              <div className="font-mono text-sm text-muted-foreground">No NFTs yet</div>
+              <p className="font-mono text-[11px] text-muted-foreground/50">Mint NFT passes or earn them through the platform.</p>
+              <Button size="sm" variant="outline" onClick={fetchNfts} className="font-mono text-xs gap-1.5">
+                <RefreshCw className="w-3 h-3" /> Refresh
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between">
+                <span className="font-mono text-[11px] text-muted-foreground">{myNfts.length} NFT{myNfts.length !== 1 ? "s" : ""} owned</span>
+                <Button size="sm" variant="ghost" onClick={fetchNfts} className="font-mono text-xs gap-1 h-7">
+                  <RefreshCw className="w-3 h-3" /> Refresh
+                </Button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {myNfts.map((nft: any) => {
+                  const planColor: Record<string, string> = {
+                    pro: "text-cyan-400 border-cyan-500/30 bg-cyan-500/5",
+                    enterprise: "text-amber-400 border-amber-500/30 bg-amber-500/5",
+                    lifetime_pro: "text-violet-400 border-violet-500/30 bg-violet-500/5",
+                    lifetime_enterprise: "text-rose-400 border-rose-500/30 bg-rose-500/5",
+                    username: "text-emerald-400 border-emerald-500/30 bg-emerald-500/5",
+                  };
+                  const cls = planColor[nft.plan] ?? "text-primary border-primary/30 bg-primary/5";
+                  return (
+                    <div key={nft.id} className={cn("border rounded-xl p-4 space-y-2", cls)}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Gem className="w-4 h-4" />
+                          <span className="font-mono font-bold text-xs uppercase">{nft.plan.replace(/_/g, " ")}</span>
+                        </div>
+                        {nft.is_listed && (
+                          <Badge variant="outline" className="text-[9px] font-mono border-amber-500/30 text-amber-400">Listed</Badge>
+                        )}
+                      </div>
+                      <div className="font-mono text-[10px] text-muted-foreground/70 truncate">{nft.token_id}</div>
+                      {nft.badge_name && (
+                        <div className="font-mono text-[10px] text-muted-foreground/60">Badge: {nft.badge_name}</div>
+                      )}
+                      <div className="font-mono text-[10px] text-muted-foreground/50">
+                        {nft.expires_at
+                          ? `Expires: ${new Date(nft.expires_at).toLocaleDateString()}`
+                          : nft.nft_type === "username" ? "Permanent collectible" : "No expiry"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

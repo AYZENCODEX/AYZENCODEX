@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, pool } from "@workspace/db";
 import { eq, sql } from "drizzle-orm";
 import * as crypto from "crypto";
 import { referralsTable } from "@workspace/db";
@@ -212,6 +212,17 @@ router.post("/auth/register", async (req, res): Promise<void> => {
     `INSERT INTO wallets (user_id, label, address, chain, chain_id, is_primary, balance, balance_usd, created_at, updated_at)
      VALUES (${user.id}, 'My Wallet', 'pending', 'ETH', 1, true, 0, 0, NOW(), NOW())`
   )).catch(() => {});
+
+  // Auto-mint username NFT for every new user
+  const cleanUname = username.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 24);
+  const unameTokenId = `USERNAME-${user.id}-${cleanUname.toUpperCase()}`;
+  pool.query(
+    `INSERT INTO nft_subscriptions
+      (owner_id, original_owner_id, token_id, plan, nft_type, nft_category, badge_name, image_url, metadata, expires_at, is_listed, list_price, transfer_count, is_burned, minted_at, created_at, updated_at)
+     VALUES ($1,$1,$2,'username','username','username',$3,NULL,'{}',NOW()+INTERVAL '100 years',false,NULL,0,false,NOW(),NOW(),NOW())
+     ON CONFLICT DO NOTHING`,
+    [user.id, unameTokenId, cleanUname]
+  ).catch(() => {});
 
   // Auto-create built-in AYZEN email for every new user
   db.execute(sql.raw(

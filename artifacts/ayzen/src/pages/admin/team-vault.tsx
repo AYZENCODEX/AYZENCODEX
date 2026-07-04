@@ -53,7 +53,7 @@ function Field({ label, value, icon: Icon }: { label: string; value?: string | n
 }
 
 function EntryCard({ entry }: { entry: TeamVaultEntry }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   return (
     <div className="border border-border/40 rounded-xl overflow-hidden bg-card/40">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 p-3 hover:bg-muted/10 transition-colors text-left">

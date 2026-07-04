@@ -616,6 +616,8 @@ const MIGRATIONS = [
   )`,
   "CREATE INDEX IF NOT EXISTS idx_mkt_activity_created ON marketplace_activity_log(created_at DESC)",
   "CREATE INDEX IF NOT EXISTS idx_mkt_activity_event ON marketplace_activity_log(event_type)",
+  // ── Phase 20: Marketplace listing expiry ──────────────────────────────────
+  "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS listing_expires_at TIMESTAMP",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

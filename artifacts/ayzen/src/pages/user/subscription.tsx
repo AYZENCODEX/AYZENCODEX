@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import {
   Crown, Zap, Shield, Check, Loader2, ExternalLink,
   RefreshCw, Star, Sparkles, Lock, Unlock, Coins, ArrowRightLeft,
-  CreditCard, Copy, ChevronDown, ChevronUp,
+  CreditCard, Copy, ChevronDown, ChevronUp, Gem, InfinityIcon,
 } from "lucide-react";
 import { Link } from "wouter";
 
@@ -43,6 +43,95 @@ const PLAN_BG: Record<string, string> = {
   pro: "bg-primary/5",
   enterprise: "bg-amber-400/5",
 };
+
+// ─── Lifetime NFT Pass Section ───────────────────────────────────────────────
+const LIFETIME_PASSES = [
+  {
+    plan: "lifetime_pro",
+    label: "Lifetime Pro",
+    aznCost: 500,
+    color: "text-violet-400",
+    border: "border-violet-500/30",
+    bg: "bg-violet-500/5",
+    btnClass: "bg-violet-600 hover:bg-violet-700 text-white border-0",
+    perks: ["Pro features forever", "No monthly renewals", "Tradeable NFT", "Priority support"],
+    icon: Gem,
+  },
+  {
+    plan: "lifetime_enterprise",
+    label: "Lifetime Enterprise",
+    aznCost: 1000,
+    color: "text-rose-400",
+    border: "border-rose-500/30",
+    bg: "bg-rose-500/5",
+    btnClass: "bg-rose-600 hover:bg-rose-700 text-white border-0",
+    perks: ["Enterprise features forever", "No monthly renewals", "Tradeable NFT", "Dedicated support", "AZN Token Rewards"],
+    icon: InfinityIcon,
+  },
+];
+
+function LifetimePassSection({ token, onSuccess }: { token: string; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [minting, setMinting] = useState<string | null>(null);
+
+  const handleMint = async (plan: string, aznCost: number) => {
+    if (!confirm(`Mint ${plan.replace(/_/g, " ").toUpperCase()} NFT Pass for ${aznCost} AZN? This is permanent and non-refundable.`)) return;
+    setMinting(plan);
+    try {
+      const r = await fetch(`${BASE}/api/nft-subscriptions/mint`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ plan }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error ?? "Mint failed");
+      toast({ title: `🎉 ${plan.replace(/_/g, " ").toUpperCase()} NFT minted!`, description: `Token ID: ${d.nft?.token_id ?? ""}` });
+      onSuccess();
+    } catch (e: any) {
+      toast({ variant: "destructive", title: e.message });
+    }
+    setMinting(null);
+  };
+
+  return (
+    <div className="border border-violet-500/20 rounded-xl overflow-hidden bg-violet-500/3">
+      <div className="px-5 py-4 border-b border-violet-500/15 flex items-center gap-2">
+        <Gem className="w-4 h-4 text-violet-400" />
+        <span className="font-mono font-bold text-sm text-violet-400">Lifetime NFT Passes</span>
+        <span className="font-mono text-[10px] text-muted-foreground ml-auto">Pay once · Own forever · Tradeable</span>
+      </div>
+      <div className="px-5 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {LIFETIME_PASSES.map(({ plan, label, aznCost, color, border, bg, btnClass, perks, icon: Icon }) => (
+          <div key={plan} className={cn("rounded-xl border px-5 py-5 flex flex-col gap-3", border, bg)}>
+            <div className="flex items-center gap-2">
+              <Icon className={cn("w-5 h-5", color)} />
+              <span className={cn("font-mono font-bold text-sm", color)}>{label}</span>
+            </div>
+            <div className="font-mono text-3xl font-bold text-foreground">
+              {aznCost}<span className="text-xs text-muted-foreground ml-1">AZN</span>
+            </div>
+            <div className="font-mono text-[10px] text-muted-foreground">one-time · lifetime access</div>
+            <ul className="space-y-1">
+              {perks.map(p => (
+                <li key={p} className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                  <Check className="w-3 h-3 text-emerald-400 flex-shrink-0" /> {p}
+                </li>
+              ))}
+            </ul>
+            <Button
+              onClick={() => handleMint(plan, aznCost)}
+              disabled={!!minting}
+              className={cn("w-full font-mono text-xs gap-2 h-10 mt-auto", btnClass)}
+            >
+              {minting === plan ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Gem className="w-3.5 h-3.5" />}
+              {minting === plan ? "Minting…" : `Mint for ${aznCost} AZN`}
+            </Button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function AznBuyButton({ plan, aznCost, isActive, token, onSuccess, btnClass }: {
   plan: string; aznCost: number; isActive: boolean; token: string; onSuccess: () => void; btnClass: string;
@@ -496,6 +585,9 @@ export default function SubscriptionPage() {
           </div>
         </div>
       </div>
+
+      {/* Lifetime NFT Passes */}
+      <LifetimePassSection token={token ?? ""} onSuccess={fetchData} />
 
       <div className="border border-card-border rounded-xl p-4 bg-card/50">
         <div className="font-mono text-xs font-bold text-muted-foreground/60 uppercase tracking-widest mb-3">Plan Comparison</div>

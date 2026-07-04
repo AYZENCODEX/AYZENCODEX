@@ -177,6 +177,18 @@ function AznChart() {
 
 // ── Create Listing Modal ───────────────────────────────────────────────────────
 
+interface OwnedNft { id: number; token_id: string; plan: string; nft_type: string; badge_name?: string; expires_at?: string; }
+
+const EXPIRY_OPTIONS = [
+  { label: "Never", days: 0 },
+  { label: "1 day", days: 1 },
+  { label: "3 days", days: 3 },
+  { label: "7 days", days: 7 },
+  { label: "14 days", days: 14 },
+  { label: "30 days", days: 30 },
+  { label: "90 days", days: 90 },
+];
+
 function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
   const { token } = useAuth() as any;
   const { toast } = useToast();
@@ -184,10 +196,14 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState("");
+  const [expiryDays, setExpiryDays] = useState(7);
   const [saving, setSaving] = useState(false);
   const [vaultItems, setVaultItems] = useState<{ entities: VaultItem[]; local_accounts: VaultItem[] }>({ entities: [], local_accounts: [] });
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [vaultOpen, setVaultOpen] = useState(false);
+  const [ownedNfts, setOwnedNfts] = useState<OwnedNft[]>([]);
+  const [selectedNftId, setSelectedNftId] = useState<number | null>(null);
+  const [nftPickerOpen, setNftPickerOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -195,9 +211,16 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
       .then(r => r.json())
       .then(d => setVaultItems({ entities: d.entities ?? [], local_accounts: d.local_accounts ?? [] }))
       .catch(() => {});
+    fetch(`${BASE}/api/nft-subscriptions/my-nfts`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(d => setOwnedNfts(Array.isArray(d) ? d : []))
+      .catch(() => {});
   }, [open, token]);
 
-  const reset = () => { setType("entity"); setTitle(""); setDesc(""); setPrice(""); setSelectedItemId(null); setVaultOpen(false); };
+  const reset = () => {
+    setType("entity"); setTitle(""); setDesc(""); setPrice(""); setExpiryDays(7);
+    setSelectedItemId(null); setVaultOpen(false); setSelectedNftId(null); setNftPickerOpen(false);
+  };
 
   const availableVaultItems = type === "entity" ? vaultItems.entities : type === "local_account" ? vaultItems.local_accounts : [];
 
@@ -208,12 +231,25 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
     setVaultOpen(false);
   };
 
+  const selectedNft = ownedNfts.find(n => n.id === selectedNftId);
+
   const submit = async () => {
-    if (!title || !price || Number(price) <= 0) { toast({ title: "Fill all fields", variant: "destructive" }); return; }
+    if ((type === "entity" || type === "local_account") && !selectedItemId) {
+      toast({ title: "Select a vault item to list", variant: "destructive" }); return;
+    }
+    if (type === "nft" && !selectedNftId) {
+      toast({ title: "Select an NFT to list", variant: "destructive" }); return;
+    }
+    if (!price || Number(price) <= 0) { toast({ title: "Enter a valid price", variant: "destructive" }); return; }
+    const listingTitle = title.trim() || selectedNft?.token_id || "Listing";
+    const listing_expires_at = expiryDays > 0
+      ? new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toISOString()
+      : null;
     setSaving(true);
     try {
-      const body: any = { listing_type: type, title, description: desc, price_azn: Number(price) };
+      const body: any = { listing_type: type, title: listingTitle, description: desc, price_azn: Number(price), listing_expires_at };
       if (selectedItemId && (type === "entity" || type === "local_account")) body.item_id = selectedItemId;
+      if (selectedNftId && type === "nft") body.item_id = selectedNftId;
       const r = await fetch(`${BASE}/api/marketplace/listings`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
@@ -238,8 +274,6 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
       label: "Digital Assets",
       types: [
         { id: "nft" as ListingType,          ...TYPE_CONFIG.nft },
-        { id: "username_nft" as ListingType,  ...TYPE_CONFIG.username_nft },
-        { id: "badge_nft" as ListingType,     ...TYPE_CONFIG.badge_nft },
         { id: "azn" as ListingType,           ...TYPE_CONFIG.azn },
       ],
     },
@@ -263,7 +297,7 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
                   {group.types.map(t => {
                     const Icon = t.icon;
                     return (
-                      <button key={t.id} onClick={() => { setType(t.id); setSelectedItemId(null); setTitle(""); setDesc(""); }}
+                      <button key={t.id} onClick={() => { setType(t.id); setSelectedItemId(null); setSelectedNftId(null); setTitle(""); setDesc(""); }}
                         className={cn("flex items-center gap-2 p-2 rounded-lg border text-xs transition-all text-left",
                           type === t.id ? "border-primary/40 bg-primary/10 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
                         <Icon className="w-3.5 h-3.5 flex-shrink-0" /> <span className="truncate">{t.label}</span>
@@ -275,35 +309,81 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
             ))}
           </div>
 
-          {/* Vault item picker */}
-          {(type === "entity" || type === "local_account") && availableVaultItems.length > 0 && (
+          {/* Vault item picker — required for entity/local_account */}
+          {(type === "entity" || type === "local_account") && (
             <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">
-                Pick from Vault <span className="text-muted-foreground/40">(optional)</span>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1 flex items-center gap-1">
+                <Wallet className="w-3 h-3" /> Select from Vault <span className="text-red-400">*</span>
               </div>
-              <button onClick={() => setVaultOpen(v => !v)}
-                className="w-full flex items-center justify-between p-2.5 rounded-lg border border-border/40 text-xs text-muted-foreground hover:border-primary/20 transition-all">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-3.5 h-3.5" />
-                  {selectedItemId
-                    ? availableVaultItems.find(v => v.id === selectedItemId)?.name ?? availableVaultItems.find(v => v.id === selectedItemId)?.username ?? "Selected"
-                    : `${availableVaultItems.length} items in vault`}
+              {availableVaultItems.length === 0 ? (
+                <div className="text-[11px] text-muted-foreground/50 border border-dashed border-border/30 rounded-lg px-3 py-2.5 text-center">
+                  No {type === "entity" ? "entities" : "local accounts"} in vault
                 </div>
-                <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", vaultOpen && "rotate-180")} />
-              </button>
-              {vaultOpen && (
-                <div className="mt-1 border border-border/40 rounded-lg overflow-hidden max-h-40 overflow-y-auto">
-                  {availableVaultItems.map(item => (
-                    <button key={item.id} onClick={() => handleVaultSelect(item)}
-                      className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-all border-b border-border/20 last:border-0",
-                        selectedItemId === item.id ? "bg-primary/10 text-primary" : "hover:bg-muted/30 text-muted-foreground")}>
-                      <span className="font-bold truncate">{item.name ?? item.username}</span>
-                      {(item.platform_type ?? item.platform_name) && (
-                        <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">{item.platform_type ?? item.platform_name}</span>
-                      )}
-                    </button>
-                  ))}
+              ) : (
+                <>
+                  <button onClick={() => setVaultOpen(v => !v)}
+                    className={cn("w-full flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all",
+                      selectedItemId ? "border-primary/40 bg-primary/5 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+                    <span className="truncate">
+                      {selectedItemId
+                        ? availableVaultItems.find(v => v.id === selectedItemId)?.name ?? availableVaultItems.find(v => v.id === selectedItemId)?.username ?? "Selected"
+                        : `Choose from ${availableVaultItems.length} vault items…`}
+                    </span>
+                    <ChevronDown className={cn("w-3.5 h-3.5 flex-shrink-0 transition-transform", vaultOpen && "rotate-180")} />
+                  </button>
+                  {vaultOpen && (
+                    <div className="mt-1 border border-border/40 rounded-lg overflow-hidden max-h-44 overflow-y-auto">
+                      {availableVaultItems.map(item => (
+                        <button key={item.id} onClick={() => handleVaultSelect(item)}
+                          className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-all border-b border-border/20 last:border-0",
+                            selectedItemId === item.id ? "bg-primary/10 text-primary" : "hover:bg-muted/30 text-muted-foreground")}>
+                          <span className="font-bold truncate">{item.name ?? item.username}</span>
+                          {(item.platform_type ?? item.platform_name) && (
+                            <span className="text-muted-foreground/50 text-[10px] flex-shrink-0">{item.platform_type ?? item.platform_name}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* NFT pass picker — required for nft type */}
+          {type === "nft" && (
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1 flex items-center gap-1">
+                <Gem className="w-3 h-3" /> Select NFT Pass <span className="text-red-400">*</span>
+              </div>
+              {ownedNfts.length === 0 ? (
+                <div className="text-[11px] text-muted-foreground/50 border border-dashed border-border/30 rounded-lg px-3 py-2.5 text-center">
+                  No owned NFT passes found
                 </div>
+              ) : (
+                <>
+                  <button onClick={() => setNftPickerOpen(v => !v)}
+                    className={cn("w-full flex items-center justify-between p-2.5 rounded-lg border text-xs transition-all",
+                      selectedNftId ? "border-primary/40 bg-primary/5 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+                    <span className="truncate font-mono">
+                      {selectedNft ? `${selectedNft.plan.toUpperCase()} — ${selectedNft.token_id}` : `Choose from ${ownedNfts.length} NFTs…`}
+                    </span>
+                    <ChevronDown className={cn("w-3.5 h-3.5 flex-shrink-0 transition-transform", nftPickerOpen && "rotate-180")} />
+                  </button>
+                  {nftPickerOpen && (
+                    <div className="mt-1 border border-border/40 rounded-lg overflow-hidden max-h-44 overflow-y-auto">
+                      {ownedNfts.map(nft => (
+                        <button key={nft.id} onClick={() => { setSelectedNftId(nft.id); setTitle(`${nft.plan.toUpperCase()} NFT Pass — ${nft.token_id}`); setNftPickerOpen(false); }}
+                          className={cn("w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-all border-b border-border/20 last:border-0",
+                            selectedNftId === nft.id ? "bg-primary/10 text-primary" : "hover:bg-muted/30 text-muted-foreground")}>
+                          <Gem className="w-3 h-3 flex-shrink-0" />
+                          <span className="font-bold">{nft.plan.toUpperCase()}</span>
+                          <span className="text-[10px] text-muted-foreground/50 truncate">{nft.token_id}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
@@ -330,6 +410,31 @@ function CreateListingModal({ open, onClose, onCreated }: { open: boolean; onClo
               </span>
             </div>
             <p className="text-[10px] text-muted-foreground/50 mt-1">100 AZN = $1 USD. 5% platform fee deducted from seller on approval.</p>
+          </div>
+
+          {/* Listing Expiry Timer */}
+          <div>
+            <div className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5 flex items-center gap-1">
+              <Clock className="w-3 h-3" /> Listing Expires
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {EXPIRY_OPTIONS.map(opt => (
+                <button key={opt.days} onClick={() => setExpiryDays(opt.days)}
+                  className={cn(
+                    "px-3 py-1 rounded-full text-[10px] font-mono border transition-all",
+                    expiryDays === opt.days
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "border-border/40 text-muted-foreground hover:border-primary/20"
+                  )}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {expiryDays > 0 && (
+              <p className="text-[10px] text-muted-foreground/40 mt-1">
+                Expires {new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>

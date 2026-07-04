@@ -169,7 +169,7 @@ function MintModal({ onClose, onSuccess, token }: { onClose: () => void; onSucce
           {[
             { heading: "Subscription Passes", plans: ["pro", "enterprise"] },
             { heading: "Lifetime Passes", plans: ["lifetime_pro", "lifetime_enterprise"] },
-            { heading: "Collectible NFTs", plans: ["username", "achievement_badge"] },
+            { heading: "Username NFT", plans: ["username"] },
           ].map(group => (
             <div key={group.heading}>
               <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground/60 mb-2">{group.heading}</div>
@@ -198,29 +198,13 @@ function MintModal({ onClose, onSuccess, token }: { onClose: () => void; onSucce
             </div>
           ))}
 
-          {/* Badge name picker */}
-          {plan === "achievement_badge" && (
-            <div>
-              <div className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">Badge Name</div>
-              <div className="flex flex-wrap gap-1.5">
-                {BADGE_OPTIONS.map(b => (
-                  <button key={b} onClick={() => setBadgeName(b)}
-                    className={cn("px-2.5 py-1 text-[10px] font-mono rounded-full border transition-all",
-                      badgeName === b ? "bg-amber-400/10 border-amber-400/40 text-amber-400" : "border-border/40 text-muted-foreground hover:border-amber-400/20")}>
-                    {b}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Selected plan preview */}
           <div className={cn("rounded-lg border p-3 flex items-center gap-3", cfg.bg, cfg.border)}>
             <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center", cfg.bg)}>
               <cfg.icon className={cn("w-5 h-5", cfg.color)} />
             </div>
             <div className="flex-1">
-              <div className="font-mono font-bold text-sm">{cfg.label}{plan === "achievement_badge" ? ` — ${badgeName}` : ""}</div>
+              <div className="font-mono font-bold text-sm">{cfg.label}</div>
               <div className="font-mono text-[10px] text-muted-foreground">{cfg.durationLabel}</div>
             </div>
             <div className={cn("font-mono text-lg font-bold", cfg.color)}>{cfg.aznCost === 0 ? "FREE" : `${cfg.aznCost} AZN`}</div>
