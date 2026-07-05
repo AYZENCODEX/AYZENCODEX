@@ -241,6 +241,8 @@ const MIGRATIONS = [
     updated_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
   "INSERT INTO ai_agent_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING",
+  "ALTER TABLE ai_agent_settings ADD COLUMN IF NOT EXISTS agent_mode TEXT DEFAULT 'single'",
+  "ALTER TABLE ai_agent_settings ADD COLUMN IF NOT EXISTS context_window INTEGER DEFAULT 32000",
   // ── AI Agent chat sessions ────────────────────────────────────────────────────
   `CREATE TABLE IF NOT EXISTS ai_agent_messages (
     id SERIAL PRIMARY KEY,
@@ -251,9 +253,74 @@ const MIGRATIONS = [
     tool_input TEXT,
     tool_output TEXT,
     tokens_used INTEGER DEFAULT 0,
+    agent_name TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT NOW()
   )`,
   "CREATE INDEX IF NOT EXISTS idx_ai_msgs_session ON ai_agent_messages(session_id, created_at DESC)",
+  "ALTER TABLE ai_agent_messages ADD COLUMN IF NOT EXISTS agent_name TEXT",
+  // ── AI Agent roster (multi-agent pipeline members) ───────────────────────────
+  `CREATE TABLE IF NOT EXISTS ai_agents (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    router TEXT NOT NULL DEFAULT 'openai',
+    model TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+    system_prompt TEXT NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `INSERT INTO ai_agents (name, role, description, model, system_prompt, sort_order)
+   SELECT * FROM (VALUES
+     ('Planner', 'planner', 'Decodes intent and breaks the request into an actionable plan', 'gpt-4o-mini', 'You are the PLANNER agent of AYZEN AI Agent. Decode the user''s intent, expand it into clear requirements, and produce a numbered implementation plan. List the exact target files you expect to touch. Do not write code yet.', 1),
+     ('Architect', 'architect', 'Locates and reads existing code relevant to the plan', 'gpt-4o-mini', 'You are the ARCHITECT agent of AYZEN AI Agent. Given a plan, use list_files and read_file to inspect the current codebase, confirm the exact files to change, and summarize the relevant existing code and conventions the Coder must follow.', 2),
+     ('Coder', 'coder', 'Generates and applies code changes', 'gpt-4o-mini', 'You are the CODER agent of AYZEN AI Agent. Using the plan and the architecture notes, generate the necessary code and apply it with the write_file tool. Keep changes minimal, consistent with existing style, and scoped to the plan.', 3),
+     ('QA', 'qa', 'Typechecks and fixes bugs', 'gpt-4o-mini', 'You are the QA agent of AYZEN AI Agent. Run run_typecheck after code changes. If it fails, read the errors, fix the offending files with write_file, and re-run typecheck until it passes or you determine it cannot be fixed automatically.', 4),
+     ('DevOps', 'devops', 'Commits verified changes and can roll back on failure', 'gpt-4o-mini', 'You are the DEVOPS agent of AYZEN AI Agent. If QA reports a passing typecheck, use git_commit to save the verified changes with a clear commit message. If QA reports failure, use rollback_file to restore the original file contents and report that the change was rolled back.', 5)
+   ) AS v(name, role, description, model, system_prompt, sort_order)
+   WHERE NOT EXISTS (SELECT 1 FROM ai_agents)`,
+  // ── AI Model catalog (user-editable) ─────────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS ai_model_catalog (
+    id SERIAL PRIMARY KEY,
+    provider TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    label TEXT NOT NULL,
+    ctx INTEGER NOT NULL DEFAULT 32000,
+    is_custom BOOLEAN NOT NULL DEFAULT FALSE,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  `INSERT INTO ai_model_catalog (provider, model_id, label, ctx, is_custom)
+   SELECT * FROM (VALUES
+     ('openai', 'gpt-4o', 'GPT-4o', 128000, FALSE),
+     ('openai', 'gpt-4o-mini', 'GPT-4o Mini', 128000, FALSE),
+     ('openai', 'gpt-4-turbo', 'GPT-4 Turbo', 128000, FALSE),
+     ('openai', 'gpt-3.5-turbo', 'GPT-3.5 Turbo', 16385, FALSE),
+     ('groq', 'llama-3.3-70b-versatile', 'LLaMA 3.3 70B', 131072, FALSE),
+     ('groq', 'llama-3.1-8b-instant', 'LLaMA 3.1 8B Instant', 131072, FALSE),
+     ('groq', 'mixtral-8x7b-32768', 'Mixtral 8x7B', 32768, FALSE),
+     ('groq', 'gemma2-9b-it', 'Gemma 2 9B', 8192, FALSE),
+     ('openrouter', 'anthropic/claude-3.5-sonnet', 'Claude 3.5 Sonnet', 200000, FALSE),
+     ('openrouter', 'anthropic/claude-3-haiku', 'Claude 3 Haiku', 200000, FALSE),
+     ('openrouter', 'google/gemini-pro-1.5', 'Gemini Pro 1.5', 2000000, FALSE),
+     ('openrouter', 'meta-llama/llama-3.2-90b-vision-instruct', 'LLaMA 3.2 90B Vision', 131072, FALSE),
+     ('openrouter', 'deepseek/deepseek-r1', 'DeepSeek R1', 65536, FALSE),
+     ('openrouter', 'mistralai/mistral-large', 'Mistral Large', 131072, FALSE),
+     ('openrouter', 'x-ai/grok-beta', 'Grok Beta', 131072, FALSE)
+   ) AS v(provider, model_id, label, ctx, is_custom)
+   WHERE NOT EXISTS (SELECT 1 FROM ai_model_catalog)`,
+  // ── AI Agent file backups (for write_file / rollback) ────────────────────────
+  `CREATE TABLE IF NOT EXISTS ai_agent_file_backups (
+    id SERIAL PRIMARY KEY,
+    session_id TEXT NOT NULL DEFAULT 'default',
+    file_path TEXT NOT NULL,
+    original_content TEXT,
+    existed BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_ai_backups_path ON ai_agent_file_backups(session_id, file_path, created_at DESC)",
   // ── NFT listings: liked_by JSON array ────────────────────────────────────────
   "ALTER TABLE nft_market_listings ADD COLUMN IF NOT EXISTS liked_by TEXT DEFAULT '[]'",
   // Task steps guide (JSON array of {title, description})

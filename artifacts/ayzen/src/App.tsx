@@ -160,7 +160,7 @@ function Router() {
       <Route path="/admin/teams">{() => <ProtectedRoute component={AdminTeams} allowedRoles={["admin", "dev", "moderator"]} />}</Route>
       <Route path="/admin/team-vault">{() => <ProtectedRoute component={AdminTeamVault} adminOnly />}</Route>
       <Route path="/admin/marketplace">{() => <ProtectedRoute component={AdminMarketplace} allowedRoles={["admin", "dev"]} />}</Route>
-      <Route path="/admin/ai-agent">{() => <ProtectedRoute component={AdminAiAgent} allowedRoles={["admin", "dev"]} />}</Route>
+      <Route path="/admin/ai-agent">{() => <ProtectedRoute component={AdminAiAgent} allowedRoles={["dev"]} />}</Route>
 
       {/* Dev-only Routes */}
       <Route path="/dev/azn-deploy">{() => <ProtectedRoute component={DevAznDeploy} allowedRoles={["dev", "admin"]} />}</Route>

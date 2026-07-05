@@ -88,14 +88,6 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
-    label: "AI Agent", icon: BotIcon,
-    items: [
-      { href: "/admin/ai-agent",            label: "AI Assistant",  icon: BotIcon },
-      { href: "/admin/ai-agent?tab=models", label: "AI Models",     icon: Cpu },
-      { href: "/admin/ai-agent?tab=settings", label: "AI Settings", icon: Settings },
-    ],
-  },
-  {
     label: "Developer", icon: Code2,
     items: [
       { href: "/admin/developer?tab=console",   label: "Live Console", icon: Terminal },
@@ -125,9 +117,11 @@ const DEV_NAV: NavGroup[] = [
   {
     label: "AI Agent", icon: BotIcon,
     items: [
-      { href: "/admin/ai-agent",              label: "AI Assistant",  icon: BotIcon },
-      { href: "/admin/ai-agent?tab=models",   label: "AI Models",     icon: Cpu },
-      { href: "/admin/ai-agent?tab=settings", label: "AI Settings",   icon: Settings },
+      { href: "/admin/ai-agent",              label: "Assistant",  icon: BotIcon },
+      { href: "/admin/ai-agent?tab=agents",   label: "Agent",      icon: Users },
+      { href: "/admin/ai-agent?tab=mcp",      label: "MCP Skill",  icon: Puzzle },
+      { href: "/admin/ai-agent?tab=models",   label: "AI Model",   icon: Cpu },
+      { href: "/admin/ai-agent?tab=settings", label: "Settings",   icon: Settings },
     ],
   },
   {
