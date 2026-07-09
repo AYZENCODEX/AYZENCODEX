@@ -254,7 +254,7 @@ const TEAM_LEADER_NAV: NavGroup[] = [
   {
     label: "Market", icon: Store,
     items: [
-      { href: "/marketplace",       label: "P2P Market",  icon: Store },
+      { href: "/marketplace/azn",   label: "AZN Market",  icon: Zap },
       { href: "/marketplace/nft",   label: "NFT Market",  icon: Image },
     ],
   },
@@ -327,7 +327,6 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Market", icon: Store,
     items: [
-      { href: "/marketplace",          label: "P2P Market",    icon: Store },
       { href: "/marketplace/azn",      label: "AZN Market",    icon: Zap },
       { href: "/marketplace/nft",      label: "NFT Market",    icon: Image },
       { href: "/marketplace/vault",    label: "Vault Market",  icon: Vault },

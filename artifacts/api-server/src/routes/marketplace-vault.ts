@@ -18,24 +18,9 @@ async function ensureWallet(userId: number): Promise<number> {
   return Number(r.rows[0]?.balance ?? 0);
 }
 
-function maskVaultEntry(entry: any) {
-  if (!entry) return null;
-  return {
-    project_name: entry.project_name,
-    category: entry.category,
-    has_twitter: !!entry.twitter_username,
-    has_discord: !!entry.discord_username,
-    has_telegram: !!entry.telegram_username,
-    has_email: !!entry.email,
-    has_wallet: !!(entry.wallet_addresses),
-    entity_serial: entry.entity_serial,
-    tier_hint: entry.other_accounts ? "multi" : "single",
-  };
-}
-
-// ── 1. GET /marketplace/vault/listings ───────────────────────────────────────
+// ── GET /marketplace/vault/listings ──────────────────────────────────────────
 router.get("/marketplace/vault/listings", requireAuth, async (req, res): Promise<void> => {
-  const { limit = 50, offset = 0, category, min_price, max_price } = req.query as any;
+  const { limit = 50, offset = 0, category, account_type, vault_type, order_type, min_price, max_price } = req.query as any;
   try {
     let q = `
       SELECT vl.*, u.username AS seller_username
@@ -45,6 +30,9 @@ router.get("/marketplace/vault/listings", requireAuth, async (req, res): Promise
     `;
     const params: any[] = [];
     if (category) { params.push(category); q += ` AND vl.category = $${params.length}`; }
+    if (account_type) { params.push(account_type); q += ` AND vl.account_type = $${params.length}`; }
+    if (vault_type) { params.push(vault_type); q += ` AND vl.vault_type = $${params.length}`; }
+    if (order_type) { params.push(order_type); q += ` AND vl.order_type = $${params.length}`; }
     if (min_price) { params.push(Number(min_price)); q += ` AND vl.price >= $${params.length}`; }
     if (max_price) { params.push(Number(max_price)); q += ` AND vl.price <= $${params.length}`; }
     q += ` ORDER BY vl.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
@@ -54,44 +42,105 @@ router.get("/marketplace/vault/listings", requireAuth, async (req, res): Promise
     const listings = r.rows.map(row => ({
       ...row,
       preview_data: row.preview_data ? JSON.parse(row.preview_data) : null,
+      account_details: row.account_details ? JSON.parse(row.account_details) : null,
     }));
     res.json({ listings, total: Number(cnt.rows[0].count), fee_pct: FEE_PCT });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 2. POST /marketplace/vault/listings — list a vault entry for sale ─────────
+// ── POST /marketplace/vault/listings ─────────────────────────────────────────
 router.post("/marketplace/vault/listings", requireAuth, async (req, res): Promise<void> => {
   const sellerId = req.user!.userId;
-  const { vault_entry_id, title, description, price, category, tier = "basic" } = req.body;
-  if (!title || !price) { res.status(400).json({ error: "title and price required" }); return; }
+  const {
+    vault_entry_id, local_account_id,
+    title, description, price, price_min, price_max,
+    category, tier = "basic",
+    order_type = "sell",
+    account_type,
+    account_details,
+    vault_type = "entity",
+  } = req.body;
+  if (order_type === "sell" && !price) { res.status(400).json({ error: "price required for sell order" }); return; }
+  if (order_type === "buy" && !account_type) { res.status(400).json({ error: "account_type required for buy order" }); return; }
   try {
     let previewData = null;
-    if (vault_entry_id) {
+    // Verify ownership of referenced vault asset before listing
+    if (vault_entry_id && vault_type === "entity") {
       const ve = await pool.query(
         "SELECT * FROM vault_entries WHERE id=$1 AND user_id=$2",
         [vault_entry_id, sellerId]
       );
-      if (ve.rows[0]) previewData = JSON.stringify(maskVaultEntry(ve.rows[0]));
+      if (!ve.rows[0]) { res.status(403).json({ error: "Vault entry not found or not yours" }); return; }
+      const e = ve.rows[0];
+      previewData = JSON.stringify({
+        project_name: e.project_name,
+        has_twitter: !!e.twitter_username,
+        has_discord: !!e.discord_username,
+        has_telegram: !!e.telegram_phone,
+        has_email: !!e.email,
+        has_wallet: !!(e.wallet_addresses),
+        entity_serial: e.entity_serial,
+      });
+    } else if (local_account_id && vault_type === "local") {
+      const la = await pool.query(
+        "SELECT * FROM local_accounts WHERE id=$1 AND user_id=$2",
+        [local_account_id, sellerId]
+      );
+      if (!la.rows[0]) { res.status(403).json({ error: "Local account not found or not yours" }); return; }
+      const a = la.rows[0];
+      previewData = JSON.stringify({
+        category: a.category,
+        has_2fa: !!a.twofa,
+        account_create_date: a.account_create_date,
+        followers: a.followers,
+      });
     }
+
+    const effectiveTitle = title || `${account_type ? account_type.charAt(0).toUpperCase() + account_type.slice(1) : "Account"} buy request`;
+    const effectivePrice = order_type === "buy" ? (price_min ?? 0) : Number(price);
+
     const r = await pool.query(
       `INSERT INTO vault_market_listings
-         (seller_id, vault_entry_id, title, description, price, category, tier, preview_data)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [sellerId, vault_entry_id ?? null, title, description ?? null,
-       Number(price), category ?? "Social", tier, previewData]
+         (seller_id, vault_entry_id, title, description, price, category, tier,
+          preview_data, order_type, account_type, account_details, vault_type, price_min, price_max)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [
+        sellerId,
+        vault_entry_id ?? local_account_id ?? null,
+        effectiveTitle,
+        description ?? null,
+        effectivePrice,
+        category ?? account_type ?? "Other",
+        tier,
+        previewData,
+        order_type,
+        account_type ?? null,
+        account_details ? JSON.stringify(account_details) : null,
+        vault_type,
+        price_min ? Number(price_min) : null,
+        price_max ? Number(price_max) : null,
+      ]
     );
-    res.json({ ...r.rows[0], preview_data: previewData ? JSON.parse(previewData) : null });
+    res.json({
+      ...r.rows[0],
+      preview_data: previewData ? JSON.parse(previewData) : null,
+      account_details: account_details ?? null,
+    });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 3. POST /marketplace/vault/buy ────────────────────────────────────────────
+// ── POST /marketplace/vault/buy ────────────────────────────────────────────────
 router.post("/marketplace/vault/buy", requireAuth, async (req, res): Promise<void> => {
   const buyerId = req.user!.userId;
   const { listing_id } = req.body;
   if (!listing_id) { res.status(400).json({ error: "listing_id required" }); return; }
   try {
-    const listR = await pool.query("SELECT * FROM vault_market_listings WHERE id=$1 AND status='active'", [listing_id]);
-    if (!listR.rows[0]) { res.status(404).json({ error: "Listing not found or sold" }); return; }
+    // Only allow purchasing sell-type listings (buy-orders are fulfilled via a different flow)
+    const listR = await pool.query(
+      "SELECT * FROM vault_market_listings WHERE id=$1 AND status='active' AND (order_type='sell' OR order_type IS NULL)",
+      [listing_id]
+    );
+    if (!listR.rows[0]) { res.status(404).json({ error: "Listing not found, sold, or is not a sell listing" }); return; }
     const listing = listR.rows[0];
     if (listing.seller_id === buyerId) { res.status(400).json({ error: "Cannot buy your own listing" }); return; }
     const balance = await ensureWallet(buyerId);
@@ -100,24 +149,45 @@ router.post("/marketplace/vault/buy", requireAuth, async (req, res): Promise<voi
     const net = Number(listing.price) - fee;
     await pool.query("BEGIN");
     try {
+      // Debit buyer
       await pool.query(
         "UPDATE marketplace_wallets SET balance=balance-$1, updated_at=NOW() WHERE user_id=$2 AND market_type='vault'",
         [Number(listing.price), buyerId]
       );
+      // Credit seller (minus fee)
       await pool.query(
         "UPDATE marketplace_wallets SET balance=balance+$1, updated_at=NOW() WHERE user_id=$2 AND market_type='vault'",
         [net, listing.seller_id]
       );
+      // Mark listing sold
       await pool.query(
         "UPDATE vault_market_listings SET status='sold', buyer_id=$1, sold_at=NOW() WHERE id=$2",
         [buyerId, listing_id]
       );
+      // Transfer the vault asset
       if (listing.vault_entry_id) {
-        await pool.query(
-          "UPDATE vault_entries SET user_id=$1 WHERE id=$2 AND user_id=$3",
-          [buyerId, listing.vault_entry_id, listing.seller_id]
-        );
+        if (listing.vault_type === "entity") {
+          const transferResult = await pool.query(
+            "UPDATE vault_entries SET user_id=$1 WHERE id=$2 AND user_id=$3 RETURNING id",
+            [buyerId, listing.vault_entry_id, listing.seller_id]
+          );
+          if (transferResult.rowCount === 0) {
+            // Seller no longer owns this asset; rollback to protect buyer
+            await pool.query("ROLLBACK");
+            res.status(409).json({ error: "Asset ownership conflict — seller may no longer own this entry" }); return;
+          }
+        } else if (listing.vault_type === "local") {
+          const transferResult = await pool.query(
+            "UPDATE local_accounts SET user_id=$1 WHERE id=$2 AND user_id=$3 RETURNING id",
+            [buyerId, listing.vault_entry_id, listing.seller_id]
+          );
+          if (transferResult.rowCount === 0) {
+            await pool.query("ROLLBACK");
+            res.status(409).json({ error: "Asset ownership conflict — seller may no longer own this local account" }); return;
+          }
+        }
       }
+      // Record transaction
       await pool.query(
         `INSERT INTO marketplace_transactions (market_type,listing_id,buyer_id,seller_id,amount,fee,net_amount)
          VALUES ('vault',$1,$2,$3,$4,$5,$6)`,
@@ -129,10 +199,10 @@ router.post("/marketplace/vault/buy", requireAuth, async (req, res): Promise<voi
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 4. DELETE /marketplace/vault/listings/:id ─────────────────────────────────
+// ── DELETE /marketplace/vault/listings/:id ────────────────────────────────────
 router.delete("/marketplace/vault/listings/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
     const r = await pool.query("SELECT * FROM vault_market_listings WHERE id=$1 AND status='active'", [id]);
     if (!r.rows[0]) { res.status(404).json({ error: "Not found" }); return; }
@@ -143,21 +213,21 @@ router.delete("/marketplace/vault/listings/:id", requireAuth, async (req, res): 
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 5. GET /marketplace/vault/stats ──────────────────────────────────────────
+// ── GET /marketplace/vault/stats ──────────────────────────────────────────────
 router.get("/marketplace/vault/stats", requireAuth, async (_req, res): Promise<void> => {
   try {
-    const [active, volume, cats] = await Promise.all([
-      pool.query("SELECT COUNT(*) as cnt, MIN(price) as floor, AVG(price) as avg_price FROM vault_market_listings WHERE status='active'"),
+    const [active, buy_orders, volume] = await Promise.all([
+      pool.query("SELECT COUNT(*) as cnt, MIN(price) as floor, AVG(price) as avg_price FROM vault_market_listings WHERE status='active' AND (order_type='sell' OR order_type IS NULL)"),
+      pool.query("SELECT COUNT(*) as cnt FROM vault_market_listings WHERE status='active' AND order_type='buy'"),
       pool.query("SELECT SUM(amount) as vol, COUNT(*) as sales FROM marketplace_transactions WHERE market_type='vault'"),
-      pool.query("SELECT category, COUNT(*) as cnt FROM vault_market_listings WHERE status='active' GROUP BY category"),
     ]);
     res.json({
       active_listings: Number(active.rows[0].cnt),
+      active_buy_orders: Number(buy_orders.rows[0].cnt),
       floor_price: Number(active.rows[0].floor ?? 0),
       avg_price: Number(active.rows[0].avg_price ?? 0),
       total_volume: Number(volume.rows[0].vol ?? 0),
       total_sales: Number(volume.rows[0].sales),
-      category_breakdown: cats.rows,
       fee_pct: FEE_PCT,
     });
   } catch (e: any) { res.status(500).json({ error: e.message }); }

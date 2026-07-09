@@ -835,6 +835,34 @@ const MIGRATIONS = [
      '32c9156337d663748c1b0122abbcbe288929ea52352250854325d61d786ae292',
      'teamleader', 'active', true, false, 'AYZN-TL001'
    WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'demoteam@ayzen.io')`,
+  // ── Phase 22: AZN Market buy/sell order types + payment methods ───────────
+  "ALTER TABLE azn_listings ADD COLUMN IF NOT EXISTS order_type TEXT DEFAULT 'sell'",
+  "ALTER TABLE azn_listings ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'binance'",
+  "ALTER TABLE azn_listings ADD COLUMN IF NOT EXISTS payment_details TEXT",
+  // ── Phase 23: NFT Market dynamic categories ────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS nft_market_categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    color TEXT DEFAULT 'text-primary',
+    icon TEXT DEFAULT 'gem',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_by INTEGER,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  )`,
+  "INSERT INTO nft_market_categories (name, label, color, icon) VALUES ('username', 'Username NFT', 'text-cyan-400', 'user') ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO nft_market_categories (name, label, color, icon) VALUES ('lifetime_pass', 'Lifetime Pass', 'text-teal-400', 'infinity') ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO nft_market_categories (name, label, color, icon) VALUES ('regular_pass', 'Regular Pass', 'text-violet-400', 'zap') ON CONFLICT (name) DO NOTHING",
+  "INSERT INTO nft_market_categories (name, label, color, icon) VALUES ('achievement_pass', 'Achievement Pass', 'text-amber-400', 'award') ON CONFLICT (name) DO NOTHING",
+  "ALTER TABLE nft_subscriptions ADD COLUMN IF NOT EXISTS market_payment_method TEXT DEFAULT 'azn'",
+  "ALTER TABLE nft_subscriptions ADD COLUMN IF NOT EXISTS market_payment_details TEXT",
+  // ── Phase 24: Vault Market extended fields ─────────────────────────────────
+  "ALTER TABLE vault_market_listings ADD COLUMN IF NOT EXISTS order_type TEXT DEFAULT 'sell'",
+  "ALTER TABLE vault_market_listings ADD COLUMN IF NOT EXISTS account_type TEXT",
+  "ALTER TABLE vault_market_listings ADD COLUMN IF NOT EXISTS account_details TEXT",
+  "ALTER TABLE vault_market_listings ADD COLUMN IF NOT EXISTS vault_type TEXT DEFAULT 'entity'",
+  "ALTER TABLE vault_market_listings ADD COLUMN IF NOT EXISTS price_min REAL",
+  "ALTER TABLE vault_market_listings ADD COLUMN IF NOT EXISTS price_max REAL",
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

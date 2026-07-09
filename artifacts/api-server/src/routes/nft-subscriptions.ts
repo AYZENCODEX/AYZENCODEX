@@ -399,19 +399,23 @@ router.get("/nft-subscriptions/marketplace", requireAuth, async (req, res): Prom
 router.post("/nft-subscriptions/:id/list", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
   const nftId = parseInt(Array.isArray(req.params.id) ? req.params.id[0] : req.params.id, 10);
-  const { price } = req.body as { price?: number };
+  const { price, market_payment_method = "azn", market_payment_details = null } = req.body as {
+    price?: number; market_payment_method?: string; market_payment_details?: string | null;
+  };
 
   if (!price || price <= 0) { res.status(400).json({ error: "price must be > 0 AZN" }); return; }
 
   const result = await pool.query(
-    "SELECT id FROM nft_subscriptions WHERE id = $1 AND owner_id = $2 AND is_burned = FALSE",
+    "SELECT id FROM nft_subscriptions WHERE id = $1 AND owner_id = $2 AND is_burned = FALSE AND is_listed = FALSE",
     [nftId, userId]
   );
-  if (result.rows.length === 0) { res.status(404).json({ error: "NFT not found or not yours" }); return; }
+  if (result.rows.length === 0) { res.status(404).json({ error: "NFT not found, not yours, or already listed" }); return; }
 
   await pool.query(
-    "UPDATE nft_subscriptions SET is_listed = TRUE, list_price = $1 WHERE id = $2 AND owner_id = $3",
-    [price, nftId, userId]
+    `UPDATE nft_subscriptions
+     SET is_listed = TRUE, list_price = $1, market_payment_method = $2, market_payment_details = $3
+     WHERE id = $4 AND owner_id = $5`,
+    [price, market_payment_method, market_payment_details ?? null, nftId, userId]
   );
 
   const userRow = await pool.query("SELECT username FROM users WHERE id = $1", [userId]);
@@ -421,7 +425,7 @@ router.post("/nft-subscriptions/:id/list", requireAuth, async (req, res): Promis
     [userId, userRow.rows[0]?.username ?? "user", nftId, price]
   ).catch(() => {});
 
-  res.json({ success: true, listed: true, price });
+  res.json({ success: true, listed: true, price, market_payment_method, market_payment_details });
 });
 
 // ── POST /nft-subscriptions/:id/delist ───────────────────────────────────────
@@ -533,6 +537,41 @@ router.get("/nft-subscriptions/stats", async (_req, res): Promise<void> => {
     res.json({ totalMinted: 0, listed: 0, tradingVolume: 0, byType: {} });
   }
 });
+
+// ── GET /nft-subscriptions/categories — dynamic categories ───────────────────
+router.get("/nft-subscriptions/categories", async (_req, res): Promise<void> => {
+  try {
+    const r = await pool.query(
+      "SELECT * FROM nft_market_categories WHERE is_active = TRUE ORDER BY id ASC"
+    );
+    res.json(r.rows);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /nft-subscriptions/categories — admin: add category ─────────────────
+router.post("/nft-subscriptions/categories", requireAuth, requireRoles("admin", "dev"), async (req, res): Promise<void> => {
+  const { name, label, color = "text-primary", icon = "gem" } = req.body;
+  if (!name || !label) { res.status(400).json({ error: "name and label required" }); return; }
+  try {
+    const r = await pool.query(
+      "INSERT INTO nft_market_categories (name, label, color, icon, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *",
+      [name.toLowerCase().replace(/\s+/g, "_"), label, color, icon, req.user!.userId]
+    );
+    res.json(r.rows[0]);
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ── DELETE /nft-subscriptions/categories/:id — admin: remove category ─────────
+router.delete("/nft-subscriptions/categories/:id", requireAuth, requireRoles("admin", "dev"), async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    await pool.query("UPDATE nft_market_categories SET is_active = FALSE WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch (e: any) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Update list endpoint to store payment_method + payment_details ─────────────
+// (handled by existing /nft-subscriptions/:id/list — we just pass the extra fields through)
 
 // ── ADMIN: GET /admin/nft-subscriptions — all NFTs ──────────────────────────
 

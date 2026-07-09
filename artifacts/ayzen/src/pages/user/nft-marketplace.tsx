@@ -4,170 +4,256 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Gem, ShoppingCart, Tag, RefreshCw, Loader2, Coins, Crown,
-  Zap, Shield, Star, TrendingUp, X, CheckCircle2, Lock, User, Award,
-  Infinity as InfinityIcon, Filter,
+  Gem, ShoppingCart, Tag, RefreshCw, Loader2, Plus, X, Check,
+  User, Zap, Award, Wallet, Package, Trash2, Building2, Banknote, CreditCard,
+  TrendingUp, Lock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+const tok = () => localStorage.getItem("ayzen_token") ?? "";
+const api = (p: string, o?: RequestInit) =>
+  fetch(`${BASE}/api${p}`, { ...o, headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok()}`, ...(o?.headers ?? {}) } });
 
-interface NftSubscription {
-  id: number;
-  token_id: string;
-  owner_id: number;
-  original_owner_id: number;
-  plan: string;
-  nft_type: string;
-  nft_category: string;
-  image_url: string | null;
-  badge_name: string | null;
-  metadata: any;
-  expires_at: string;
-  is_listed: boolean;
-  list_price: number | null;
-  transfer_count: number;
-  minted_at: string;
-  seller_username?: string;
-  original_owner_username?: string;
-}
-
-interface Stats {
-  totalMinted: number;
-  listed: number;
-  tradingVolume: number;
-  byType: Record<string, number>;
-}
-
-// ── Plan config ────────────────────────────────────────────────────────────────
-
-const PLAN_CONFIG: Record<string, {
-  label: string; icon: React.ElementType; color: string; bg: string; border: string;
-  aznCost: number; isLifetime?: boolean; durationLabel: string; description: string;
-}> = {
-  pro: {
-    label: "Pro Pass", icon: Zap, color: "text-cyan-400", bg: "bg-cyan-400/5", border: "border-cyan-400/30",
-    aznCost: 30, durationLabel: "30-day subscription", description: "Unlock Pro features for 30 days. Tradeable.",
-  },
-  enterprise: {
-    label: "Enterprise Pass", icon: Crown, color: "text-violet-400", bg: "bg-violet-400/5", border: "border-violet-400/30",
-    aznCost: 60, durationLabel: "30-day subscription", description: "Full enterprise access for 30 days. Tradeable.",
-  },
-  lifetime_pro: {
-    label: "Lifetime Pro", icon: Star, color: "text-teal-400", bg: "bg-teal-400/5", border: "border-teal-400/30",
-    aznCost: 500, isLifetime: true, durationLabel: "Never expires", description: "Permanent Pro access. Genesis-tier NFT.",
-  },
-  lifetime_enterprise: {
-    label: "Lifetime Enterprise", icon: Shield, color: "text-rose-400", bg: "bg-rose-400/5", border: "border-rose-400/30",
-    aznCost: 1000, isLifetime: true, durationLabel: "Never expires", description: "Diamond-tier. Full lifetime access + priority.",
-  },
-  username: {
-    label: "Username NFT", icon: User, color: "text-cyan-300", bg: "bg-cyan-300/5", border: "border-cyan-300/30",
-    aznCost: 50, isLifetime: true, durationLabel: "Permanent", description: "Mint your username as a unique NFT. One per account.",
-  },
-  achievement_badge: {
-    label: "Achievement Badge", icon: Award, color: "text-amber-400", bg: "bg-amber-400/5", border: "border-amber-400/30",
-    aznCost: 0, isLifetime: true, durationLabel: "Permanent", description: "Collectible achievement badge NFT. Unique to your journey.",
-  },
-};
-
-const BADGE_OPTIONS = ["Pioneer", "Whale", "Diamond Hand", "Alpha Hunter", "Top Trader", "Airdrop King", "Network Guru", "Vault Master"];
-
-// ── Category filters ────────────────────────────────────────────────────────────
-
-const CATEGORY_FILTERS = [
-  { id: "all",               label: "All NFTs",       icon: Gem },
-  { id: "subscription_pass", label: "Sub Passes",     icon: Zap },
-  { id: "lifetime_pass",     label: "Lifetime",       icon: InfinityIcon },
-  { id: "username",          label: "Username NFTs",  icon: User },
-  { id: "badge",             label: "Badges",         icon: Award },
+// ── Payment methods ───────────────────────────────────────────────────────────
+const PAYMENT_METHODS = [
+  { id: "azn",     label: "AZN",     icon: Zap,         color: "text-primary",      border: "border-primary/30",      bg: "bg-primary/10",      fee: 0 },
+  { id: "binance", label: "Binance", icon: Building2,   color: "text-amber-400",    border: "border-amber-400/30",    bg: "bg-amber-400/10",    fee: 2 },
+  { id: "bkash",   label: "bKash",   icon: Banknote,    color: "text-pink-400",     border: "border-pink-400/30",     bg: "bg-pink-400/10",     fee: 2 },
+  { id: "nagad",   label: "Nagad",   icon: CreditCard,  color: "text-orange-400",   border: "border-orange-400/30",   bg: "bg-orange-400/10",   fee: 2 },
 ];
 
-// ── NFT Image Display ──────────────────────────────────────────────────────────
+// ── Icon map for categories from DB ──────────────────────────────────────────
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
+  user: User, gem: Gem, infinity: TrendingUp, zap: Zap, award: Award, wallet: Wallet,
+};
 
-function NftImage({ imageUrl, plan, size = "lg" }: { imageUrl?: string | null; plan: string; size?: "sm" | "lg" }) {
-  const cfg = PLAN_CONFIG[plan] ?? PLAN_CONFIG.pro;
-  const Icon = cfg.icon;
-  const dim = size === "lg" ? "w-full aspect-square" : "w-10 h-10";
-  if (imageUrl) {
-    return (
-      <div className={cn(dim, "rounded-xl overflow-hidden flex-shrink-0")}>
-        <img src={imageUrl} alt={cfg.label} className="w-full h-full object-cover" />
-      </div>
-    );
-  }
+function getCatIcon(icon?: string): React.ElementType {
+  return CATEGORY_ICONS[icon ?? "gem"] ?? Gem;
+}
+
+// ── Payment pill ─────────────────────────────────────────────────────────────
+function PaymentPill({ method, selected, onClick }: { method: typeof PAYMENT_METHODS[0]; selected: boolean; onClick: () => void }) {
+  const Icon = method.icon;
   return (
-    <div className={cn(dim, "rounded-xl flex items-center justify-center flex-shrink-0", cfg.bg, `border ${cfg.border}`)}>
-      <Icon className={cn(size === "lg" ? "w-10 h-10" : "w-5 h-5", cfg.color)} />
-    </div>
+    <button onClick={onClick}
+      className={cn(
+        "flex items-center gap-1.5 px-3 py-2 rounded-lg border font-mono text-xs transition-all",
+        selected ? `${method.bg} ${method.border} ${method.color}` : "border-border/40 text-muted-foreground hover:border-border"
+      )}>
+      <Icon className="w-3.5 h-3.5" />{method.label}
+      {method.fee > 0 && !selected && <span className="text-[9px] opacity-50">+{method.fee}%</span>}
+      {selected && <Check className="w-3 h-3" />}
+    </button>
   );
 }
 
-// ── Plan Badge ─────────────────────────────────────────────────────────────────
-
-function PlanBadge({ plan }: { plan: string }) {
-  const cfg = PLAN_CONFIG[plan] ?? { label: plan, icon: Shield, color: "text-muted-foreground", border: "border-border" };
-  const Icon = cfg.icon;
-  return (
-    <Badge variant="outline" className={cn("font-mono text-[10px] gap-1", cfg.color, cfg.border)}>
-      <Icon className="w-3 h-3" />{cfg.label.toUpperCase()}
-    </Badge>
-  );
-}
-
-// ── List Modal ─────────────────────────────────────────────────────────────────
-
-function ListModal({ nft, onClose, onSuccess, token }: {
-  nft: NftSubscription; onClose: () => void; onSuccess: () => void; token: string;
-}) {
+// ── Sell Modal — select from inventory, set price + payment ──────────────────
+function SellModal({ myNfts, onClose, onSuccess }: { myNfts: any[]; onClose: () => void; onSuccess: () => void }) {
   const { toast } = useToast();
+  const [step, setStep] = useState<"select" | "price">("select");
+  const [selectedNft, setSelectedNft] = useState<any>(null);
   const [price, setPrice] = useState("");
+  const [payMethod, setPayMethod] = useState("azn");
+  const [payDetails, setPayDetails] = useState("");
   const [listing, setListing] = useState(false);
 
+  const pm = PAYMENT_METHODS.find(p => p.id === payMethod)!;
+  const finalPrice = price ? (Number(price) * (1 + pm.fee / 100)).toFixed(2) : "";
+
   const handleList = async () => {
-    const p = parseFloat(price);
-    if (!p || p <= 0) { toast({ variant: "destructive", title: "Enter a valid price" }); return; }
+    if (!price || Number(price) <= 0) { toast({ variant: "destructive", title: "Enter a valid price" }); return; }
+    if (payMethod !== "azn" && !payDetails.trim()) { toast({ variant: "destructive", title: "Enter payment details" }); return; }
     setListing(true);
     try {
-      const r = await fetch(`${BASE}/api/nft-subscriptions/${nft.id}/list`, {
+      const r = await api(`/nft-subscriptions/${selectedNft.id}/list`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ price: p }),
+        body: JSON.stringify({ price: Number(finalPrice), market_payment_method: payMethod, market_payment_details: payDetails }),
       });
       const d = await r.json();
-      if (r.ok) { toast({ title: `Listed for ${p} AZN!` }); onSuccess(); onClose(); }
+      if (r.ok) { toast({ title: `Listed for ${finalPrice} AZN!` }); onSuccess(); onClose(); }
       else toast({ variant: "destructive", title: d.error ?? "Failed to list" });
     } catch { toast({ variant: "destructive", title: "Connection error" }); }
     setListing(false);
   };
 
+  const availableNfts = myNfts.filter(n => !n.is_listed && !n.is_burned);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-primary/20 rounded-xl w-full max-w-md mx-4 shadow-2xl max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-4 border-b border-border/40 sticky top-0 bg-card">
+          <div>
+            <span className="font-mono font-bold text-sm">Sell NFT</span>
+            <div className="text-[10px] font-mono text-muted-foreground">{step === "select" ? "Select from inventory" : "Set price & payment"}</div>
+          </div>
+          <button onClick={onClose}><X className="w-4 h-4 text-muted-foreground" /></button>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {step === "select" ? (
+            <>
+              {availableNfts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Lock className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+                  <p className="font-mono text-sm text-muted-foreground">No NFTs available to list</p>
+                  <p className="font-mono text-[10px] text-muted-foreground/50 mt-1">Already listed NFTs cannot be re-listed</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {availableNfts.map(nft => (
+                    <button
+                      key={nft.id}
+                      onClick={() => { setSelectedNft(nft); setStep("price"); }}
+                      className={cn(
+                        "w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
+                        selectedNft?.id === nft.id ? "border-primary/40 bg-primary/5" : "border-border/30 hover:border-primary/20"
+                      )}
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                        <Gem className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-mono text-sm font-bold truncate">{nft.plan?.replace(/_/g, " ")}</div>
+                        <div className="font-mono text-[10px] text-muted-foreground truncate">{nft.token_id}</div>
+                      </div>
+                      <Badge variant="outline" className="font-mono text-[9px] text-primary border-primary/30 flex-shrink-0">{nft.nft_category ?? nft.plan}</Badge>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {/* Selected NFT preview */}
+              <div className="bg-muted/20 rounded-lg p-3 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                  <Gem className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-mono text-sm font-bold">{selectedNft.plan?.replace(/_/g, " ")}</div>
+                  <div className="font-mono text-[10px] text-muted-foreground">{selectedNft.token_id}</div>
+                </div>
+                <button onClick={() => setStep("select")} className="text-[10px] font-mono text-primary/60 hover:text-primary">Change</button>
+              </div>
+
+              {/* Price */}
+              <div>
+                <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1">Base Price (AZN) *</label>
+                <Input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 50" className="font-mono text-sm h-10" />
+              </div>
+
+              {/* Payment Method */}
+              <div>
+                <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-2">Payment Method</label>
+                <div className="flex gap-2 flex-wrap">
+                  {PAYMENT_METHODS.map(m => <PaymentPill key={m.id} method={m} selected={payMethod === m.id} onClick={() => setPayMethod(m.id)} />)}
+                </div>
+                {pm.fee > 0 && <p className="text-[10px] font-mono text-amber-400/80 mt-1.5">+{pm.fee}% fee applied for non-AZN payments</p>}
+              </div>
+
+              {/* Payment Details for non-AZN */}
+              {payMethod !== "azn" && (
+                <div>
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1">
+                    {payMethod === "binance" ? "Binance UID / Pay ID" : payMethod === "bkash" ? "bKash Number" : "Nagad Number"} *
+                  </label>
+                  <Input value={payDetails} onChange={e => setPayDetails(e.target.value)}
+                    placeholder={payMethod === "binance" ? "e.g. 123456789" : "e.g. 01XXXXXXXXX"}
+                    className="font-mono text-sm h-10" />
+                </div>
+              )}
+
+              {/* Price summary */}
+              {price && (
+                <div className="bg-muted/20 rounded-lg p-3 font-mono text-[11px] space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Base price</span><span>{price} AZN</span></div>
+                  {pm.fee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Fee ({pm.fee}%)</span><span className="text-amber-400">+{(Number(price) * pm.fee / 100).toFixed(2)} AZN</span></div>}
+                  <div className="flex justify-between font-bold border-t border-border/30 pt-1"><span className="text-foreground">Listing price</span><span className="text-primary">{finalPrice} AZN</span></div>
+                </div>
+              )}
+
+              <Button onClick={handleList} disabled={listing || !price} className="w-full font-mono text-xs gap-2">
+                {listing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
+                List for Sale
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Buy Modal — select NFT from library then set payment ──────────────────────
+function BuyModal({
+  nft, onClose, onSuccess,
+}: { nft: any; onClose: () => void; onSuccess: () => void }) {
+  const { toast } = useToast();
+  const [payMethod, setPayMethod] = useState("azn");
+  const [buying, setBuying] = useState(false);
+
+  const pm = PAYMENT_METHODS.find(p => p.id === payMethod)!;
+
+  const handleBuy = async () => {
+    setBuying(true);
+    try {
+      const r = await api(`/nft-subscriptions/${nft.id}/buy`, {
+        method: "POST",
+        body: JSON.stringify({ payment_method: payMethod }),
+      });
+      const d = await r.json();
+      if (r.ok) { toast({ title: `✅ NFT Purchased!` }); onSuccess(); onClose(); }
+      else toast({ variant: "destructive", title: d.error ?? "Purchase failed" });
+    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+    setBuying(false);
+  };
+
+  const finalPrice = nft.list_price ? (nft.list_price * (1 + pm.fee / 100)).toFixed(2) : "0";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
       <div className="bg-card border border-primary/20 rounded-xl w-full max-w-sm mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border/40">
-          <span className="font-mono font-bold text-sm">List on Marketplace</span>
+          <span className="font-mono font-bold text-sm">Buy NFT</span>
           <button onClick={onClose}><X className="w-4 h-4 text-muted-foreground" /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
-          {nft.image_url ? (
-            <div className="w-full aspect-video rounded-lg overflow-hidden">
-              <img src={nft.image_url} alt={nft.plan} className="w-full h-full object-cover" />
+          <div className="bg-muted/20 rounded-lg p-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <Gem className="w-5 h-5 text-primary" />
             </div>
-          ) : null}
-          <div className="bg-muted/20 rounded-lg p-3 space-y-1">
-            <div className="font-mono text-sm font-bold">{PLAN_CONFIG[nft.plan]?.label ?? nft.plan}</div>
-            <div className="font-mono text-[10px] text-muted-foreground">{nft.token_id}</div>
-            <PlanBadge plan={nft.plan} />
+            <div>
+              <div className="font-mono text-sm font-bold">{nft.plan?.replace(/_/g, " ")}</div>
+              <div className="font-mono text-[10px] text-muted-foreground">Sold by {nft.seller_username ?? "—"}</div>
+            </div>
           </div>
+
           <div>
-            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-1">Sale Price (AZN)</label>
-            <Input type="number" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g. 45" className="font-mono text-xs h-10" />
-            {price && <p className="text-[10px] text-muted-foreground/50 mt-1">≈ ${(Number(price) / 100).toFixed(2)} USD</p>}
+            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground block mb-2">Payment Method</label>
+            <div className="flex gap-2 flex-wrap">
+              {PAYMENT_METHODS.map(m => <PaymentPill key={m.id} method={m} selected={payMethod === m.id} onClick={() => setPayMethod(m.id)} />)}
+            </div>
           </div>
-          <Button onClick={handleList} disabled={listing || !price} className="w-full font-mono text-xs gap-2">
-            {listing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Tag className="w-3.5 h-3.5" />}
-            List for Sale
+
+          {payMethod !== "azn" && nft.market_payment_details && (
+            <div className="bg-muted/20 rounded-lg p-3 font-mono text-[11px]">
+              <div className="text-muted-foreground mb-0.5">Send payment to:</div>
+              <div className="font-bold text-foreground">{nft.market_payment_details}</div>
+            </div>
+          )}
+
+          <div className="bg-muted/20 rounded-lg p-3 font-mono text-[11px] space-y-1">
+            <div className="flex justify-between"><span className="text-muted-foreground">List price</span><span>{nft.list_price} AZN</span></div>
+            {pm.fee > 0 && <div className="flex justify-between"><span className="text-muted-foreground">Fee ({pm.fee}%)</span><span className="text-amber-400">+{(nft.list_price * pm.fee / 100).toFixed(2)} AZN</span></div>}
+            <div className="flex justify-between font-bold border-t border-border/30 pt-1"><span>Total</span><span className="text-primary">{finalPrice} AZN</span></div>
+          </div>
+
+          <Button onClick={handleBuy} disabled={buying} className="w-full font-mono text-xs gap-2">
+            {buying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingCart className="w-3.5 h-3.5" />}
+            Confirm Purchase
           </Button>
         </div>
       </div>
@@ -175,165 +261,80 @@ function ListModal({ nft, onClose, onSuccess, token }: {
   );
 }
 
-// ── NFT Card ───────────────────────────────────────────────────────────────────
-
-function NftCard({
-  nft, isOwn, buying, onBuy, onDelist, onList, showListBtn,
-}: {
-  nft: NftSubscription; isOwn: boolean; buying: boolean;
-  onBuy: () => void; onDelist: () => void; onList?: () => void; showListBtn?: boolean;
-}) {
-  const cfg = PLAN_CONFIG[nft.plan] ?? { label: nft.plan, icon: Shield, color: "text-muted-foreground", bg: "", border: "border-border" };
-  const expiry = new Date(nft.expires_at);
-  const isLifetime = cfg.isLifetime;
-  const daysLeft = isLifetime ? Infinity : Math.max(0, Math.floor((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-
-  return (
-    <div className={cn("bg-card border rounded-xl overflow-hidden transition-all hover:border-primary/30 flex flex-col", cfg.bg, cfg.border)}>
-      {/* NFT Image */}
-      {nft.image_url ? (
-        <div className="aspect-square overflow-hidden">
-          <img src={nft.image_url} alt={cfg.label} className="w-full h-full object-cover" />
-        </div>
-      ) : (
-        <div className={cn("aspect-square flex items-center justify-center", cfg.bg)}>
-          <cfg.icon className={cn("w-16 h-16 opacity-20", cfg.color)} />
-        </div>
-      )}
-
-      <div className="p-3 space-y-2.5 flex flex-col flex-1">
-        <div className="flex items-start justify-between gap-1">
-          <div>
-            <div className="font-mono font-bold text-sm">{cfg.label}</div>
-            {nft.badge_name && <div className="font-mono text-[10px] text-amber-400">{nft.badge_name}</div>}
-            <div className="font-mono text-[9px] text-muted-foreground/50 mt-0.5 truncate">{nft.token_id}</div>
-          </div>
-          <PlanBadge plan={nft.plan} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-1.5 text-[10px] font-mono">
-          {nft.seller_username && (
-            <div className="bg-background/60 border border-border/30 rounded p-1.5">
-              <div className="text-muted-foreground/60 mb-0.5">Seller</div>
-              <div className="truncate">{nft.seller_username}</div>
-            </div>
-          )}
-          {!isOwn && (
-            <div className="bg-background/60 border border-border/30 rounded p-1.5">
-              <div className="text-muted-foreground/60 mb-0.5">Transfers</div>
-              <div>{nft.transfer_count ?? 0}×</div>
-            </div>
-          )}
-          <div className="bg-background/60 border border-border/30 rounded p-1.5">
-            <div className="text-muted-foreground/60 mb-0.5">Validity</div>
-            <div className={cn("font-bold", isLifetime ? "text-teal-400" : daysLeft < 7 ? "text-red-400" : "")}>
-              {isLifetime ? "∞" : `${daysLeft}d`}
-            </div>
-          </div>
-          {isOwn && nft.is_listed && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded p-1.5">
-              <div className="text-amber-400/60 mb-0.5">Listed</div>
-              <div className="text-amber-400 font-bold">{nft.list_price} AZN</div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between mt-auto pt-1">
-          {nft.is_listed && nft.list_price ? (
-            <div>
-              <div className="font-mono text-lg font-bold text-primary">{nft.list_price} AZN</div>
-              <div className="font-mono text-[9px] text-muted-foreground/50">${(nft.list_price / 100).toFixed(2)}</div>
-            </div>
-          ) : <div />}
-          <div className="flex gap-1.5">
-            {isOwn ? (
-              nft.is_listed ? (
-                <Button variant="outline" size="sm" onClick={onDelist}
-                  className="h-7 text-[10px] gap-1 border-red-500/20 text-red-400 hover:bg-red-500/10">
-                  <X className="w-3 h-3" /> Delist
-                </Button>
-              ) : showListBtn ? (
-                <Button variant="outline" size="sm" onClick={onList}
-                  className="h-7 text-[10px] gap-1 border-primary/20 text-primary hover:bg-primary/10">
-                  <Tag className="w-3 h-3" /> List
-                </Button>
-              ) : null
-            ) : (
-              <Button size="sm" onClick={onBuy} disabled={buying}
-                className="h-7 text-[10px] gap-1">
-                {buying ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShoppingCart className="w-3 h-3" />}
-                Buy
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Export ────────────────────────────────────────────────────────────────
-
+// ── Main Component ────────────────────────────────────────────────────────────
 export default function NftMarketplace() {
-  const { token, user } = useAuth();
+  const { user } = useAuth();
   const { toast } = useToast();
 
-  const [listings, setListings] = useState<NftSubscription[]>([]);
-  const [myNfts, setMyNfts] = useState<NftSubscription[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalMinted: 0, listed: 0, tradingVolume: 0, byType: {} });
+  const [categories, setCategories] = useState<any[]>([]);
+  const [listings, setListings] = useState<any[]>([]);
+  const [myNfts, setMyNfts] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [buying, setBuying] = useState<number | null>(null);
-  const [tab, setTab] = useState<"marketplace" | "my-nfts">("marketplace");
-  const [listNft, setListNft] = useState<NftSubscription | null>(null);
   const [catFilter, setCatFilter] = useState("all");
+  const [showInventory, setShowInventory] = useState(false);
+  const [showSell, setShowSell] = useState(false);
+  const [buyNft, setBuyNft] = useState<any>(null);
 
-  const headers = { Authorization: `Bearer ${token}` };
-  const currentUserId = user?.id ?? null;
+  // Admin state
+  const isAdmin = user?.role === "admin" || user?.role === "dev";
+  const [showAddCat, setShowAddCat] = useState(false);
+  const [newCatLabel, setNewCatLabel] = useState("");
+  const [addingCat, setAddingCat] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const catQ = catFilter !== "all" ? `?category=${catFilter}` : "";
-      const [marketRes, myRes, statsRes] = await Promise.all([
-        fetch(`${BASE}/api/nft-subscriptions/marketplace${catQ}`, { headers }),
-        fetch(`${BASE}/api/nft-subscriptions/my-nfts`, { headers }),
-        fetch(`${BASE}/api/nft-subscriptions/stats`),
+      const catQ = catFilter !== "all" ? `?category=${encodeURIComponent(catFilter)}` : "";
+      const [cats, market, my, st] = await Promise.all([
+        api("/nft-subscriptions/categories").then(r => r.json()),
+        api(`/nft-subscriptions/marketplace${catQ}`).then(r => r.json()),
+        api("/nft-subscriptions/my-nfts").then(r => r.json()),
+        api("/nft-subscriptions/stats").then(r => r.json()),
       ]);
-      if (marketRes.ok) setListings(await marketRes.json());
-      if (myRes.ok) setMyNfts(await myRes.json());
-      if (statsRes.ok) setStats(await statsRes.json());
+      setCategories(Array.isArray(cats) ? cats : []);
+      setListings(Array.isArray(market) ? market : []);
+      setMyNfts(Array.isArray(my) ? my : []);
+      setStats(st);
     } catch { toast({ variant: "destructive", title: "Failed to load NFT data" }); }
     setLoading(false);
-  }, [token, catFilter]);
+  }, [catFilter]);
 
   useEffect(() => { load(); }, [load]);
 
-  const handleBuy = async (nft: NftSubscription) => {
-    setBuying(nft.id);
+  const handleDelist = async (nft: any) => {
     try {
-      const r = await fetch(`${BASE}/api/nft-subscriptions/${nft.id}/buy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      });
-      const d = await r.json();
-      if (r.ok) { toast({ title: `✅ NFT Purchased! ${PLAN_CONFIG[d.plan]?.label ?? d.plan} activated.` }); await load(); }
-      else toast({ variant: "destructive", title: d.error ?? "Purchase failed" });
-    } catch { toast({ variant: "destructive", title: "Connection error" }); }
-    setBuying(null);
+      const r = await api(`/nft-subscriptions/${nft.id}/delist`, { method: "POST" });
+      if (r.ok) { toast({ title: "Delisted" }); load(); }
+    } catch { toast({ variant: "destructive", title: "Error" }); }
   };
 
-  const handleDelist = async (nft: NftSubscription) => {
+  const handleAddCategory = async () => {
+    if (!newCatLabel.trim()) return;
+    setAddingCat(true);
     try {
-      const r = await fetch(`${BASE}/api/nft-subscriptions/${nft.id}/delist`, {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      const r = await api("/nft-subscriptions/categories", {
+        method: "POST",
+        body: JSON.stringify({ name: newCatLabel.trim().toLowerCase().replace(/\s+/g, "_"), label: newCatLabel.trim() }),
       });
-      if (r.ok) { toast({ title: "Delisted" }); await load(); }
-    } catch { toast({ variant: "destructive", title: "Connection error" }); }
+      const d = await r.json();
+      if (r.ok) { toast({ title: "Category added!" }); setNewCatLabel(""); setShowAddCat(false); load(); }
+      else toast({ variant: "destructive", title: d.error });
+    } catch { toast({ variant: "destructive", title: "Error" }); }
+    setAddingCat(false);
+  };
+
+  const handleRemoveCategory = async (cat: any) => {
+    try {
+      await api(`/nft-subscriptions/categories/${cat.id}`, { method: "DELETE" });
+      toast({ title: `Removed "${cat.label}"` }); load();
+    } catch { toast({ variant: "destructive", title: "Error" }); }
   };
 
   return (
     <div className="space-y-5 page-enter">
-      {listNft && <ListModal nft={listNft} onClose={() => setListNft(null)} onSuccess={load} token={token ?? ""} />}
+      {showSell && <SellModal myNfts={myNfts} onClose={() => setShowSell(false)} onSuccess={load} />}
+      {buyNft && <BuyModal nft={buyNft} onClose={() => setBuyNft(null)} onSuccess={load} />}
 
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -341,16 +342,25 @@ export default function NftMarketplace() {
           <h2 className="text-lg font-bold font-mono tracking-tighter uppercase flex items-center gap-2">
             <Gem className="w-5 h-5 text-primary" /> NFT Market
           </h2>
-          <p className="text-muted-foreground font-mono text-[11px] mt-0.5">Buy and trade AYZEN NFTs — new NFTs are minted automatically when you purchase a subscription</p>
+          <p className="text-muted-foreground font-mono text-[11px] mt-0.5">Trade AYZEN NFTs · AZN · Binance · bKash · Nagad</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={load} disabled={loading} className="font-mono text-xs gap-1.5 h-8">
-            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} /> Refresh
+            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
           </Button>
-          <Button asChild size="sm" className="font-mono text-xs gap-1.5 h-8">
-            <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/subscription`}>
-              <Gem className="w-3.5 h-3.5" /> Get a Subscription NFT
-            </a>
+          {/* Inventory Button */}
+          <Button
+            variant="outline" size="sm"
+            onClick={() => setShowInventory(v => !v)}
+            className={cn("font-mono text-xs gap-1.5 h-8", showInventory && "border-primary/40 bg-primary/10 text-primary")}
+          >
+            <Package className="w-3.5 h-3.5" /> Inventory
+            {myNfts.length > 0 && (
+              <span className="bg-primary/20 text-primary text-[9px] rounded-full px-1.5 py-0.5 font-bold">{myNfts.length}</span>
+            )}
+          </Button>
+          <Button size="sm" className="font-mono text-xs gap-1.5 h-8" onClick={() => setShowSell(true)}>
+            <Tag className="w-3.5 h-3.5" /> Sell NFT
           </Button>
         </div>
       </div>
@@ -358,10 +368,10 @@ export default function NftMarketplace() {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total Minted", value: stats.totalMinted, icon: Gem, color: "text-primary" },
-          { label: "Listed",        value: stats.listed,       icon: Tag, color: "text-emerald-400" },
-          { label: "Volume (AZN)",  value: stats.tradingVolume.toFixed(0), icon: TrendingUp, color: "text-amber-400" },
-          { label: "Types",         value: Object.keys(stats.byType ?? {}).length, icon: Filter, color: "text-violet-400" },
+          { label: "Total Minted", value: stats?.totalMinted ?? 0, icon: Gem, color: "text-primary" },
+          { label: "Listed",       value: stats?.listed ?? 0,       icon: Tag, color: "text-emerald-400" },
+          { label: "Volume (AZN)", value: stats?.tradingVolume?.toFixed(0) ?? 0, icon: TrendingUp, color: "text-amber-400" },
+          { label: "My NFTs",      value: myNfts.length,             icon: Wallet, color: "text-violet-400" },
         ].map(s => {
           const Icon = s.icon;
           return (
@@ -378,102 +388,187 @@ export default function NftMarketplace() {
         })}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 bg-muted/20 rounded-lg p-1 w-fit">
-        {[
-          { id: "marketplace" as const, label: "Marketplace", icon: ShoppingCart },
-          { id: "my-nfts" as const,     label: "My NFTs",     icon: Gem },
-        ].map(t => {
-          const Icon = t.icon;
+      {/* Inventory Panel */}
+      {showInventory && (
+        <div className="bg-card border border-border/40 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground font-bold flex items-center gap-2">
+              <Package className="w-3.5 h-3.5" /> My NFT Inventory
+            </h3>
+            <button onClick={() => setShowInventory(false)}><X className="w-4 h-4 text-muted-foreground" /></button>
+          </div>
+          {myNfts.length === 0 ? (
+            <p className="text-center py-4 font-mono text-sm text-muted-foreground/50">No NFTs in your inventory</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {myNfts.map(nft => (
+                <div key={nft.id} className={cn(
+                  "flex items-center gap-3 p-3 rounded-lg border",
+                  nft.is_listed ? "border-amber-500/20 bg-amber-500/5" : "border-border/30"
+                )}>
+                  <div className="w-8 h-8 rounded-md bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Gem className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-xs font-bold truncate">{nft.plan?.replace(/_/g, " ")}</div>
+                    <div className="font-mono text-[9px] text-muted-foreground truncate">{nft.token_id}</div>
+                    {nft.is_listed && <div className="font-mono text-[9px] text-amber-400">Listed: {nft.list_price} AZN</div>}
+                  </div>
+                  {nft.is_listed ? (
+                    <Button size="sm" variant="outline"
+                      onClick={() => handleDelist(nft)}
+                      className="h-6 text-[9px] font-mono border-red-500/20 text-red-400 hover:bg-red-500/10 flex-shrink-0">
+                      Delist
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline"
+                      onClick={() => { setShowInventory(false); setShowSell(true); }}
+                      className="h-6 text-[9px] font-mono border-primary/20 text-primary hover:bg-primary/10 flex-shrink-0">
+                      Sell
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Admin: Category Management */}
+      {isAdmin && (
+        <div className="bg-card border border-border/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-mono text-xs uppercase tracking-widest text-muted-foreground font-bold">Category Management</h3>
+            <Button size="sm" variant="outline" onClick={() => setShowAddCat(v => !v)} className="font-mono text-[10px] h-7 gap-1">
+              <Plus className="w-3 h-3" /> Add Category
+            </Button>
+          </div>
+          {showAddCat && (
+            <div className="flex gap-2">
+              <Input value={newCatLabel} onChange={e => setNewCatLabel(e.target.value)}
+                placeholder="Category label (e.g. Rare Pass)"
+                className="font-mono text-sm h-8" />
+              <Button size="sm" onClick={handleAddCategory} disabled={addingCat || !newCatLabel.trim()} className="font-mono text-xs h-8 flex-shrink-0">
+                {addingCat ? "..." : "Add"}
+              </Button>
+            </div>
+          )}
+          <div className="flex gap-2 flex-wrap">
+            {categories.map(cat => {
+              const Icon = getCatIcon(cat.icon);
+              return (
+                <div key={cat.id} className={cn("flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-mono", cat.color ?? "text-primary", "border-border/40 bg-muted/20")}>
+                  <Icon className="w-3 h-3" />
+                  {cat.label}
+                  <button onClick={() => handleRemoveCategory(cat)} className="ml-0.5 text-muted-foreground hover:text-red-400 transition-colors">
+                    <Trash2 className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Category Filters */}
+      <div className="flex gap-2 flex-wrap">
+        <button onClick={() => setCatFilter("all")}
+          className={cn("flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-full border transition-all",
+            catFilter === "all" ? "bg-primary/10 border-primary/40 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+          <Gem className="w-3 h-3" /> All NFTs
+        </button>
+        {categories.map(cat => {
+          const Icon = getCatIcon(cat.icon);
           return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={cn("flex items-center gap-1.5 px-4 py-2 text-xs font-mono rounded transition-all",
-                tab === t.id ? "bg-primary/20 text-primary" : "text-muted-foreground hover:text-foreground")}>
-              <Icon className="w-3.5 h-3.5" />
-              {t.label}
-              {t.id === "my-nfts" && myNfts.length > 0 && (
-                <span className="bg-primary/20 text-primary text-[9px] rounded-full px-1.5 py-0.5">{myNfts.length}</span>
-              )}
+            <button key={cat.id} onClick={() => setCatFilter(cat.name)}
+              className={cn("flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-full border transition-all",
+                catFilter === cat.name ? `bg-primary/10 border-primary/40 ${cat.color ?? "text-primary"}` : "border-border/40 text-muted-foreground hover:border-primary/20")}>
+              <Icon className="w-3 h-3" /> {cat.label}
             </button>
           );
         })}
       </div>
 
-      {/* Category filter */}
-      {tab === "marketplace" && (
-        <div className="flex gap-2 flex-wrap">
-          {CATEGORY_FILTERS.map(f => {
-            const Icon = f.icon;
+      {/* NFT Library Grid */}
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[1,2,3,4,5,6].map(i => <div key={i} className="aspect-square bg-card border border-border/30 rounded-xl animate-pulse" />)}
+        </div>
+      ) : listings.length === 0 ? (
+        <div className="py-16 text-center bg-card border border-border/30 rounded-xl">
+          <ShoppingCart className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
+          <p className="font-mono text-sm text-muted-foreground">No NFTs listed for sale</p>
+          <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">
+            {catFilter !== "all" ? "Try a different category" : "Be the first to list an NFT"}
+          </p>
+          <Button size="sm" className="mt-4 font-mono text-xs gap-1.5" onClick={() => setShowSell(true)}>
+            <Tag className="w-3.5 h-3.5" /> List Your NFT
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {listings.map(nft => {
+            const isOwn = nft.owner_id === user?.id;
+            const catDef = categories.find(c => c.name === nft.nft_category);
+            const Icon = getCatIcon(catDef?.icon);
             return (
-              <button key={f.id} onClick={() => setCatFilter(f.id)}
-                className={cn("flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-mono rounded-full border transition-all",
-                  catFilter === f.id ? "bg-primary/10 border-primary/40 text-primary" : "border-border/40 text-muted-foreground hover:border-primary/20")}>
-                <Icon className="w-3 h-3" /> {f.label}
-              </button>
+              <div key={nft.id} className="bg-card border border-border/30 rounded-xl overflow-hidden hover:border-primary/30 transition-all flex flex-col">
+                {/* Image / placeholder */}
+                {nft.image_url ? (
+                  <div className="aspect-square overflow-hidden">
+                    <img src={nft.image_url} alt={nft.plan} className="w-full h-full object-cover" />
+                  </div>
+                ) : (
+                  <div className="aspect-square flex items-center justify-center bg-primary/5 border-b border-border/20">
+                    <Icon className={cn("w-16 h-16 opacity-20", catDef?.color ?? "text-primary")} />
+                  </div>
+                )}
+
+                <div className="p-3 space-y-2 flex flex-col flex-1">
+                  <div>
+                    <div className="font-mono font-bold text-sm truncate">{nft.plan?.replace(/_/g, " ")}</div>
+                    {nft.badge_name && <div className="font-mono text-[10px] text-amber-400">{nft.badge_name}</div>}
+                    <div className="font-mono text-[9px] text-muted-foreground/50 truncate">{nft.token_id}</div>
+                  </div>
+
+                  {nft.seller_username && (
+                    <div className="font-mono text-[9px] text-muted-foreground/60">by {nft.seller_username}</div>
+                  )}
+
+                  {nft.market_payment_method && nft.market_payment_method !== "azn" && (
+                    <div className="flex items-center gap-1">
+                      {PAYMENT_METHODS.filter(p => p.id === nft.market_payment_method).map(pm => {
+                        const PMIcon = pm.icon;
+                        return (
+                          <Badge key={pm.id} variant="outline" className={cn("font-mono text-[8px] gap-1", pm.color, pm.border)}>
+                            <PMIcon className="w-2.5 h-2.5" />{pm.label}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mt-auto pt-1">
+                    <div>
+                      <div className="font-mono text-base font-bold text-primary">{nft.list_price} AZN</div>
+                      <div className="font-mono text-[9px] text-muted-foreground/50">${((nft.list_price ?? 0) / 100).toFixed(2)}</div>
+                    </div>
+                    {isOwn ? (
+                      <Button variant="outline" size="sm" onClick={() => handleDelist(nft)}
+                        className="h-7 text-[10px] gap-1 border-red-500/20 text-red-400 hover:bg-red-500/10">
+                        <X className="w-3 h-3" /> Delist
+                      </Button>
+                    ) : (
+                      <Button size="sm" onClick={() => setBuyNft(nft)} className="h-7 text-[10px] gap-1">
+                        <ShoppingCart className="w-3 h-3" /> Buy
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
             );
           })}
         </div>
-      )}
-
-      {/* Content */}
-      {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[1, 2, 3, 4, 5, 6].map(i => <div key={i} className="aspect-square bg-card border border-border/30 rounded-xl animate-pulse" />)}
-        </div>
-      ) : tab === "marketplace" ? (
-        listings.length === 0 ? (
-          <div className="py-12 text-center bg-card border border-border/30 rounded-xl">
-            <ShoppingCart className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-            <p className="font-mono text-sm text-muted-foreground">No NFTs listed for sale</p>
-            <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">Buy a subscription to get an NFT, then list it to earn AZN</p>
-            <Button asChild size="sm" className="mt-4 font-mono text-xs gap-1.5">
-              <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/subscription`}>
-                <Gem className="w-3.5 h-3.5" /> View Subscriptions
-              </a>
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {listings.map(nft => (
-              <NftCard
-                key={nft.id}
-                nft={nft}
-                isOwn={nft.owner_id === currentUserId}
-                buying={buying === nft.id}
-                onBuy={() => handleBuy(nft)}
-                onDelist={() => handleDelist(nft)}
-              />
-            ))}
-          </div>
-        )
-      ) : (
-        myNfts.length === 0 ? (
-          <div className="py-12 text-center bg-card border border-border/30 rounded-xl">
-            <Lock className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
-            <p className="font-mono text-sm text-muted-foreground">No NFTs in your wallet</p>
-            <p className="font-mono text-[11px] text-muted-foreground/50 mt-1">NFTs are minted automatically when you purchase a subscription</p>
-            <Button asChild size="sm" className="mt-4 font-mono text-xs gap-1.5">
-              <a href={`${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/subscription`}>
-                <Gem className="w-3.5 h-3.5" /> View Subscriptions
-              </a>
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {myNfts.map(nft => (
-              <NftCard
-                key={nft.id}
-                nft={nft}
-                isOwn
-                buying={false}
-                onBuy={() => {}}
-                onDelist={() => handleDelist(nft)}
-                onList={() => setListNft(nft)}
-                showListBtn={!nft.is_listed}
-              />
-            ))}
-          </div>
-        )
       )}
     </div>
   );

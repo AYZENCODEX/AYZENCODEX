@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "@workspace/db";
-import { requireAuth, requireAdmin } from "../middlewares/auth";
+import { requireAuth } from "../middlewares/auth";
 
 const router = Router();
 const FEE_PCT = 2.5;
@@ -8,8 +8,7 @@ const FEE_PCT = 2.5;
 async function ensureWallet(userId: number, type = "azn"): Promise<{ balance: number; locked: number }> {
   await pool.query(
     `INSERT INTO marketplace_wallets (user_id, market_type, balance, locked_balance)
-     VALUES ($1, $2, 0, 0)
-     ON CONFLICT (user_id, market_type) DO NOTHING`,
+     VALUES ($1, $2, 0, 0) ON CONFLICT (user_id, market_type) DO NOTHING`,
     [userId, type]
   );
   const r = await pool.query(
@@ -19,21 +18,18 @@ async function ensureWallet(userId: number, type = "azn"): Promise<{ balance: nu
   return { balance: Number(r.rows[0]?.balance ?? 0), locked: Number(r.rows[0]?.locked_balance ?? 0) };
 }
 
-// ── 1. GET /marketplace/azn/listings ─────────────────────────────────────────
+// ── GET /marketplace/azn/listings ─────────────────────────────────────────────
 router.get("/marketplace/azn/listings", requireAuth, async (req, res): Promise<void> => {
-  const { limit = 50, offset = 0, min_price, max_price, currency } = req.query as any;
+  const { limit = 50, offset = 0, order_type } = req.query as any;
   try {
     let q = `
-      SELECT al.*, u.username AS seller_username,
-             (SELECT balance FROM marketplace_wallets WHERE user_id=al.seller_id AND market_type='azn') AS seller_balance
+      SELECT al.*, u.username AS seller_username
       FROM azn_listings al
       LEFT JOIN users u ON u.id = al.seller_id
       WHERE al.status = 'active'
     `;
     const params: any[] = [];
-    if (min_price) { params.push(Number(min_price)); q += ` AND al.price_per_unit >= $${params.length}`; }
-    if (max_price) { params.push(Number(max_price)); q += ` AND al.price_per_unit <= $${params.length}`; }
-    if (currency) { params.push(currency); q += ` AND al.currency = $${params.length}`; }
+    if (order_type) { params.push(order_type); q += ` AND al.order_type = $${params.length}`; }
     q += ` ORDER BY al.created_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(Number(limit), Number(offset));
     const r = await pool.query(q, params);
@@ -42,35 +38,52 @@ router.get("/marketplace/azn/listings", requireAuth, async (req, res): Promise<v
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 2. POST /marketplace/azn/listings ────────────────────────────────────────
+// ── POST /marketplace/azn/listings ────────────────────────────────────────────
+// order_type: 'sell' | 'buy'
+// payment_method: 'binance' | 'bkash' | 'nagad'
+// payment_details: string (account number / UID / wallet address)
 router.post("/marketplace/azn/listings", requireAuth, async (req, res): Promise<void> => {
   const sellerId = req.user!.userId;
-  const { amount, price_per_unit, currency = "USDT", min_buy = 0 } = req.body;
+  const {
+    amount,
+    price_per_unit,
+    order_type = "sell",
+    payment_method = "binance",
+    payment_details = "",
+    min_buy = 0,
+  } = req.body;
   if (!amount || !price_per_unit) { res.status(400).json({ error: "amount and price_per_unit required" }); return; }
   const totalPrice = Number(amount) * Number(price_per_unit);
   try {
-    const { balance } = await ensureWallet(sellerId, "azn");
-    if (balance < Number(amount)) { res.status(400).json({ error: "Insufficient AZN balance in marketplace wallet" }); return; }
-    await pool.query(
-      "UPDATE marketplace_wallets SET balance=balance-$1, locked_balance=locked_balance+$1, updated_at=NOW() WHERE user_id=$2 AND market_type='azn'",
-      [Number(amount), sellerId]
-    );
+    if (order_type === "sell") {
+      // For sell orders: lock AZN in marketplace wallet
+      const { balance } = await ensureWallet(sellerId, "azn");
+      if (balance < Number(amount)) {
+        res.status(400).json({ error: "Insufficient AZN balance in marketplace wallet" }); return;
+      }
+      await pool.query(
+        "UPDATE marketplace_wallets SET balance=balance-$1, locked_balance=locked_balance+$1, updated_at=NOW() WHERE user_id=$2 AND market_type='azn'",
+        [Number(amount), sellerId]
+      );
+    }
     const r = await pool.query(
-      `INSERT INTO azn_listings (seller_id, amount, price_per_unit, total_price, currency, min_buy)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [sellerId, Number(amount), Number(price_per_unit), totalPrice, currency, Number(min_buy)]
+      `INSERT INTO azn_listings (seller_id, amount, price_per_unit, total_price, currency, min_buy, order_type, payment_method, payment_details)
+       VALUES ($1,$2,$3,$4,'AZN',$5,$6,$7,$8) RETURNING *`,
+      [sellerId, Number(amount), Number(price_per_unit), totalPrice, Number(min_buy),
+       order_type, payment_method, payment_details || null]
     );
     res.json(r.rows[0]);
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 3. POST /marketplace/azn/buy ─────────────────────────────────────────────
+// ── POST /marketplace/azn/buy ─────────────────────────────────────────────────
+// Buy from a sell listing (AZN wallet-based)
 router.post("/marketplace/azn/buy", requireAuth, async (req, res): Promise<void> => {
   const buyerId = req.user!.userId;
   const { listing_id, amount } = req.body;
   if (!listing_id || !amount) { res.status(400).json({ error: "listing_id and amount required" }); return; }
   try {
-    const listingR = await pool.query("SELECT * FROM azn_listings WHERE id=$1 AND status='active'", [listing_id]);
+    const listingR = await pool.query("SELECT * FROM azn_listings WHERE id=$1 AND status='active' AND order_type='sell'", [listing_id]);
     if (!listingR.rows[0]) { res.status(404).json({ error: "Listing not found or sold" }); return; }
     const listing = listingR.rows[0];
     if (listing.seller_id === buyerId) { res.status(400).json({ error: "Cannot buy your own listing" }); return; }
@@ -110,43 +123,45 @@ router.post("/marketplace/azn/buy", requireAuth, async (req, res): Promise<void>
         [listing_id, buyerId, listing.seller_id, cost, fee, net]
       );
       await pool.query("COMMIT");
-      res.json({ ok: true, amount_bought: Number(amount), cost, fee, net });
+      res.json({ ok: true, amount_bought: Number(amount), cost, fee, net, payment_method: listing.payment_method, payment_details: listing.payment_details });
     } catch (e) { await pool.query("ROLLBACK"); throw e; }
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 4. DELETE /marketplace/azn/listings/:id ───────────────────────────────────
+// ── DELETE /marketplace/azn/listings/:id ──────────────────────────────────────
 router.delete("/marketplace/azn/listings/:id", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
-  const { id } = req.params;
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
     const r = await pool.query("SELECT * FROM azn_listings WHERE id=$1 AND status='active'", [id]);
     if (!r.rows[0]) { res.status(404).json({ error: "Not found" }); return; }
     const listing = r.rows[0];
     if (listing.seller_id !== userId && req.user!.role !== "admin") { res.status(403).json({ error: "Forbidden" }); return; }
     await pool.query("UPDATE azn_listings SET status='cancelled' WHERE id=$1", [id]);
-    await pool.query(
-      "UPDATE marketplace_wallets SET locked_balance=locked_balance-$1, balance=balance+$1, updated_at=NOW() WHERE user_id=$2 AND market_type='azn'",
-      [Number(listing.amount), listing.seller_id]
-    );
+    if (listing.order_type === "sell" || !listing.order_type) {
+      await pool.query(
+        "UPDATE marketplace_wallets SET locked_balance=locked_balance-$1, balance=balance+$1, updated_at=NOW() WHERE user_id=$2 AND market_type='azn'",
+        [Number(listing.amount), listing.seller_id]
+      );
+    }
     res.json({ ok: true });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
 });
 
-// ── 5. GET /marketplace/azn/stats ────────────────────────────────────────────
+// ── GET /marketplace/azn/stats ────────────────────────────────────────────────
 router.get("/marketplace/azn/stats", requireAuth, async (_req, res): Promise<void> => {
   try {
-    const [active, volume, price] = await Promise.all([
-      pool.query("SELECT COUNT(*) as cnt, SUM(amount) as total_azn FROM azn_listings WHERE status='active'"),
+    const [sell, buy, volume] = await Promise.all([
+      pool.query("SELECT COUNT(*) as cnt, SUM(amount) as total_azn FROM azn_listings WHERE status='active' AND (order_type='sell' OR order_type IS NULL)"),
+      pool.query("SELECT COUNT(*) as cnt FROM azn_listings WHERE status='active' AND order_type='buy'"),
       pool.query("SELECT SUM(amount) as vol, COUNT(*) as trades FROM marketplace_transactions WHERE market_type='azn'"),
-      pool.query("SELECT price_per_unit FROM azn_listings WHERE status='active' ORDER BY created_at DESC LIMIT 1"),
     ]);
     res.json({
-      active_listings: Number(active.rows[0].cnt),
-      available_azn: Number(active.rows[0].total_azn ?? 0),
+      active_sell_listings: Number(sell.rows[0].cnt),
+      active_buy_listings: Number(buy.rows[0].cnt),
+      available_azn: Number(sell.rows[0].total_azn ?? 0),
       total_volume: Number(volume.rows[0].vol ?? 0),
       total_trades: Number(volume.rows[0].trades),
-      last_price: Number(price.rows[0]?.price_per_unit ?? 0),
       fee_pct: FEE_PCT,
     });
   } catch (e: any) { res.status(500).json({ error: e.message }); }
