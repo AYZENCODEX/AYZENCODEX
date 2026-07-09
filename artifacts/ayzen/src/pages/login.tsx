@@ -731,6 +731,9 @@ export default function Login() {
                 {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Team Leader Init"}
               </Button>
             </div>
+            <Button variant="outline" className="w-full font-mono text-xs h-9 mt-2 border-border hover:border-sky-500/40 hover:text-sky-400" onClick={handleDemoUser} disabled={isLoading}>
+              {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "User Init"}
+            </Button>
           </div>
         </div>
 

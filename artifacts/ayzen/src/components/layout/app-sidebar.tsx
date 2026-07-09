@@ -104,18 +104,6 @@ const ADMIN_NAV: NavGroup[] = [
 
 const DEV_NAV: NavGroup[] = [
   {
-    label: "Developer", icon: Code2,
-    items: [
-      { href: "/admin/developer?tab=console",   label: "Live Console", icon: Terminal },
-      { href: "/admin/developer?tab=telemetry", label: "Telemetry",    icon: Activity },
-      { href: "/admin/developer?tab=ping",      label: "Ping Test",    icon: RefreshCwIcon },
-      { href: "/admin/developer?tab=functions", label: "Functions",    icon: Server },
-      { href: "/admin/developer?tab=errors",    label: "Error Log",    icon: XCircle },
-      { href: "/admin/developer?tab=shell",     label: "Shell",        icon: TerminalSquare },
-      { href: "/admin/developer?tab=db",        label: "Database",     icon: Database },
-    ],
-  },
-  {
     label: "AI Agent", icon: BotIcon,
     items: [
       { href: "/admin/ai-agent",              label: "Assistant", icon: BotIcon },
@@ -169,11 +157,13 @@ const MODERATOR_NAV: NavGroup[] = [
   {
     label: "Teams", icon: Users,
     items: [
-      { href: "/teams",              label: "Overview",    icon: LayoutDashboard },
-      { href: "/teams?tab=members",  label: "Members",     icon: Users },
-      { href: "/teams?tab=chat",     label: "Chat",        icon: MessageSquare },
-      { href: "/teams?tab=tasks",    label: "Tasks",       icon: ListTodo },
-      { href: "/teams?tab=missions", label: "Missions",    icon: Swords },
+      { href: "/teams",                 label: "Overview",     icon: LayoutDashboard },
+      { href: "/teams?tab=members",     label: "Members",      icon: Users },
+      { href: "/teams?tab=chat",        label: "Chat",         icon: MessageSquare },
+      { href: "/teams?tab=tasks",       label: "Tasks",        icon: ListTodo },
+      { href: "/teams?tab=missions",    label: "Missions",     icon: Swords },
+      { href: "/teams?tab=browse",      label: "Browse Teams", icon: Search },
+      { href: "/teams?tab=invite",      label: "Invite Link",  icon: Link2 },
     ],
   },
   {
@@ -204,17 +194,20 @@ const TEAM_LEADER_NAV: NavGroup[] = [
   {
     label: "Command", icon: LayoutDashboard,
     items: [
-      { href: "/dashboard",  label: "Dashboard",      icon: LayoutDashboard },
-      { href: "/checkin",    label: "Daily Check-in",  icon: Flame },
-      { href: "/history",    label: "Activity Log",    icon: History },
+      { href: "/dashboard",       label: "Dashboard",      icon: LayoutDashboard },
+      { href: "/checkin",         label: "Daily Check-in",  icon: Flame },
+      { href: "/history",         label: "Activity Log",    icon: History },
+      { href: "/teams?tab=panel", label: "Team Settings",   icon: Settings },
     ],
   },
   {
     label: "Team Overview", icon: Users,
     items: [
-      { href: "/teams",              label: "Team Home",   icon: LayoutDashboard },
-      { href: "/teams?tab=members",  label: "Members",     icon: Users },
-      { href: "/teams?tab=chat",     label: "Chat",        icon: MessageSquare },
+      { href: "/teams",                label: "Team Home",    icon: LayoutDashboard },
+      { href: "/teams?tab=members",    label: "Members",      icon: Users },
+      { href: "/teams?tab=chat",       label: "Chat",         icon: MessageSquare },
+      { href: "/teams?tab=browse",     label: "Browse Teams", icon: Search },
+      { href: "/teams?tab=invite",     label: "Invite Link",  icon: Link2 },
     ],
   },
   {
@@ -318,15 +311,17 @@ const USER_NAV: NavGroup[] = [
   {
     label: "Teams", icon: Users,
     items: [
-      { href: "/teams",              label: "Overview",    icon: LayoutDashboard },
-      { href: "/teams?tab=members",  label: "Members",     icon: Users },
-      { href: "/teams?tab=chat",     label: "Chat",        icon: MessageSquare },
-      { href: "/teams?tab=vault",    label: "Vault",       icon: Vault },
-      { href: "/teams?tab=tasks",    label: "Tasks",       icon: ListTodo },
-      { href: "/teams?tab=missions", label: "Missions",    icon: Swords },
-      { href: "/teams?tab=leaderboard", label: "Leaderboard", icon: Trophy },
-      { href: "/teams?tab=projects", label: "Projects",    icon: FolderGit2 },
-      { href: "/teams?tab=panel",    label: "Panel",       icon: Settings },
+      { href: "/teams",                 label: "Overview",     icon: LayoutDashboard },
+      { href: "/teams?tab=members",     label: "Members",      icon: Users },
+      { href: "/teams?tab=chat",        label: "Chat",         icon: MessageSquare },
+      { href: "/teams?tab=vault",       label: "Vault",        icon: Vault },
+      { href: "/teams?tab=tasks",       label: "Tasks",        icon: ListTodo },
+      { href: "/teams?tab=missions",    label: "Missions",     icon: Swords },
+      { href: "/teams?tab=leaderboard", label: "Leaderboard",  icon: Trophy },
+      { href: "/teams?tab=projects",    label: "Projects",     icon: FolderGit2 },
+      { href: "/teams?tab=browse",      label: "Browse Teams", icon: Search },
+      { href: "/teams?tab=invite",      label: "Invite Link",  icon: Link2 },
+      { href: "/teams?tab=panel",       label: "Panel",        icon: Settings },
     ],
   },
   {
@@ -618,6 +613,54 @@ function useThemeToggle() {
   return { isDark, toggle };
 }
 
+function ProfileQuickAccess({ user, logout, navigate, onNavigate }: {
+  user: any; logout: () => void; navigate: (href: string) => void; onNavigate?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const go = (href: string) => { navigate(href); onNavigate?.(); setOpen(false); };
+  return (
+    <div className="border-b border-sidebar-border">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-sidebar-accent/50 transition-colors"
+      >
+        <div className="w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center font-bold text-[11px] uppercase text-primary flex-shrink-0">
+          {user?.username?.[0] || 'U'}
+        </div>
+        <div className="flex-1 overflow-hidden min-w-0 text-left">
+          <div className="text-[11px] font-mono font-semibold truncate leading-tight">{user?.username}</div>
+          <div className="text-[9px] text-sidebar-foreground/40 truncate font-mono">{user?.email}</div>
+        </div>
+        {open ? <ChevronDown className="w-3 h-3 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />}
+      </button>
+      {open && (
+        <div className="pb-2 px-2 space-y-0.5 animate-fade-up">
+          {[
+            { href: "/profile",      label: "My Profile",    icon: UserCircle },
+            { href: "/settings",     label: "Settings",      icon: Settings },
+            { href: "/security",     label: "Security",      icon: ShieldCheck },
+            { href: "/subscription", label: "Subscription",  icon: Star },
+          ].map(({ href, label, icon: Icon }) => (
+            <button
+              key={href}
+              onClick={() => go(href)}
+              className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-mono text-sidebar-foreground/60 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground border border-transparent hover:border-border/30 transition-all"
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+          <button
+            onClick={() => { logout(); setOpen(false); }}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-mono text-red-400/70 hover:bg-red-500/10 hover:text-red-400 border border-transparent hover:border-red-500/20 transition-all"
+          >
+            <LogOut className="w-3.5 h-3.5" /> Disconnect
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -631,15 +674,12 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
 
   return (
     <div className="flex h-full w-64 flex-col bg-sidebar border-r border-sidebar-border text-sidebar-foreground">
+      {/* Logo bar */}
       <div className="p-4 flex items-center gap-2 font-mono text-xl font-bold tracking-tighter text-primary border-b border-sidebar-border">
         <Terminal className="w-5 h-5" />
         <span className="flex-1">AYZEN</span>
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => { navigate("/ayzen-email"); onNavigate?.(); }}
-            className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors"
-            title="AYZEN Mail"
-          >
+          <button onClick={() => { navigate("/ayzen-email"); onNavigate?.(); }} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="AYZEN Mail">
             <AtSign className="w-3.5 h-3.5" />
           </button>
           <button onClick={openSearch} className="p-1 rounded text-muted-foreground/40 hover:text-primary transition-colors" title="Search (⌘K)">
@@ -653,6 +693,11 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
           </button>
         </div>
       </div>
+
+      {/* Profile quick-access at top — click to expand settings/system links */}
+      <ProfileQuickAccess user={user} logout={logout} navigate={navigate} onNavigate={onNavigate} />
+
+      {/* Nav groups */}
       <div className="flex-1 overflow-y-auto py-2 space-y-1">
         {groups.map(group => (
           <NavGroupComp key={group.label} group={group} location={location} search={search} isEnabled={isEnabled} onNavigate={onNavigate} />
@@ -660,22 +705,6 @@ export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
       </div>
 
       <SidebarAiPanel />
-
-      <div className="p-3 border-t border-sidebar-border">
-        <div className="flex items-center gap-2 mb-3 px-1">
-          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center font-bold text-xs uppercase text-primary flex-shrink-0">
-            {user?.username?.[0] || 'U'}
-          </div>
-          <div className="flex-1 overflow-hidden min-w-0">
-            <div className="text-xs font-mono font-medium truncate">{user?.username}</div>
-            <div className="text-[10px] text-sidebar-foreground/50 truncate font-mono">{user?.email}</div>
-          </div>
-        </div>
-        <Button variant="outline" className="w-full justify-start gap-2 border-sidebar-border text-sidebar-foreground hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 text-xs font-mono" onClick={logout}>
-          <LogOut className="w-3.5 h-3.5" />
-          Disconnect
-        </Button>
-      </div>
     </div>
   );
 }

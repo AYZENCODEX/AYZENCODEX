@@ -12,7 +12,7 @@ import {
   Activity, Star, Zap, Shield, Medal, Target, CheckCircle2,
   KeyRound, Clock, Check, X, Lock, Wallet, Swords, ListTodo,
   Bell, ChevronDown, ChevronUp, ArrowLeft, LayoutDashboard,
-  Smartphone, Mail,
+  Smartphone, Mail, Search, Link2, Copy, Globe, AtSign,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ type Mission = { id: number; team_id: number; title: string; description?: strin
 type VaultEntry = { id: number; project_name: string; category: string; email?: string; twitter_username?: string; discord_username?: string; telegram_username?: string; entity_serial?: string; user_id: number; username?: string; created_at: string };
 type PendingInvite = { id: number; team_id: number; team_name: string; invited_by_username?: string; invited_at: string };
 
-type Tab = "dashboard" | "members" | "vault" | "missions" | "tasks" | "leaderboard" | "projects" | "chat" | "panel";
+type Tab = "dashboard" | "members" | "vault" | "missions" | "tasks" | "leaderboard" | "projects" | "chat" | "panel" | "browse" | "invite";
 
 function Avatar({ name, size = "md", role }: { name: string; size?: "sm" | "md" | "lg"; role?: string }) {
   const sizes = { sm: "w-6 h-6 text-[9px]", md: "w-8 h-8 text-xs", lg: "w-10 h-10 text-sm" };
@@ -1089,6 +1089,128 @@ function TeamPanel({ team, onRefresh, onDelete }: { team: TeamDetail; onRefresh:
   );
 }
 
+// ─── Team Browse ─────────────────────────────────────────────────────────────
+type PublicTeam = { id: number; name: string; description?: string; member_count: number; owner_username?: string; slug?: string };
+function TeamBrowse({ onJoin }: { onJoin: () => void }) {
+  const [teams, setTeams] = useState<PublicTeam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    customFetch<PublicTeam[]>("/api/teams/browse").then(d => {
+      setTeams(Array.isArray(d) ? d : []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  const filtered = teams.filter(t => !query || t.name.toLowerCase().includes(query.toLowerCase()) || t.description?.toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <div className="space-y-4 animate-fade-up">
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search teams…" className="w-full h-9 pl-9 pr-3 rounded-lg border border-border bg-background/50 text-sm font-mono focus:outline-none focus:border-primary/60" />
+        </div>
+        <button onClick={() => customFetch<PublicTeam[]>("/api/teams/browse").then(d => { setTeams(Array.isArray(d) ? d : []); }).catch(() => {})} className="p-2 rounded-lg border border-border hover:border-primary/40 text-muted-foreground hover:text-primary transition-colors">
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground font-mono text-sm">No public teams found</div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((t, i) => (
+            <div key={t.id} className="flex items-center gap-4 p-4 bg-card/60 border border-border/40 rounded-xl animate-pop-in" style={{ animationDelay: `${i * 40}ms` }}>
+              <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold font-mono text-base flex-shrink-0">
+                {t.name[0].toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="font-mono font-bold text-sm text-foreground">{t.name}</p>
+                  {t.slug && <span className="text-[10px] font-mono text-muted-foreground/50">@{t.slug}</span>}
+                </div>
+                {t.description && <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">{t.description}</p>}
+                <div className="flex items-center gap-3 mt-1">
+                  <span className="text-[10px] font-mono text-muted-foreground/60 flex items-center gap-1"><Users className="w-3 h-3" /> {t.member_count} members</span>
+                  {t.owner_username && <span className="text-[10px] font-mono text-muted-foreground/60 flex items-center gap-1"><Crown className="w-3 h-3" /> {t.owner_username}</span>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Team Invite Link ─────────────────────────────────────────────────────────
+function TeamInviteLink({ team }: { team: TeamDetail }) {
+  const [link, setLink] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
+
+  const generateLink = async () => {
+    setLoading(true);
+    try {
+      const data = await customFetch<{ invite_link: string; code: string }>(`/api/teams/${team.id}/invite-link`, { method: "POST" });
+      setLink(data.invite_link);
+    } catch { toast({ title: "Failed to generate link", variant: "destructive" }); }
+    setLoading(false);
+  };
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  useEffect(() => { generateLink(); }, [team.id]);
+
+  return (
+    <div className="space-y-4 animate-fade-up max-w-lg">
+      <div className="bg-card/60 border border-border/40 rounded-xl p-5 space-y-4">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2"><Link2 className="w-3.5 h-3.5 text-primary" /> Deep Invite Link</h3>
+        <p className="text-xs text-muted-foreground font-mono">Share this link to invite someone directly to <strong>{team.name}</strong>. Anyone with the link can request to join.</p>
+        {loading ? (
+          <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+        ) : link ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border font-mono text-[11px] text-muted-foreground break-all">
+              <Globe className="w-3.5 h-3.5 flex-shrink-0 text-primary" />
+              <span className="flex-1 min-w-0 break-all">{link}</span>
+            </div>
+            <Button size="sm" className="w-full h-9 gap-2 font-mono text-xs" onClick={copyLink} variant={copied ? "outline" : "default"}>
+              {copied ? <><Check className="w-4 h-4 text-emerald-400" /> Copied!</> : <><Copy className="w-4 h-4" /> Copy Link</>}
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" onClick={generateLink} disabled={loading} className="w-full h-9 font-mono text-xs gap-2">
+            <Link2 className="w-4 h-4" /> Generate Invite Link
+          </Button>
+        )}
+        <Button size="sm" variant="outline" onClick={generateLink} disabled={loading} className="w-full h-9 font-mono text-xs gap-2">
+          <RefreshCw className="w-3.5 h-3.5" /> Regenerate Link
+        </Button>
+      </div>
+      {/* Team username / slug */}
+      <div className="bg-card/60 border border-border/40 rounded-xl p-5 space-y-3">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2"><AtSign className="w-3.5 h-3.5 text-primary" /> Team Username</h3>
+        <p className="text-xs text-muted-foreground font-mono">Your team's public @handle for discovery in Browse Teams.</p>
+        <div className="flex items-center gap-1.5 p-2.5 rounded-lg bg-muted/30 border border-border font-mono text-sm">
+          <AtSign className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-foreground">{(team as any).slug ?? team.name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Teams Page ──────────────────────────────────────────────────────────
 export default function TeamsPage() {
   const { user } = useAuth();
@@ -1096,7 +1218,7 @@ export default function TeamsPage() {
   const [selectedTeam, setSelectedTeam] = useState<TeamDetail | null>(null);
   const search = useSearch();
   const [, navigate] = useLocation();
-  const VALID_TABS: Tab[] = ["dashboard", "members", "vault", "missions", "tasks", "leaderboard", "projects", "chat", "panel"];
+  const VALID_TABS: Tab[] = ["dashboard", "members", "vault", "missions", "tasks", "leaderboard", "projects", "chat", "panel", "browse", "invite"];
   const urlTab = new URLSearchParams(search).get("tab") as Tab | null;
   const [tab, setTabState] = useState<Tab>(urlTab && VALID_TABS.includes(urlTab) ? urlTab : "dashboard");
   const setTab = (t: Tab) => {
@@ -1140,6 +1262,22 @@ export default function TeamsPage() {
       await loadTeams();
     } catch { toast({ title: "Failed to create team", variant: "destructive" }); } finally { setCreating(false); }
   };
+
+  // ── Browse tab works without a team selection ─────────────────────────────
+  if (tab === "browse") {
+    return (
+      <div className="max-w-2xl mx-auto space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2"><Globe className="w-5 h-5 text-primary" /> Browse Teams</h1>
+            <p className="text-sm text-muted-foreground mt-0.5 font-mono">Discover active teams and request to join.</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => setTab("dashboard")} className="h-9 gap-2"><Users className="w-4 h-4" /> My Teams</Button>
+        </div>
+        <TeamBrowse onJoin={loadTeams} />
+      </div>
+    );
+  }
 
   // ── No team selected — team list ──────────────────────────────────────────
   if (!selectedTeam) {
@@ -1230,6 +1368,8 @@ export default function TeamsPage() {
     { id: "missions",    label: "Missions",     icon: Swords },
     { id: "leaderboard", label: "Leaderboard",  icon: Trophy },
     { id: "projects",    label: "Projects",     icon: FolderGit2 },
+    { id: "browse",      label: "Browse",       icon: Search },
+    { id: "invite",      label: "Invite Link",  icon: Link2, leaderOnly: true },
     { id: "panel",       label: "Panel",        icon: Settings, leaderOnly: true },
   ];
   const TABS = ALL_TABS.filter(t => !t.leaderOnly || selectedTeam.myRole === "leader");
@@ -1346,6 +1486,8 @@ export default function TeamsPage() {
           {tab === "missions"    && <TeamMissions team={selectedTeam} />}
           {tab === "leaderboard" && <TeamLeaderboard team={selectedTeam} />}
           {tab === "projects"    && <TeamProjects team={selectedTeam} />}
+          {tab === "browse"      && <TeamBrowse onJoin={loadTeams} />}
+          {tab === "invite"      && selectedTeam.myRole === "leader" && <TeamInviteLink team={selectedTeam} />}
           {tab === "panel"       && selectedTeam.myRole === "leader" && (
             <TeamPanel team={selectedTeam} onRefresh={() => loadTeamDetail(selectedTeam.id)} onDelete={() => { setSelectedTeam(null); loadTeams(); }} />
           )}

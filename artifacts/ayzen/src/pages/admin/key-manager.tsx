@@ -229,14 +229,18 @@ function ProviderSection({ provider, keys, onRefresh }: {
   );
 }
 
+const POLL_INTERVAL = 10; // seconds
+
 export default function KeyManager() {
   const [keys, setKeys] = useState<RobinKey[]>([]);
   const [status, setStatus] = useState<ProviderStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [countdown, setCountdown] = useState(POLL_INTERVAL);
   const { toast } = useToast();
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [keysRes, statusRes] = await Promise.all([
         fetch(`${BASE}/api/key-manager/keys`, { headers: getAuthHeader() }),
@@ -244,13 +248,28 @@ export default function KeyManager() {
       ]);
       if (keysRes.ok) setKeys((await keysRes.json()).keys ?? []);
       if (statusRes.ok) setStatus((await statusRes.json()).providers ?? []);
+      setLastUpdated(new Date());
+      setCountdown(POLL_INTERVAL);
     } catch {
-      toast({ variant: "destructive", title: "Failed to load keys" });
+      if (!silent) toast({ variant: "destructive", title: "Failed to load keys" });
     }
-    setLoading(false);
+    if (!silent) setLoading(false);
   };
 
+  // Initial load
   useEffect(() => { fetchData(); }, []);
+
+  // Real-time polling every POLL_INTERVAL seconds
+  useEffect(() => {
+    const pollTimer = setInterval(() => fetchData(true), POLL_INTERVAL * 1000);
+    return () => clearInterval(pollTimer);
+  }, []);
+
+  // Countdown display
+  useEffect(() => {
+    const tick = setInterval(() => setCountdown(c => c > 0 ? c - 1 : POLL_INTERVAL), 1000);
+    return () => clearInterval(tick);
+  }, []);
 
   const totalActive = status.reduce((s, p) => s + parseInt(p.active ?? "0", 10), 0);
   const totalKeys = status.reduce((s, p) => s + parseInt(p.total ?? "0", 10), 0);
@@ -263,12 +282,18 @@ export default function KeyManager() {
           <div className="flex items-center gap-2">
             <Key className="w-5 h-5 text-primary" />
             <h1 className="font-mono font-bold text-xl">Robin Key Manager</h1>
+            {/* Live indicator */}
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[9px] font-mono text-emerald-400 uppercase tracking-widest">Live</span>
+            </div>
           </div>
           <p className="text-xs font-mono text-muted-foreground mt-1">
-            Round-robin key rotation for Database, Groq, OpenRouter & Fireworks AI
+            Round-robin key rotation · auto-refresh in {countdown}s
+            {lastUpdated && <span className="ml-2 opacity-50">· updated {lastUpdated.toLocaleTimeString()}</span>}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchData} className="font-mono text-xs">
+        <Button variant="outline" size="sm" onClick={() => fetchData()} className="font-mono text-xs">
           <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
           Refresh
         </Button>

@@ -60,6 +60,23 @@ router.post("/teams", requireAuth, async (req, res): Promise<void> => {
   }
 });
 
+// ── GET /teams/browse — public team listing (MUST be before /:id) ────────────
+router.get("/teams/browse", requireAuth, async (req, res): Promise<void> => {
+  const result = await db.execute(sql`
+    SELECT t.id, t.name, t.description, t.slug,
+           COUNT(tm.id)::int AS member_count,
+           u.username AS owner_username
+    FROM teams t
+    LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.status = 'active'
+    LEFT JOIN users u ON u.id = t.owner_id
+    WHERE t.status = 'active'
+    GROUP BY t.id, u.username
+    ORDER BY member_count DESC, t.created_at DESC
+    LIMIT 50
+  `);
+  res.json(result.rows);
+});
+
 // ── GET /teams/my-invites — pending invites for current user (MUST be before /:id) ──
 router.get("/teams/my-invites", requireAuth, async (req, res): Promise<void> => {
   const userId = req.user!.userId;
@@ -196,6 +213,24 @@ router.delete("/teams/:id", requireAuth, async (req, res): Promise<void> => {
   await db.execute(sql.raw(`DELETE FROM team_members WHERE team_id = ${teamId}`));
   await db.execute(sql.raw(`DELETE FROM teams WHERE id = ${teamId}`));
   res.json({ ok: true });
+});
+
+// ── POST /teams/:id/invite-link — generate shareable deep-link (MUST be before /:id/invite) ──
+router.post("/teams/:id/invite-link", requireAuth, async (req, res): Promise<void> => {
+  const teamId = parseInt(req.params.id as string);
+  const userId = req.user!.userId;
+  if (isNaN(teamId)) { res.status(400).json({ error: "invalid team id" }); return; }
+  // Only leaders/admins can generate invite links
+  const memberCheck = await db.execute(sql`SELECT role FROM team_members WHERE team_id = ${teamId} AND user_id = ${userId} AND status = 'active' LIMIT 1`);
+  const role = (memberCheck.rows[0] as any)?.role;
+  if (!role) { res.status(403).json({ error: "Not a member of this team" }); return; }
+  if (role !== "leader") { res.status(403).json({ error: "Only leaders can generate invite links" }); return; }
+  // Generate/refresh invite code
+  const code = `tm-${teamId}-${Buffer.from(`${teamId}:${Date.now()}`).toString("base64url").slice(0, 12)}`;
+  await db.execute(sql`UPDATE teams SET invite_code = ${code} WHERE id = ${teamId}`);
+  const origin = req.headers.origin ?? `https://${req.headers.host}`;
+  const invite_link = `${origin}/teams/join?code=${code}`;
+  res.json({ invite_link, code });
 });
 
 // ── POST /teams/:id/invite — invite member ────────────────────────────────────
