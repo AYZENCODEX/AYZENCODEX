@@ -7,6 +7,9 @@ import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 const port = Number(process.env.PORT ?? 5173);
 const basePath = process.env.BASE_PATH ?? "/";
 const apiPort = Number(process.env.AYZEN_API_PORT ?? 8000);
+// When VITE_API_URL is set (Vercel / Render deploy), the built frontend
+// calls that URL directly instead of using the dev-server proxy.
+const apiUrl = process.env.VITE_API_URL ?? "";
 
 export default defineConfig({
   base: basePath,
@@ -29,6 +32,10 @@ export default defineConfig({
       : []),
   ],
   define: {
+    // External API base URL — set VITE_API_URL for Vercel/Render deployments
+    // where the API lives on a different domain than the frontend.
+    // Leave blank for Replit (uses the dev-server proxy /api → localhost:apiPort).
+    "import.meta.env.VITE_API_URL": JSON.stringify(apiUrl),
     "import.meta.env.VITE_FIREBASE_API_KEY": JSON.stringify(process.env.VITE_FIREBASE_API_KEY ?? ""),
     "import.meta.env.VITE_FIREBASE_APP_ID": JSON.stringify(process.env.VITE_FIREBASE_APP_ID ?? ""),
     "import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID": JSON.stringify(process.env.VITE_FIREBASE_MESSAGING_SENDER_ID ?? ""),

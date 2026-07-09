@@ -8,7 +8,8 @@ import { Terminal, ArrowRight, Loader2, Mail, User, Eye, EyeOff, Sparkles, Check
 import { useToast } from "@/hooks/use-toast";
 import { SuccessAnimation } from "@/components/success-animation";
 
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { getApiBase } from "@/lib/api-base";
+const BASE = getApiBase();
 
 
 async function backendLogin(email: string, password: string): Promise<{ token: string; user: any } | null> {
@@ -346,6 +347,48 @@ export default function Login() {
     setLoading(false);
   };
 
+  const handleDemoDev = async () => {
+    setLoading(true);
+    const data = await backendLogin("demodev@ayzen.io", "Demo@1234");
+    if (data) {
+      setAuthContext(data.user, data.token);
+      setSuccessMsg(`Welcome, ${data.user.username}!`);
+      setShowSuccess(true);
+      setTimeout(() => setLocation("/admin/developer"), 1600);
+    } else {
+      toast({ variant: "destructive", title: "Demo developer login failed" });
+    }
+    setLoading(false);
+  };
+
+  const handleDemoModerator = async () => {
+    setLoading(true);
+    const data = await backendLogin("demomod@ayzen.io", "Demo@1234");
+    if (data) {
+      setAuthContext(data.user, data.token);
+      setSuccessMsg(`Welcome, ${data.user.username}!`);
+      setShowSuccess(true);
+      setTimeout(() => setLocation("/dashboard"), 1600);
+    } else {
+      toast({ variant: "destructive", title: "Demo moderator login failed" });
+    }
+    setLoading(false);
+  };
+
+  const handleDemoTeamLeader = async () => {
+    setLoading(true);
+    const data = await backendLogin("demoteam@ayzen.io", "Demo@1234");
+    if (data) {
+      setAuthContext(data.user, data.token);
+      setSuccessMsg(`Welcome, ${data.user.username}!`);
+      setShowSuccess(true);
+      setTimeout(() => setLocation("/teams"), 1600);
+    } else {
+      toast({ variant: "destructive", title: "Demo team leader login failed" });
+    }
+    setLoading(false);
+  };
+
   const handleDemoUser = async () => {
     setLoading(true);
     const data = await backendLogin("demo@ayzen.io", "Demo@1234");
@@ -674,12 +717,18 @@ export default function Login() {
 
           <div className="mt-6 border-t border-border pt-5">
             <div className="text-[10px] font-mono text-center text-muted-foreground mb-3 uppercase tracking-widest">Demo Override</div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-primary/40 hover:text-primary" onClick={handleDemoAdmin} disabled={isLoading}>
                 {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Admin Init"}
               </Button>
-              <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-violet-500/40 hover:text-violet-400" onClick={handleDemoUser} disabled={isLoading}>
-                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "User Init"}
+              <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-yellow-500/40 hover:text-yellow-400" onClick={handleDemoDev} disabled={isLoading}>
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Developer Init"}
+              </Button>
+              <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-orange-500/40 hover:text-orange-400" onClick={handleDemoModerator} disabled={isLoading}>
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Moderator Init"}
+              </Button>
+              <Button variant="outline" className="font-mono text-xs h-9 border-border hover:border-emerald-500/40 hover:text-emerald-400" onClick={handleDemoTeamLeader} disabled={isLoading}>
+                {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Team Leader Init"}
               </Button>
             </div>
           </div>

@@ -56,6 +56,7 @@ import checkinRouter from "./checkin";
 import watchlistRouter from "./watchlist";
 import shellRouter from "./shell";
 import devPanelRouter from "./dev-panel";
+import keyManagerRouter from "./key-manager";
 
 const router: IRouter = Router();
 
@@ -116,5 +117,6 @@ router.use(securityRouter);
 router.use(checkinRouter);
 router.use(watchlistRouter);
 router.use(devPanelRouter);
+router.use(keyManagerRouter);
 
 export default router;

@@ -10,6 +10,7 @@ interface AuthContextType {
   isAdmin: boolean;
   isDev: boolean;
   isModerator: boolean;
+  isTeamLeader: boolean;
   isLoading: boolean;
 }
 
@@ -73,6 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isAdmin: user?.role === "admin",
       isDev: user?.role === "dev",
       isModerator: user?.role === "moderator",
+      isTeamLeader: user?.role === "teamleader",
       isLoading,
     }}>
       {children}

@@ -48,6 +48,7 @@ const AdminHealthRules  = lazy(() => import("@/pages/admin/health-rules"));
 const AdminTeams        = lazy(() => import("@/pages/admin/teams"));
 const AdminTeamVault    = lazy(() => import("@/pages/admin/team-vault"));
 const AdminAiAgent      = lazy(() => import("@/pages/admin/ai-agent"));
+const AdminKeyManager   = lazy(() => import("@/pages/admin/key-manager"));
 const DevAznDeploy      = lazy(() => import("@/pages/dev/azn-deploy"));
 
 const UserHome          = lazy(() => import("@/pages/user/home"));
@@ -96,7 +97,7 @@ function PageLoader() {
 }
 
 function ProtectedRoute({ component: Component, adminOnly = false, allowedRoles, ...rest }: any) {
-  const { user, isAdmin, isDev, isModerator, isLoading } = useAuth();
+  const { user, isAdmin, isDev, isModerator, isTeamLeader, isLoading } = useAuth();
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-background text-primary font-mono">INITIALIZING...</div>;
   if (!user) return <Redirect to="/login" />;
@@ -116,7 +117,7 @@ function ProtectedRoute({ component: Component, adminOnly = false, allowedRoles,
 }
 
 function Router() {
-  const { user, isAdmin, isDev, isModerator } = useAuth();
+  const { user, isAdmin, isDev, isModerator, isTeamLeader } = useAuth();
 
   return (
     <Switch>
@@ -125,8 +126,10 @@ function Router() {
           ? (isAdmin || isDev)
             ? <Redirect to="/admin/dashboard" />
             : isModerator
-              ? <Redirect to="/admin/projects" />
-              : <Redirect to="/home" />
+              ? <Redirect to="/dashboard" />
+              : isTeamLeader
+                ? <Redirect to="/teams" />
+                : <Redirect to="/home" />
           : <Landing />}
       </Route>
 
@@ -161,6 +164,7 @@ function Router() {
       <Route path="/admin/team-vault">{() => <ProtectedRoute component={AdminTeamVault} adminOnly />}</Route>
       <Route path="/admin/marketplace">{() => <ProtectedRoute component={AdminMarketplace} allowedRoles={["admin", "dev"]} />}</Route>
       <Route path="/admin/ai-agent">{() => <ProtectedRoute component={AdminAiAgent} allowedRoles={["dev"]} />}</Route>
+      <Route path="/admin/key-manager">{() => <ProtectedRoute component={AdminKeyManager} allowedRoles={["admin"]} />}</Route>
 
       {/* Dev-only Routes */}
       <Route path="/dev/azn-deploy">{() => <ProtectedRoute component={DevAznDeploy} allowedRoles={["dev", "admin"]} />}</Route>

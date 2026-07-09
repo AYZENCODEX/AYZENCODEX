@@ -797,6 +797,42 @@ const MIGRATIONS = [
   "CREATE INDEX IF NOT EXISTS idx_mkt_activity_event ON marketplace_activity_log(event_type)",
   // ── Phase 20: Marketplace listing expiry ──────────────────────────────────
   "ALTER TABLE marketplace_listings ADD COLUMN IF NOT EXISTS listing_expires_at TIMESTAMP",
+  // ── Phase 21: Robin API Key Manager ───────────────────────────────────────
+  `CREATE TABLE IF NOT EXISTS robin_api_keys (
+    id SERIAL PRIMARY KEY,
+    provider TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    slot INTEGER NOT NULL DEFAULT 1,
+    key_value TEXT NOT NULL,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE(provider, slot)
+  )`,
+  "CREATE INDEX IF NOT EXISTS idx_robin_keys_provider ON robin_api_keys(provider, is_active)",
+  // ── Demo accounts for all roles (idempotent) ───────────────────────────────
+  // Demo accounts — SHA-256(password + "ayzen_salt"), pre-computed from hashPassword() in auth.ts.
+  // All four accounts use the same hash so a clean DB has all role init buttons working.
+  `INSERT INTO users (username, email, password_hash, role, status, email_verified, two_fa_enabled, referral_code)
+   SELECT 'demoadmin', 'demoadmin@ayzen.io',
+     '32c9156337d663748c1b0122abbcbe288929ea52352250854325d61d786ae292',
+     'admin', 'active', true, false, 'AYZN-ADMIN1'
+   WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'demoadmin@ayzen.io')`,
+  `INSERT INTO users (username, email, password_hash, role, status, email_verified, two_fa_enabled, referral_code)
+   SELECT 'demodev', 'demodev@ayzen.io',
+     '32c9156337d663748c1b0122abbcbe288929ea52352250854325d61d786ae292',
+     'dev', 'active', true, false, 'AYZN-DEV001'
+   WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'demodev@ayzen.io')`,
+  `INSERT INTO users (username, email, password_hash, role, status, email_verified, two_fa_enabled, referral_code)
+   SELECT 'demomod', 'demomod@ayzen.io',
+     '32c9156337d663748c1b0122abbcbe288929ea52352250854325d61d786ae292',
+     'moderator', 'active', true, false, 'AYZN-MOD001'
+   WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'demomod@ayzen.io')`,
+  `INSERT INTO users (username, email, password_hash, role, status, email_verified, two_fa_enabled, referral_code)
+   SELECT 'demoteam', 'demoteam@ayzen.io',
+     '32c9156337d663748c1b0122abbcbe288929ea52352250854325d61d786ae292',
+     'teamleader', 'active', true, false, 'AYZN-TL001'
+   WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'demoteam@ayzen.io')`,
 ];
 
 async function waitForDbThenMigrate(): Promise<void> {

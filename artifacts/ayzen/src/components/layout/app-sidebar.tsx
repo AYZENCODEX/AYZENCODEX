@@ -10,7 +10,7 @@ import {
   Bot, Send, Loader2, X, ChevronUp, Star, Coins, MessageCircle, History,
   DollarSign, Link2, Sun, Moon, Search, Keyboard, Smartphone, QrCode, Shield,
   ArrowLeftRight, Zap, Globe, FlaskConical, Timer, LayoutList, User,
-  Store, Swords, ListTodo, BarChart2, MessageSquare, Flame, Bookmark, Image,
+  Store, Swords, ListTodo, BarChart2, MessageSquare, Flame, Bookmark, Image, Key,
   Bot as BotIcon, Cpu, Activity, RefreshCw as RefreshCwIcon, XCircle, TerminalSquare, Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -81,10 +81,11 @@ const ADMIN_NAV: NavGroup[] = [
   {
     label: "Config", icon: Settings,
     items: [
-      { href: "/admin/categories", label: "Categories", icon: Database },
-      { href: "/admin/tools/networks", label: "Networks", icon: Radio },
-      { href: "/admin/plugins", label: "Plugins", icon: Puzzle },
-      { href: "/admin/settings", label: "Settings", icon: Settings },
+      { href: "/admin/categories",   label: "Categories",   icon: Database },
+      { href: "/admin/tools/networks",label: "Networks",    icon: Radio },
+      { href: "/admin/plugins",      label: "Plugins",      icon: Puzzle },
+      { href: "/admin/key-manager",  label: "Key Manager",  icon: Key },
+      { href: "/admin/settings",     label: "Settings",     icon: Settings },
     ],
   },
   {
@@ -117,11 +118,11 @@ const DEV_NAV: NavGroup[] = [
   {
     label: "AI Agent", icon: BotIcon,
     items: [
-      { href: "/admin/ai-agent",              label: "Assistant",  icon: BotIcon },
-      { href: "/admin/ai-agent?tab=agents",   label: "Agent",      icon: Users },
-      { href: "/admin/ai-agent?tab=mcp",      label: "MCP Skill",  icon: Puzzle },
-      { href: "/admin/ai-agent?tab=models",   label: "AI Model",   icon: Cpu },
-      { href: "/admin/ai-agent?tab=settings", label: "Settings",   icon: Settings },
+      { href: "/admin/ai-agent",              label: "Assistant", icon: BotIcon },
+      { href: "/admin/ai-agent?tab=agents",   label: "Agent",     icon: Users },
+      { href: "/admin/ai-agent?tab=models",   label: "Model",     icon: Cpu },
+      { href: "/admin/ai-agent?tab=mcp",      label: "Skill",     icon: Puzzle },
+      { href: "/admin/ai-agent?tab=settings", label: "Settings",  icon: Settings },
     ],
   },
   {
@@ -146,16 +147,147 @@ const DEV_NAV: NavGroup[] = [
 
 const MODERATOR_NAV: NavGroup[] = [
   {
+    label: "Command", icon: LayoutDashboard,
+    items: [
+      { href: "/dashboard",  label: "Dashboard",      icon: LayoutDashboard },
+      { href: "/checkin",    label: "Daily Check-in",  icon: Flame },
+      { href: "/history",    label: "Activity Log",    icon: History },
+    ],
+  },
+  {
     label: "Protocols", icon: FolderGit2,
     items: [
-      { href: "/admin/projects", label: "Create Projects", icon: FolderGit2 },
-      { href: "/admin/tasks",    label: "Create Tasks",    icon: CheckSquare },
+      { href: "/projects",               label: "Protocol",  icon: FolderGit2,    pluginSlug: "projects" },
+      { href: "/projects?type=exchange", label: "Exchange",  icon: ArrowLeftRight, pluginSlug: "projects" },
+      { href: "/projects?type=instant",  label: "Instant",   icon: Zap,           pluginSlug: "projects" },
+      { href: "/projects?type=web3",     label: "Web3",      icon: Globe,         pluginSlug: "projects" },
+      { href: "/projects?type=testnet",  label: "Testnet",   icon: FlaskConical,  pluginSlug: "projects" },
+      { href: "/projects?type=waitlist", label: "Wait-list", icon: Timer,         pluginSlug: "projects" },
+      { href: "/tasks",                  label: "Task",      icon: CheckSquare,   pluginSlug: "tasks" },
     ],
   },
   {
     label: "Teams", icon: Users,
     items: [
-      { href: "/admin/teams", label: "Approve Teams", icon: ShieldCheck },
+      { href: "/teams",              label: "Overview",    icon: LayoutDashboard },
+      { href: "/teams?tab=members",  label: "Members",     icon: Users },
+      { href: "/teams?tab=chat",     label: "Chat",        icon: MessageSquare },
+      { href: "/teams?tab=tasks",    label: "Tasks",       icon: ListTodo },
+      { href: "/teams?tab=missions", label: "Missions",    icon: Swords },
+    ],
+  },
+  {
+    label: "Earn", icon: DollarSign,
+    items: [
+      { href: "/earn",       label: "Earn Center",  icon: DollarSign },
+      { href: "/watchlist",  label: "Watchlist",    icon: Bookmark },
+      { href: "/referrals",  label: "Referrals",    icon: Share2, pluginSlug: "referrals" },
+    ],
+  },
+  {
+    label: "Social", icon: MessageCircle,
+    items: [
+      { href: "/inbox",   label: "Messages",   icon: MessageCircle },
+      { href: "/profile", label: "My Profile", icon: UserCircle },
+    ],
+  },
+  {
+    label: "System", icon: Settings,
+    items: [
+      { href: "/settings",  label: "Settings",  icon: Settings },
+      { href: "/security",  label: "Security",  icon: ShieldCheck },
+    ],
+  },
+];
+
+const TEAM_LEADER_NAV: NavGroup[] = [
+  {
+    label: "Command", icon: LayoutDashboard,
+    items: [
+      { href: "/dashboard",  label: "Dashboard",      icon: LayoutDashboard },
+      { href: "/checkin",    label: "Daily Check-in",  icon: Flame },
+      { href: "/history",    label: "Activity Log",    icon: History },
+    ],
+  },
+  {
+    label: "Team Overview", icon: Users,
+    items: [
+      { href: "/teams",              label: "Team Home",   icon: LayoutDashboard },
+      { href: "/teams?tab=members",  label: "Members",     icon: Users },
+      { href: "/teams?tab=chat",     label: "Chat",        icon: MessageSquare },
+    ],
+  },
+  {
+    label: "Team Progress", icon: BarChart2,
+    items: [
+      { href: "/teams?tab=tasks",      label: "Task Progress",    icon: ListTodo },
+      { href: "/teams?tab=missions",   label: "Missions",         icon: Swords },
+      { href: "/teams?tab=leaderboard",label: "Leaderboard",      icon: Trophy },
+      { href: "/teams?tab=projects",   label: "Projects",         icon: FolderGit2 },
+    ],
+  },
+  {
+    label: "Team Finance", icon: Coins,
+    items: [
+      { href: "/teams?tab=vault",    label: "Team Vault",    icon: Vault },
+      { href: "/credits",            label: "AZN & Credits", icon: Coins },
+    ],
+  },
+  {
+    label: "Team Panel", icon: Settings,
+    items: [
+      { href: "/teams?tab=panel",    label: "Team Settings", icon: Settings },
+    ],
+  },
+  {
+    label: "Protocols", icon: FolderGit2,
+    items: [
+      { href: "/projects",               label: "Protocol",  icon: FolderGit2,    pluginSlug: "projects" },
+      { href: "/projects?type=exchange", label: "Exchange",  icon: ArrowLeftRight, pluginSlug: "projects" },
+      { href: "/projects?type=instant",  label: "Instant",   icon: Zap,           pluginSlug: "projects" },
+      { href: "/projects?type=web3",     label: "Web3",      icon: Globe,         pluginSlug: "projects" },
+      { href: "/tasks",                  label: "Task",      icon: CheckSquare,   pluginSlug: "tasks" },
+    ],
+  },
+  {
+    label: "Vault", icon: Vault,
+    items: [
+      { href: "/vault?tab=entity",  label: "Entity",     icon: Shield,      pluginSlug: "vault" },
+      { href: "/vault?tab=local",   label: "Local",      icon: Smartphone,  pluginSlug: "vault" },
+      { href: "/vault?tab=2fa",     label: "2FA Access", icon: QrCode,      pluginSlug: "vault" },
+      { href: "/vault?tab=wallet",  label: "Wallet",     icon: Wallet,      pluginSlug: "vault" },
+    ],
+  },
+  {
+    label: "Market", icon: Store,
+    items: [
+      { href: "/marketplace",       label: "P2P Market",  icon: Store },
+      { href: "/marketplace/nft",   label: "NFT Market",  icon: Image },
+    ],
+  },
+  {
+    label: "Earn", icon: DollarSign,
+    items: [
+      { href: "/earn",       label: "Earn Center",  icon: DollarSign },
+      { href: "/leaderboard",label: "Operators",    icon: Trophy,  pluginSlug: "leaderboard" },
+      { href: "/referrals",  label: "Referrals",    icon: Share2,  pluginSlug: "referrals" },
+    ],
+  },
+  {
+    label: "Social", icon: MessageCircle,
+    items: [
+      { href: "/inbox",   label: "Messages",   icon: MessageCircle },
+      { href: "/profile", label: "My Profile", icon: UserCircle },
+      { href: "/support", label: "Support",    icon: HelpCircle, pluginSlug: "support" },
+    ],
+  },
+  {
+    label: "System", icon: Settings,
+    items: [
+      { href: "/subscription", label: "Subscription", icon: Star },
+      { href: "/wallet",       label: "My Wallet",    icon: Wallet },
+      { href: "/settings",     label: "Settings",     icon: Settings },
+      { href: "/security",     label: "Security",     icon: ShieldCheck },
     ],
   },
 ];
@@ -253,7 +385,8 @@ const USER_NAV: NavGroup[] = [
 
 interface Message { role: "user" | "assistant"; content: string; }
 
-const BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
+import { getApiBase } from "@/lib/api-base";
+const BASE = getApiBase();
 
 function SidebarAiPanel() {
   const [open, setOpen] = useState(false);
@@ -488,10 +621,10 @@ function useThemeToggle() {
 export function AppSidebar({ onNavigate }: AppSidebarProps = {}) {
   const [location, navigate] = useLocation();
   const search = useSearch();
-  const { isAdmin, isDev, isModerator, logout, user } = useAuth();
+  const { isAdmin, isDev, isModerator, isTeamLeader, logout, user } = useAuth();
   const { isEnabled } = usePlugins();
   const { isDark, toggle: toggleTheme } = useThemeToggle();
-  const groups = isAdmin ? ADMIN_NAV : isDev ? DEV_NAV : isModerator ? MODERATOR_NAV : USER_NAV;
+  const groups = isAdmin ? ADMIN_NAV : isDev ? DEV_NAV : isModerator ? MODERATOR_NAV : isTeamLeader ? TEAM_LEADER_NAV : USER_NAV;
 
   const openSearch = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }));
   const openShortcuts = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "?", bubbles: true }));
