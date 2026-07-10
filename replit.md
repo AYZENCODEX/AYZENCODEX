@@ -4,6 +4,7 @@ A full-stack Crypto Airdrop & Task Management Platform with Admin and User roles
 
 ## Run & Operate
 
+- Workflow "Project" runs all services (frontend web, API server, Component Preview Server). API Server workflow runs the built `dist/index.mjs` directly (not `pnpm dev`, which times out on restart due to the >60s build step); build it first with `pnpm --filter @workspace/api-server run build`.
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 8080)
 - `pnpm --filter @workspace/ayzen run dev` — run the frontend (port 23325)
 - `pnpm run typecheck` — full typecheck across all packages
